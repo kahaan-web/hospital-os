@@ -9,6 +9,10 @@ export const PERMISSIONS = {
   'audit.view': 'Read the audit trail',
   'privacy.manage': 'Handle DPDP data-principal requests',
   'patients.manage': 'Register and edit patients',
+  'patients.view': 'Look up patients and read the registration',
+  'clinical.view': 'Read encounters, notes and orders',
+  'lab.verify': 'Verify laboratory results',
+  'portal.self': 'Use the patient portal for the linked patient',
   'appointments.manage': 'Book, reschedule and cancel appointments',
   'opd.manage': 'Register OPD visits',
   'billing.op.post': 'Post OP vouchers, deposits and settlements',
@@ -35,13 +39,16 @@ export type RoleKey =
   | 'cashier'
   | 'pharmacist'
   | 'lab_tech'
-  | 'accounts';
+  | 'accounts'
+  | 'patient';
 
 export interface RoleDef {
   key: RoleKey;
   name: string;
   description: string;
   permissions: readonly PermissionKey[];
+  /** False hides the role from the staff invite list. The patient portal role is not staff. */
+  staff?: boolean;
 }
 
 export const SYSTEM_ROLES: readonly RoleDef[] = [
@@ -55,43 +62,43 @@ export const SYSTEM_ROLES: readonly RoleDef[] = [
     key: 'location_admin',
     name: 'Location Admin',
     description: 'Runs one or more locations: staff, masters and every module at those locations.',
-    permissions: PERMISSION_KEYS.filter((p) => !['billing.manage', 'tenant.manage', 'privacy.manage'].includes(p)),
+    permissions: PERMISSION_KEYS.filter((p) => !['billing.manage', 'tenant.manage', 'privacy.manage', 'portal.self'].includes(p)),
   },
   {
     key: 'front_desk',
     name: 'Front Desk',
     description: 'Registration, appointments and OPD visits at the counter.',
-    permissions: ['patients.manage', 'appointments.manage', 'opd.manage', 'reports.view'],
+    permissions: ['patients.manage', 'patients.view', 'appointments.manage', 'opd.manage', 'reports.view'],
   },
   {
     key: 'doctor',
     name: 'Doctor',
     description: 'Appointment diary, clinical orders and notes.',
-    permissions: ['appointments.manage', 'clinical.order', 'reports.view'],
+    permissions: ['patients.view', 'clinical.view', 'appointments.manage', 'clinical.order', 'reports.view'],
   },
   {
     key: 'nurse',
     name: 'Nurse',
     description: 'Nurse station: orders, vitals and medicine administration.',
-    permissions: ['nursing.manage', 'adt.manage'],
+    permissions: ['patients.view', 'clinical.view', 'nursing.manage', 'adt.manage'],
   },
   {
     key: 'cashier',
     name: 'Cashier / Billing',
     description: 'OP and IP billing, deposits, refunds and settlements.',
-    permissions: ['billing.op.post', 'billing.op.refund', 'billing.ip.manage', 'reports.view'],
+    permissions: ['patients.view', 'billing.op.post', 'billing.op.refund', 'billing.ip.manage', 'reports.view'],
   },
   {
     key: 'pharmacist',
     name: 'Pharmacist',
     description: 'Pharmacy and stores transactions and stock reports.',
-    permissions: ['pharmacy.manage', 'reports.view'],
+    permissions: ['patients.view', 'pharmacy.manage', 'reports.view'],
   },
   {
     key: 'lab_tech',
     name: 'Lab Tech',
     description: 'Sample collection and result entry.',
-    permissions: ['lab.manage', 'reports.view'],
+    permissions: ['patients.view', 'lab.manage', 'lab.verify', 'reports.view'],
   },
   {
     key: 'accounts',
@@ -99,7 +106,17 @@ export const SYSTEM_ROLES: readonly RoleDef[] = [
     description: 'Doctor accounting, revenue reports and subscription invoices.',
     permissions: ['accounts.manage', 'billing.view', 'reports.view'],
   },
+  {
+    key: 'patient',
+    name: 'Patient',
+    description: 'Signs in to the patient portal for their own record. Hidden from the staff invite list.',
+    permissions: ['portal.self'],
+    staff: false,
+  },
 ];
+
+/** Roles offered when inviting staff. The patient portal role is not one of them. */
+export const STAFF_ROLES: readonly RoleDef[] = SYSTEM_ROLES.filter((role) => role.staff !== false);
 
 export interface RoleAssignment {
   roleKey: string;

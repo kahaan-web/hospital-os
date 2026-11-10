@@ -1,6 +1,8 @@
 // Hindi-ready i18n: every locale implements the English dictionary's shape; missing keys fall back to English.
 // Phase A ships English only. Add `hi` strings here and the UI (web and, later, Android) picks them up.
 
+import { clinicalEn } from './clinical/i18n';
+
 export const en = {
   app: { name: 'Hospital OS', tagline: 'The calm operating system for nursing homes, clinics and hospitals' },
   common: {
@@ -72,6 +74,7 @@ export const en = {
     coming_soon: 'Coming soon',
     hidden: 'Hidden',
   },
+  clinical: clinicalEn,
 } as const;
 
 type DeepPartial<T> = { [K in keyof T]?: T[K] extends string ? string : DeepPartial<T[K]> };
