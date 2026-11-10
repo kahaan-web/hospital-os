@@ -1,0 +1,45 @@
+{
+  "name": "hospital-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hospital OS — multitenant HMIS SaaS for nursing homes, clinics and hospitals in India",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose -p hospital-os up -d --wait",
+    "db:down": "docker compose -p hospital-os stop",
+    "db:migrate": "npm run migrate -w @hos/db",
+    "db:seed": "npm run seed -w @hos/db",
+    "db:seed:demo": "npm run seed:demo -w @hos/db",
+    "gen:catalog": "node scripts/gen-catalog.mjs",
+    "openapi": "npm run openapi -w @hos/api",
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm run dev -w @hos/api",
+    "dev:web": "npm run dev -w @hos/web",
+    "build": "npm run build -w @hos/api && npm run build -w @hos/web",
+    "start:api": "npm run start -w @hos/api",
+    "start:web": "npm run start -w @hos/web",
+    "test": "vitest run",
+    "test:e2e": "npm run e2e -w @hos/web",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.39.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.4"
+  }
+}
