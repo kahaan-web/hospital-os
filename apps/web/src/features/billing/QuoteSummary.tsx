@@ -4,6 +4,7 @@ import type { Catalog, QuoteDto, TaxTotals } from '@hos/shared';
 import { applyGst, priceSubscription, type PriceBook, type SubscriptionConfig } from '@hos/shared';
 import { PriceDisplay } from '@hos/ui';
 import { useMemo } from 'react';
+import { wt } from '@/i18n';
 import { formatINR } from '@/lib/format';
 
 const FALLBACK_SUPPLIER_STATE = '27';
@@ -69,24 +70,24 @@ export function QuoteSummary({ totals, label = 'Estimated total' }: { totals: Ta
           fontSize: 'var(--hos-text-sm)',
         }}
       >
-        <dt style={{ color: 'var(--hos-fg-muted)' }}>Taxable</dt>
+        <dt style={{ color: 'var(--hos-fg-muted)' }}>{wt('quote.taxable')}</dt>
         <dd style={{ margin: 0 }}>{formatINR(totals.taxablePaise)}</dd>
         {totals.interState ? (
           <>
-            <dt style={{ color: 'var(--hos-fg-muted)' }}>IGST</dt>
+            <dt style={{ color: 'var(--hos-fg-muted)' }}>{wt('quote.igst')}</dt>
             <dd style={{ margin: 0 }}>{formatINR(totals.igstPaise)}</dd>
           </>
         ) : (
           <>
-            <dt style={{ color: 'var(--hos-fg-muted)' }}>CGST</dt>
+            <dt style={{ color: 'var(--hos-fg-muted)' }}>{wt('quote.cgst')}</dt>
             <dd style={{ margin: 0 }}>{formatINR(totals.cgstPaise)}</dd>
-            <dt style={{ color: 'var(--hos-fg-muted)' }}>SGST</dt>
+            <dt style={{ color: 'var(--hos-fg-muted)' }}>{wt('quote.sgst')}</dt>
             <dd style={{ margin: 0 }}>{formatINR(totals.sgstPaise)}</dd>
           </>
         )}
       </dl>
       <p style={{ margin: 'var(--hos-space-3) 0 0', fontSize: 'var(--hos-text-xs)', color: 'var(--hos-fg-muted)' }}>
-        Sample price — final amount comes from the server quote at checkout.
+        {wt('quote.sampleFootnote')}
       </p>
     </div>
   );

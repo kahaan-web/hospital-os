@@ -1,5 +1,5 @@
 {
-  "model": "claude-fable-5-2",
+  "model": "opus",
   "effortLevel": "high",
   "fastMode": false,
   "permissions": {

@@ -4,7 +4,8 @@ import { Button, Stepper, type StepperStep } from '@hos/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { WIZARD_ROUTES, wizardBackHref } from '@/lib/onboarding-steps';
+import { wt } from '@/i18n';
+import { getWizardRoutes, wizardBackHref } from '@/lib/onboarding-steps';
 
 export function OnboardingWizardShell({
   currentHref,
@@ -13,17 +14,19 @@ export function OnboardingWizardShell({
   currentHref: string;
   children: ReactNode;
 }) {
-  const steps: StepperStep[] = WIZARD_ROUTES.map((s) => ({
+  const routes = getWizardRoutes();
+  const steps: StepperStep[] = routes.map((s) => ({
     id: s.href,
     label: s.label,
   }));
-  const current = WIZARD_ROUTES.find((s) => s.href === currentHref)?.href ?? currentHref;
+  const current = routes.find((s) => s.href === currentHref)?.href ?? currentHref;
   const backHref = wizardBackHref(currentHref);
   const router = useRouter();
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--hos-bg-canvas)' }}>
+    <div className="hos-wizard-shell" style={{ minHeight: '100vh', background: 'var(--hos-bg-canvas)' }}>
       <header
+        className="hos-wizard-header"
         style={{
           borderBottom: '1px solid var(--hos-border)',
           background: 'var(--hos-bg-surface)',
@@ -50,19 +53,19 @@ export function OnboardingWizardShell({
               textDecoration: 'none',
             }}
           >
-            Hospital OS
+            {wt('app.name')}
           </Link>
-          <p style={{ margin: 0, fontSize: 'var(--hos-text-sm)', color: 'var(--hos-fg-muted)' }}>Setup wizard</p>
+          <p style={{ margin: 0, fontSize: 'var(--hos-text-sm)', color: 'var(--hos-fg-muted)' }}>{wt('wizard.shellTitle')}</p>
         </div>
       </header>
       <main style={{ maxWidth: '72rem', margin: '0 auto', padding: 'var(--hos-page-pad)' }}>
-        <div style={{ marginBottom: 'var(--hos-space-6)', overflowX: 'auto' }}>
+        <div className="hos-wizard-stepper" style={{ marginBottom: 'var(--hos-space-6)', overflowX: 'auto' }}>
           <Stepper steps={steps} currentStepId={current} orientation="horizontal" />
         </div>
         {backHref ? (
-          <div style={{ marginBottom: 'var(--hos-space-4)' }}>
+          <div className="hos-wizard-back" style={{ marginBottom: 'var(--hos-space-4)' }}>
             <Button type="button" variant="secondary" size="sm" onClick={() => router.push(backHref)}>
-              Back
+              {wt('wizard.back')}
             </Button>
           </div>
         ) : null}
