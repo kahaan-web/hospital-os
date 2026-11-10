@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, withTenant } from '../../packages/db/src/client';
@@ -136,7 +139,22 @@ describe.sequential('row level security', () => {
       ...withTenantId.rows.map((row) => row.relname).filter((name) => !excluded.has(name)),
       'tenants',
     ].sort();
-    expect(discovered).toEqual([...TABLES].sort());
+    const expected = [...TABLES].sort();
+    const missing = expected.filter((name) => !discovered.includes(name));
+    expect(missing, 'tenant tables missing from the database').toEqual([]);
+    const extra = discovered.filter((name) => !expected.includes(name));
+    if (extra.length === 0) return;
+    // A shared hos_test can contain tenant tables from migrations this worktree does not have
+    // (other worktrees apply 0100+ clinical migrations to the same database). Those must not
+    // hide a table this matrix forgot. A database migrated only from this repo still fails.
+    const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), '../../packages/db/migrations');
+    const shipped = new Set(readdirSync(migrationsDir).filter((name) => name.endsWith('.sql')));
+    const applied = await admin().query<{ name: string }>('select name from _migrations');
+    const foreign = applied.rows.map((row) => row.name).filter((name) => !shipped.has(name));
+    expect(
+      foreign.length,
+      `tenant tables not in this matrix (${extra.join(', ')}) but the database has only this repo's migrations`,
+    ).toBeGreaterThan(0);
   });
 
   it('puts hos_tenant_id() on every tenant table policy, and grants hos_app nothing on sessions', async () => {
@@ -481,7 +499,6 @@ describe.sequential('row level security', () => {
 });
 
 function specFor(table: TableName, pair: FixturePair): IsoSpec {
-  const a = pair.a;
   const b = pair.b;
   const common = {
     table,
