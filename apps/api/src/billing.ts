@@ -1,15 +1,19 @@
 import { schema, type Tx } from '@hos/db';
 import {
   addCycle,
+  applyGst,
   paymentStatusForOutcome,
+  priceSubscription,
   type OrderDto,
   type PayAttemptResult,
   type PaymentDto,
   type QuoteDto,
+  type QuoteLine,
   type SubscriptionConfig,
+  type TaxTotals,
 } from '@hos/shared';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { orderDto, partyFromSettings, priceBook, quoteFor, settings } from './catalog';
+import { orderDto, partyFromSettings, placeOfSupply, priceBook, quoteFor, settings } from './catalog';
 import { publicId } from './crypto';
 import { ApiError, writeAudit, type Actor } from './http';
 import type { PaymentGateway } from './providers';
@@ -225,6 +229,13 @@ async function ensureSubscription(tx: Tx, tenantId: string, quote: QuoteDto): Pr
   }
 }
 
+/**
+ * Applies a plan, location-count or add-on change immediately, including downgrades.
+ * A downgrade does not refund cash and does not issue a GST credit note (out of scope).
+ * Unused pre-tax value is stored on `subscriptions.credit_paise` and consumed by the
+ * next charge (upgrade or renewal). Paid upgrades still go through change-quote →
+ * order → pay → verify → fulfil, which calls this with the priced quote.
+ */
 export async function applySubscriptionChange(tx: Tx, quote: QuoteDto): Promise<void> {
   const [sub] = await tx.select().from(schema.subscriptions);
   if (!sub) throw new ApiError(422, 'no_subscription', 'There is no subscription to change');
@@ -265,7 +276,125 @@ export async function applySubscriptionChange(tx: Tx, quote: QuoteDto): Promise<
   }
 }
 
-async function insertInvoice(tx: Tx, tenantId: string, orderId: string, paymentId: string, quote: QuoteDto, description: string): Promise<string> {
+interface InvoiceSource {
+  lines: QuoteDto['lines'];
+  totals: Pick<TaxTotals, 'interState' | 'taxablePaise' | 'cgstPaise' | 'sgstPaise' | 'igstPaise' | 'totalPaise'>;
+  placeOfSupplyStateCode: string;
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface RenewalInvoice {
+  invoiceId: string;
+  number: string;
+  periodStart: string;
+  periodEnd: string;
+  totalPaise: number;
+}
+
+/**
+ * Dev clock. Moves the subscription across period boundaries that fall within
+ * `advanceDays` of now and writes one mock renewal invoice per boundary.
+ * The mock gateway marks those invoices paid; there is no dunning. Not for production.
+ */
+export async function advanceBillingClock(tx: Tx, actor: Actor, advanceDays: number): Promise<{ advancedDays: number; renewals: RenewalInvoice[] }> {
+  const horizon = new Date(Date.now() + advanceDays * 24 * 60 * 60 * 1000);
+  const renewals: RenewalInvoice[] = [];
+  for (let i = 0; i < 36; i++) {
+    const [row] = await tx.select().from(schema.subscriptions);
+    if (!row || row.status !== 'active') throw new ApiError(422, 'no_subscription', 'There is no subscription to renew');
+    if (new Date(row.currentPeriodEnd).getTime() > horizon.getTime()) break;
+    renewals.push(await issueRenewal(tx, actor, row));
+  }
+  return { advancedDays: advanceDays, renewals };
+}
+
+async function issueRenewal(tx: Tx, actor: Actor, row: typeof schema.subscriptions.$inferSelect): Promise<RenewalInvoice> {
+  const { book } = await priceBook(tx);
+  const cfg = await settings(tx);
+  const place = await placeOfSupply(tx);
+  const cycle = row.billingCycle as SubscriptionConfig['cycle'];
+  const [subView] = await tx.select().from(schema.subscriptions).where(eq(schema.subscriptions.id, row.id));
+  if (!subView) throw new ApiError(422, 'no_subscription', 'There is no subscription to renew');
+  const items = await tx.select().from(schema.subscriptionItems).where(eq(schema.subscriptionItems.status, 'active'));
+  const config: SubscriptionConfig = {
+    planId: subView.planId,
+    cycle,
+    locationCount: subView.locationCount,
+    addonModuleIds: items.flatMap((item) => (item.kind === 'addon' && item.moduleId ? [item.moduleId] : [])),
+  };
+  const lines: QuoteLine[] = priceSubscription(book, config);
+  let credit = subView.creditPaise;
+  let taxed = applyGst(lines, cfg.supplierStateCode, place);
+  const applied = Math.min(credit, Math.max(0, taxed.totals.taxablePaise));
+  if (applied > 0) {
+    const withCredit = applyGst(
+      [
+        ...lines,
+        {
+          kind: 'credit',
+          refId: null,
+          description: 'Account credit applied',
+          sacCode: book.planSacCode,
+          quantity: 1,
+          unitPaise: -applied,
+          amountPaise: -applied,
+          gstRateBp: book.planGstRateBp,
+        },
+      ],
+      cfg.supplierStateCode,
+      place,
+    );
+    if (withCredit.totals.totalPaise >= 0) {
+      taxed = withCredit;
+      credit -= applied;
+    }
+  }
+  const periodStart = new Date(subView.currentPeriodEnd);
+  const periodEnd = addCycle(periodStart, cycle);
+  await tx
+    .update(schema.subscriptions)
+    .set({ currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, creditPaise: credit })
+    .where(eq(schema.subscriptions.id, subView.id));
+  const invoice = await insertInvoice(
+    tx,
+    subView.tenantId,
+    null,
+    null,
+    {
+      lines: taxed.lines,
+      totals: taxed.totals,
+      placeOfSupplyStateCode: place,
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+    },
+    'Hospital OS subscription renewal',
+    'Sample price. Mock renewal — no tax is remitted.',
+  );
+  await writeAudit(tx, actor, 'billing.subscription.renew', 'invoice', invoice.id, null, {
+    number: invoice.number,
+    periodStart: periodStart.toISOString(),
+    periodEnd: periodEnd.toISOString(),
+    totalPaise: taxed.totals.totalPaise,
+  });
+  return {
+    invoiceId: invoice.id,
+    number: invoice.number,
+    periodStart: periodStart.toISOString(),
+    periodEnd: periodEnd.toISOString(),
+    totalPaise: taxed.totals.totalPaise,
+  };
+}
+
+async function insertInvoice(
+  tx: Tx,
+  tenantId: string,
+  orderId: string | null,
+  paymentId: string | null,
+  quote: InvoiceSource,
+  description: string,
+  notes = 'Sample price. Mock invoice — no tax is remitted.',
+): Promise<{ id: string; number: string }> {
   const cfg = await settings(tx);
   const [tenant] = await tx.select().from(schema.tenants);
   const locs = await tx.select().from(schema.locations);
@@ -305,7 +434,7 @@ async function insertInvoice(tx: Tx, tenantId: string, orderId: string, paymentI
       totalPaise: quote.totals.totalPaise,
       periodStart: new Date(quote.periodStart),
       periodEnd: new Date(quote.periodEnd),
-      notes: 'Sample price. Mock invoice — no tax is remitted.',
+      notes,
     })
     .returning();
   if (quote.lines.length > 0) {
@@ -326,7 +455,7 @@ async function insertInvoice(tx: Tx, tenantId: string, orderId: string, paymentI
       })),
     );
   }
-  return invoice!.id;
+  return { id: invoice!.id, number: invoice!.number };
 }
 
 export { addCycle };

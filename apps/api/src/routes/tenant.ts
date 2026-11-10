@@ -237,6 +237,20 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       return { key: req.params.moduleKey, access: 'enabled' as const };
     }),
   );
+
+  // Generic feature probe for Phase B. Register a dedicated path in route-guards.ts
+  // (permission + module + feature) when a module grows its own routes; this handler
+  // is the reference for requireFeature(featureKey) → 403 not_entitled.
+  r.get(
+    '/api/v1/tenant/m/:moduleKey/features/:featureKey',
+    { schema: { params: z.object({ moduleKey: z.string().min(1), featureKey: z.string().min(1) }) } },
+    async (req, reply) =>
+      run(req, reply, async (gate) => {
+        await gate.requireModule(req.params.moduleKey);
+        await gate.requireFeature(req.params.featureKey);
+        return { moduleKey: req.params.moduleKey, featureKey: req.params.featureKey, access: 'enabled' as const };
+      }),
+  );
 }
 
 function page<T>(items: T[], pageNo: number, pageSize: number): PageDto<T> {
