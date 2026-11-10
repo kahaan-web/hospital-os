@@ -114,6 +114,31 @@ describe.sequential('row level security', () => {
     expect(missing.rows).toEqual([]);
   });
 
+  it('lists the same tenant-owned tables as the isolation matrix', async () => {
+    const withTenantId = await app().query<{ relname: string }>(
+      `select c.relname
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relkind = 'r'
+          and exists (
+            select 1
+              from pg_attribute a
+             where a.attrelid = c.oid
+               and a.attname = 'tenant_id'
+               and a.attnum > 0
+               and not a.attisdropped
+          )
+        order by 1`,
+    );
+    const excluded = new Set(['audit_log', 'roles', 'sessions']);
+    const discovered = [
+      ...withTenantId.rows.map((row) => row.relname).filter((name) => !excluded.has(name)),
+      'tenants',
+    ].sort();
+    expect(discovered).toEqual([...TABLES].sort());
+  });
+
   it('puts hos_tenant_id() on every tenant table policy, and grants hos_app nothing on sessions', async () => {
     const bare = await app().query<{ relname: string }>(
       `select c.relname
@@ -211,6 +236,58 @@ describe.sequential('row level security', () => {
         const deleted = await app().query(`delete from ${spec.table}`);
         expect(deleted.rowCount, 'DELETE without WHERE must touch only tenant A').toBe(1);
       }
+    } finally {
+      await app().query('ROLLBACK');
+    }
+  });
+
+  it('hides another tenant custom roles and blocks cross-tenant role assignment', async () => {
+    const customB = await admin().query<{ id: string }>(
+      `insert into roles (tenant_id, key, name, is_system)
+       values ($1, $2, 'Custom role B', false) returning id`,
+      [pair!.b.id, `zz-custom-${pair!.runId}`],
+    );
+    const roleB = customB.rows[0]?.id;
+    expect(roleB).toBeTruthy();
+    await app().query('BEGIN');
+    try {
+      await scopeTenant(app(), pair!.a.id);
+      const hidden = await app().query<{ n: number }>(`select count(*)::int as n from roles where id = $1`, [roleB]);
+      expect(Number(hidden.rows[0]?.n)).toBe(0);
+      await expectSqlState(
+        app(),
+        `insert into user_location_roles (tenant_id, user_id, role_id, location_id) values ($1, $2, $3, $4)`,
+        [pair!.a.id, pair!.a.userId, roleB, pair!.a.locationId],
+        '42501',
+      );
+    } finally {
+      await app().query('ROLLBACK');
+    }
+    await admin().query('delete from roles where id = $1', [roleB]);
+  });
+
+  it('rejects catalogue writes in tenant scope and tenant inserts with no session context', async () => {
+    await app().query('BEGIN');
+    try {
+      await scopeTenant(app(), pair!.a.id);
+      await expectSqlState(
+        app(),
+        `insert into plans (key, name, status, sort_order) values ($1, 'Nope plan', 'active', 999)`,
+        [`zz-plan-${pair!.runId}`],
+        '42501',
+      );
+    } finally {
+      await app().query('ROLLBACK');
+    }
+
+    await app().query('BEGIN');
+    try {
+      await expectSqlState(
+        app(),
+        `insert into locations (tenant_id, name, code, state_code) values ($1, 'No ctx', 'NC', '27')`,
+        [pair!.a.id],
+        '42501',
+      );
     } finally {
       await app().query('ROLLBACK');
     }

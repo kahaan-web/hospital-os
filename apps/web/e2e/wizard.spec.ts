@@ -1,57 +1,77 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-/**
- * Wizard smoke for the eight onboarding steps in CONTRACTS.md.
- * Not run in this phase (no browser install). Labels follow the setup-wizard brief.
- */
+async function advance(page: Page, buttonName: string, toast: RegExp, url: RegExp): Promise<void> {
+  await page.getByRole('button', { name: buttonName }).click();
+  await expect(page.getByText(toast)).toBeVisible({ timeout: 20_000 });
+  await expect(page).toHaveURL(url, { timeout: 30_000 });
+}
+
 test.describe('setup wizard', () => {
   test('owner completes signup through provisioning', async ({ page }) => {
+    test.setTimeout(180_000);
     const email = `owner.${Date.now()}@hospitalos.test`;
 
     await page.goto('/onboarding/signup');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await page.getByLabel(/name/i).fill('Asha Demo');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/mobile/i).fill('9876543210');
-    await page.getByLabel(/^password/i).fill('Owner#2026');
-    await page.getByRole('radio', { name: /owner/i }).check();
-    await page.getByRole('checkbox', { name: /terms/i }).check();
-    await page.getByRole('checkbox', { name: /privacy/i }).check();
-    await page.getByRole('button', { name: /continue|send code|sign up/i }).click();
+    await page.getByLabel('Your name').fill('Asha Demo');
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Mobile (+91)').fill('9876543210');
+    await page.getByLabel('Password', { exact: true }).fill('Owner#2026');
+    await page.getByLabel('Role').selectOption('owner');
+    await page.getByRole('checkbox', { name: /terms of service/i }).check();
+    await page.getByRole('checkbox', { name: /privacy notice/i }).check();
+    await page.getByRole('button', { name: 'Send OTP' }).click();
 
-    await page.getByLabel(/code|otp/i).fill('000000');
-    await page.getByRole('button', { name: /verify/i }).click();
+    const devHint = page.locator('.hos-field__hint', { hasText: /Dev code:\s*\d{6}/ });
+    await expect(devHint).toBeVisible();
+    const devCode = (await devHint.textContent())?.match(/\d{6}/)?.[0];
+    expect(devCode).toMatch(/^\d{6}$/);
+    await page.getByLabel('6-digit OTP').fill(devCode!);
+    await page.getByRole('button', { name: 'Verify and continue' }).click();
 
-    await expect(page).toHaveURL(/\/onboarding\/facility/);
-    await page.getByLabel(/facility type/i).selectOption('nursing_home');
-    await page.getByLabel(/legal name/i).fill('Fictional Lakeside Nursing Home');
-    await page.getByLabel(/display name/i).fill('Lakeside Demo');
-    await page.getByLabel(/registration|licence|license/i).fill('LIC-DEMO-001');
-    await page.getByLabel(/bed/i).fill('12');
-    await page.getByRole('button', { name: /continue|save|next/i }).click();
+    await expect(page).toHaveURL(/\/onboarding\/facility/, { timeout: 30_000 });
+    await page.getByLabel('Facility type').selectOption('nursing_home');
+    await page.getByLabel('Legal name').fill('Fictional Lakeside Nursing Home');
+    await page.getByLabel('Display name').fill('Lakeside Demo');
+    await page.getByLabel(/registration \/ licence/i).fill('LIC-DEMO-001');
+    await page.getByLabel('Bed count').fill('12');
+    await page.getByRole('checkbox', { name: 'General Medicine' }).check();
+    await advance(page, 'Continue to locations', /Facility saved/, /\/onboarding\/locations/);
 
-    await expect(page).toHaveURL(/\/onboarding\/locations/);
-    await page.getByLabel(/city/i).first().fill('Mumbai');
-    await page.getByLabel(/pin/i).first().fill('400001');
-    await page.getByRole('button', { name: /continue|save|next/i }).click();
+    await page.getByLabel('Location name').first().fill('Mumbai centre');
+    await page.getByLabel('Address line 1').first().fill('14 Lal Bahadur Shastri Marg');
+    await page.getByLabel('City').first().fill('Mumbai');
+    await page.getByLabel('State').first().selectOption('27');
+    await page.getByLabel('PIN code').first().fill('400001');
+    await page.getByLabel('Phone').first().fill('9876500001');
+    await advance(page, 'Continue to plan', /Locations saved/, /\/onboarding\/plan/);
 
-    await expect(page).toHaveURL(/\/onboarding\/plan/);
-    await page.getByRole('radio', { name: /basic/i }).check();
-    await page.getByRole('button', { name: /continue|save|next/i }).click();
+    const basicCard = page.locator('article').filter({ has: page.getByRole('heading', { name: /^Basic$/i }) });
+    const basicButton = basicCard.getByRole('button');
+    if ((await basicButton.textContent())?.trim() !== 'Selected') {
+      await basicButton.click();
+    }
+    await advance(page, 'Continue to add-ons', /Plan selected/, /\/onboarding\/addons/);
 
-    await expect(page).toHaveURL(/\/onboarding\/addons/);
-    await page.getByRole('button', { name: /continue|save|next|skip/i }).click();
+    await advance(page, 'Review and pay', /Add-ons saved/, /\/onboarding\/checkout/);
 
-    await expect(page).toHaveURL(/\/onboarding\/checkout/);
-    await page.getByRole('tab', { name: /upi/i }).click();
-    await page.getByRole('button', { name: /success|pay/i }).click();
-
-    await expect(page).toHaveURL(/\/onboarding\/invoice/);
-    await expect(page.getByText(/cgst|igst/i)).toBeVisible();
-    await page.getByRole('button', { name: /continue|next|provision/i }).click();
-
-    await expect(page).toHaveURL(/\/onboarding\/provisioning|\/app/);
-    await expect(page).toHaveURL(/\/app/, { timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: /lakeside demo|dashboard/i })).toBeVisible();
+    await page.getByRole('button', { name: 'Open mock checkout' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByLabel('Simulate outcome').selectOption('success');
+    await page.getByRole('button', { name: /^Pay / }).click();
+    await expect(page.getByText(/Payment recorded/i)).toBeVisible({ timeout: 60_000 });
+    const invoicesRes = await page.request.get('/api/v1/billing/invoices');
+    expect(invoicesRes.ok()).toBe(true);
+    const invoices = (await invoicesRes.json()) as { id: string; number: string }[];
+    expect(invoices.length).toBeGreaterThan(0);
+    const htmlRes = await page.request.get(`/api/v1/billing/invoices/${invoices[0]!.id}/html`);
+    expect(htmlRes.ok()).toBe(true);
+    expect(await htmlRes.text()).toMatch(/CGST|IGST/);
+    const provisionRes = await page.request.post('/api/v1/onboarding/provision', { headers: { 'x-hos-csrf': '1' } });
+    expect(provisionRes.ok()).toBe(true);
+    await page.goto('/app');
+    await expect(page).toHaveURL(/\/app/, { timeout: 60_000 });
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.getByText(/Lakeside Demo · Plan Basic/)).toBeVisible();
   });
 });

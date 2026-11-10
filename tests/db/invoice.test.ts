@@ -58,7 +58,10 @@ describe.sequential('invoice numbers', () => {
         Array.from({ length: 20 }, () =>
           withPooled(pool, async (client) => {
             await scopePlatform(client);
-            const row = await client.query<{ number: string }>(`select number from hos_next_invoice_number(now())`);
+            const row = await client.query<{ number: string }>(
+              `select number from hos_next_invoice_number($1::timestamptz)`,
+              ['2099-06-01T00:00:00.000Z'],
+            );
             const number = row.rows[0]?.number;
             if (!number) throw new Error('invoice function returned no number');
             return number;

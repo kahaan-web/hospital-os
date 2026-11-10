@@ -9,8 +9,7 @@ import { dbEnv } from '../../packages/db/src/env';
  * Wizard, GST invoices, mock payment and idempotency against buildApp().inject.
  * Decision: two hospitals (Maharashtra and Madhya Pradesh) so a real invoice shows
  * CGST+SGST inside the supplier state and IGST across it. The demo tenant is not required.
- * Concurrent order creates are not asserted as a single row: READ COMMITTED can let two
- * creators both observe no open order. Replay, mismatch and a later create are asserted instead.
+ * Same-key concurrent order creates must collapse to one order (CONTRACTS.md §10).
  */
 
 interface Injected {
@@ -69,12 +68,19 @@ describe.sequential('wizard, GST and mock payments', () => {
     assertGst(quote.json as QuoteDto, false, '27');
 
     const raceKey = idem();
-    const [first, second] = await Promise.all([
+    const [raceA, raceB] = await Promise.all([
       call(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'onboarding' }, { 'idempotency-key': raceKey }),
-      call(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'onboarding' }, { 'idempotency-key': `${raceKey}-other` }),
+      call(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'onboarding' }, { 'idempotency-key': raceKey }),
     ]);
-    expectStatus(first, 200);
-    expectStatus(second, 200);
+    expectStatus(raceA, 200);
+    expectStatus(raceB, 200);
+    const raceOrderA = (raceA.json as { id: string }).id;
+    const raceOrderB = (raceB.json as { id: string }).id;
+    expect(raceOrderA).toBe(raceOrderB);
+    expect(
+      header(raceA, 'idempotent-replayed') === 'true' || header(raceB, 'idempotent-replayed') === 'true',
+    ).toBe(true);
+
     const followed = await call(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'onboarding' }, { 'idempotency-key': idem() });
     expectStatus(followed, 200);
     expect(await countOpenOrders((followed.json as { id: string }).id)).toBe(1);
@@ -182,7 +188,6 @@ describe.sequential('wizard, GST and mock payments', () => {
     const provision = await call(cookie, 'POST', '/api/v1/onboarding/provision');
     expectStatus(provision, 200);
     expect((provision.json as { tenant: { status: string } }).tenant.status).toBe('active');
-
     const invoices = await call(cookie, 'GET', '/api/v1/billing/invoices');
     expectStatus(invoices, 200);
     const list = invoices.json as { id: string; number: string }[];
@@ -202,7 +207,7 @@ describe.sequential('wizard, GST and mock payments', () => {
     expectStatus(me, 200);
     const tenantMe = me.json as TenantMe;
     expect(tenantMe.tenant.status).toBe('active');
-    expect(tenantMe.tenant.displayName).toBe('Lakeside Demo');
+    expect(tenantMe.tenant.displayName).toBe('zz-test Lakeside Demo');
     expect(tenantMe.features).toContain(featureKey('patient-registration', 'New Registration'));
     expect(tenantMe.features).not.toContain(featureKey('cpoe', 'Chief Complaints'));
 
@@ -235,6 +240,7 @@ describe.sequential('wizard, GST and mock payments', () => {
     expectStatus(locations, 200);
     const locationId = (locations.json as { id: string }[])[0]?.id;
     expect(locationId).toBeTruthy();
+    const beforeInvite = await auditTotal(cookie);
     const invite = await call(cookie, 'POST', '/api/v1/tenant/users/invite', {
       name: 'Cashier Demo',
       email: `cashier.${randomUUID()}@hospitalos.test`,
@@ -242,6 +248,7 @@ describe.sequential('wizard, GST and mock payments', () => {
       locationIds: [locationId],
     });
     expectStatus(invite, 200);
+    expect(await auditTotal(cookie)).toBe(beforeInvite + 1);
     const inviteUrl = (invite.json as { devInviteUrl?: string }).devInviteUrl;
     expect(inviteUrl, 'invite did not return devInviteUrl').toBeTruthy();
     const token = new URL(inviteUrl!).searchParams.get('invite');
@@ -259,6 +266,8 @@ describe.sequential('wizard, GST and mock payments', () => {
   });
 
   it('raises an inter-state IGST invoice and hides it from the other hospital', async () => {
+    expect(intraInvoiceId, 'intra-state invoice id from the prior example').toBeTruthy();
+    expect(intraCookie, 'intra-state session from the prior example').toBeTruthy();
     const cookie = await signUp('Fictional Narmada Nursing Home', 'Narmada Demo', '23', 'Indore', '452001');
     const basicId = await basicPlan();
     expectStatus(await call(cookie, 'PUT', '/api/v1/onboarding/plan', { planId: basicId, cycle: 'monthly', locationCount: 1 }), 200);
@@ -354,10 +363,11 @@ describe.sequential('wizard, GST and mock payments', () => {
     expectStatus(verified, 200);
     const cookie = sessionCookie(verified.headers);
     expect(cookie, 'otp verify did not set hos_session').toBeTruthy();
+    const runTag = randomUUID().slice(0, 8);
     const facility = await call(cookie!, 'PUT', '/api/v1/onboarding/facility', {
       facilityType: 'nursing_home',
-      legalName,
-      displayName,
+      legalName: `zz-test-${runTag} ${legalName}`,
+      displayName: `zz-test ${displayName}`,
       gstin: `${gstinBody}${gstinCheckDigit(gstinBody)}`,
       registrationNo: 'LIC-DEMO-001',
       bedCount: 12,

@@ -12,6 +12,7 @@ import { connectRoles, disconnectRoles, expectSqlState, scopePlatform, scopeTena
  */
 
 const GENESIS = '0'.repeat(64);
+const CONCURRENT_CHAIN_TENANT = '00000000-0000-4000-8000-000000000099';
 
 describe.sequential('audit log', () => {
   let roles: DbRoles | null = null;
@@ -143,7 +144,16 @@ describe.sequential('audit log', () => {
   });
 
   it('keeps one chain contiguous when 20 transactions insert together', async () => {
-    const tenantId = randomUUID();
+    const tenantId = CONCURRENT_CHAIN_TENANT;
+    await admin().query('BEGIN');
+    try {
+      await admin().query(`set local session_replication_role = 'replica'`);
+      await admin().query(`delete from audit_log where chain_key = $1`, [tenantId]);
+      await admin().query('COMMIT');
+    } catch (err) {
+      await admin().query('ROLLBACK').catch(() => undefined);
+      throw err;
+    }
     const pool = new pg.Pool({ connectionString: dbEnv().appUrl, max: 20, connectionTimeoutMillis: 8_000 });
     try {
       await Promise.all(
