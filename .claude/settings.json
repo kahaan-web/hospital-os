@@ -1,0 +1,23 @@
+{
+  "model": "claude-fable-5-2",
+  "effortLevel": "high",
+  "fastMode": false,
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read", "Edit", "Write", "Glob", "Grep", "TodoWrite",
+      "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(git *)",
+      "Bash(docker compose *)", "Bash(docker ps*)", "Bash(docker logs *)", "Bash(docker exec hospital-os*)",
+      "Bash(ls*)", "Bash(cat *)", "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(rm -rf node_modules*)", "Bash(rm -rf apps/*)", "Bash(rm -rf packages/*)", "Bash(rm -rf .next*)",
+      "Bash(echo *)", "Bash(pwd)", "Bash(cd *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(sleep *)", "Bash(curl *localhost*)", "Bash(curl *127.0.0.1*)",
+      "Bash(netstat *)", "Bash(tasklist*)", "Bash(taskkill /PID *)", "Bash(kill *)", "Bash(find . *)", "Bash(grep *)", "Bash(sed *)", "Bash(test *)", "Bash(touch *)",
+      "PowerShell(npm *)", "PowerShell(npx *)", "PowerShell(node *)", "PowerShell(git *)", "PowerShell(docker compose *)", "PowerShell(Get-NetTCPConnection*)", "PowerShell(Stop-Process -Id *)"
+    ],
+    "deny": [
+      "Bash(git push*)", "Bash(git remote*)", "Bash(docker rm*)", "Bash(docker stop*)", "Bash(docker kill*)", "Bash(docker system*)", "Bash(docker volume rm*)",
+      "Bash(npm install -g*)", "Bash(npm i -g*)", "Bash(git config --global*)", "Bash(taskkill /IM*)",
+      "Read(~/.claude/**)", "Read(~/.agent-office/**)", "Edit(~/.claude/**)", "Edit(~/.agent-office/**)",
+      "PowerShell(git push*)", "PowerShell(Stop-Process -Name*)"
+    ]
+  }
+}

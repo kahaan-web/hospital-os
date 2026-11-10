@@ -1,0 +1,113 @@
+Module,Type,Function / Report Description,Status,Status Count,Basic,Medium,Premium
+Patient Registration,Functions,New Registration,Change,1.0,Y,Y,Y
+Patient Registration,Functions,Edit Registration,Change,1.0,Y,Y,Y
+Patient Registration,Functions,Attach patient documents,No Change,1.0,N,Y,Y
+Patient Registration,Reports,Print Patient Photo ID,No Change,1.0,N,Y,Y
+Patient Registration,Reports,Print Case paper,New,1.0,Y,Y,Y
+Patient Registration,Reports,Print Register by Date Range / By City / State / Gender / Age,No Change,1.0,Y,Y,Y
+Patient Registration,Reports,Print Stickers,No Change,1.0,Y,Y,Y
+Patient Registration,Reports,Patient Excel Data,New,1.0,N,Y,Y
+Patient Registration,Functions,Send Mailers via email / SMS,New,1.0,N,Y,Y
+Doctor Appointment / Visit,Functions,Take Appointment,No Change,1.0,Y,Y,Y
+Doctor Appointment / Visit,Functions,Phone Appointment (Without Registration,No Change,1.0,Y,Y,Y
+Doctor Appointment / Visit,Functions,Cancel / Reschedule Appointment,No Change,1.0,Y,Y,Y
+Doctor Appointment / Visit,Functions,Counter (New / Repeate Patients),No Change,1.0,Y,Y,Y
+Doctor Appointment / Visit,Functions,Visit Registration,Change,1.0,Y,Y,Y
+Doctor Appointment / Visit,Reports,Appointment Diary for Single Doctor / All Doctors,New,1.0,Y,Y,Y
+Doctor Appointment / Visit,Reports,Visit Satatisitcs Summary by Clinic,New,1.0,Y,Y,Y
+Doctor Appointment / Visit,Reports,Visit Detail by Doctor,New,1.0,Y,Y,Y
+Doctor Appointment / Visit,Reports,Visit Register,New,1.0,Y,Y,Y
+OP Billing & Cash handling,Functions,Accept Deposit,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Functions,Refund Deposit,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Functions,OP Voucher Posting (Cash / Credit / Free),No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Functions,OP Refund,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Functions,OP Settlements,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Functions,Concessions,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Reports,OP Voucher (Document),No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Reports,Cash Summary / Detail,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Reports,Revenue Summary / Detail,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Reports,Doctor Sharing / Detail,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Reports,Patient Outstanding,No Change,1.0,Y,Y,Y
+OP Billing & Cash handling,Reports,Deposit Register,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Functions,Admission,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Functions,Transfer,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Functions,Discharge,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Functions,Discharge Summary,No Change,1.0,N,Y,Y
+Admission / Discharges / Transfers,Reports,Admission Register,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Reports,Transfer Register,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Reports,Discharge Register,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Reports,Discharge Summary Report,No Change,1.0,Y,Y,Y
+Admission / Discharges / Transfers,Reports,Patient Stickers,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Posting Charges for Services,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Accept Deposit,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Refund Deposit,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Posting Reversals,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Bill Preparation,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Concessions,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Functions,Bill Settlement,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Patient Statement of Account (Summary / Detail),No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Revenue Summary / Detail,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Bill Register,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Concession Register,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Doctor Sharing / Detail,New,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Deposit Register,No Change,1.0,Y,Y,Y
+IP Billing & Cash Handling,Reports,Patient Outstanding,No Change,1.0,N,Y,Y
+IP Billing & Cash handling,Reports,Cash Summary / Detail,No Change,1.0,Y,Y,Y
+Pharmacy,Functions,Purchase Order,Change,1.0,N,Y,Y
+Pharmacy,Functions,Material Receipts,Change,1.0,Y,Y,Y
+Pharmacy,Functions,Material Returns,Change,1.0,Y,Y,Y
+Pharmacy,Functions,Issue to IP Patients / Returns,No Change,1.0,Y,Y,Y
+Pharmacy,Functions,Issue to OP Patients,No Change,1.0,Y,Y,Y
+Pharmacy,Functions,Outside Sales,No Change,1.0,Y,Y,Y
+Pharmacy,Functions,Stock Adjustments,No Change,1.0,Y,Y,Y
+Pharmacy,Functions,Payment Approvals,New,1.0,Y,Y,Y
+Pharmacy,Functions,Bill Payment,New,1.0,Y,Y,Y
+Pharmacy,Reports,Stock Register Summary / Details,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Purchase Register,No Change,1.0,N,Y,Y
+Pharmacy,Reports,Receipt Register,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Rejection Register,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Issue Register ,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Issue Return Register,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Stock Adjustment register,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Patient Issue / Return Statement IP,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Expiry Item Report,No Change,1.0,Y,Y,Y
+Pharmacy,Reports,Supplier Outstanding,New,1.0,Y,Y,Y
+Pharmacy,Reports,Supplier Payment Register,New,1.0,Y,Y,Y
+LAB,Functions,Sample Collection,No Change,1.0,N,Y,Y
+LAB,Functions,Result Entry,No Change,1.0,N,Y,Y
+LAB,Functions,Master Template,No Change,1.0,N,Y,Y
+LAB,Functions,Send Result on EMAIL,No Change,1.0,N,N,Y
+LAB,Reports,Lab Result Report,No Change,1.0,N,Y,Y
+LAB,Interface,2 Lab Equipments,,1.0,N,N,Y
+LAB,Functions,Patient History,,1.0,N,Y,Y
+LAB,Functions,Sample Status,,1.0,N,Y,Y
+LAB,Reports,LAB MIS,,1.0,N,Y,Y
+Nurse Station,Functions,Lab Orders,No Change,1.0,N,N,Y
+Nurse Station,Functions,Medicine Orders,No Change,1.0,N,N,Y
+Nurse Station,Functions,View Test Results,No Change,1.0,N,N,Y
+Nurse Station,Reports,Investigation Prescription,,1.0,N,N,Y
+Nurse Station,Reports,Medicine Prescription,,,N,N,Y
+Nurse Station,Reports,Doctors Notes,,,N,N,Y
+Nurse Station,Reports,Patient Vitals Table / Graph,,,N,N,Y
+Doctor Accounting,Functions,Setup Doctor Sharing,,1.0,N,N,Y
+Doctor Accounting,Functions,Generate Doctor Payable,,1.0,N,N,Y
+Doctor Accounting,Functions,Generate Excel Data,,1.0,N,N,Y
+Patient Registration,Reports,Print Barcode,No Change,1.0,N,N,Y
+Patient Registration,Functions,MLC Registration,No Change,1.0,N,N,Y
+Patient Registration,Reports,MLC Case Register,,1.0,N,N,Y
+OP Billing & Cash handling,Reports,Visit Statistics for the period,No Change,1.0,N,Y,Y
+CPOE,Functions,Chief Complaints,,1.0,N,N,Y
+CPOE,Functions,Diagnostic Orders,,1.0,N,N,Y
+CPOE,Functions,Medicine Orders,,1.0,N,N,Y
+CPOE,Functions,Procedure Orders,,1.0,N,N,Y
+CPOE,Functions,Appointment Diary ,,1.0,N,N,Y
+CPOE,Functions,Request Reservation / Admission,,1.0,N,N,Y
+Doctor Accounting,Reports,Doctor Transaction Details,,1.0,N,N,Y
+Doctor Accounting,Reports,Doctor Transaction Summary,,1.0,N,N,Y
+Doctor Accounting,Reports,Doctor Invoice,,1.0,N,N,Y
+Doctor Accounting,Reports,Doctor Payment Statement,,1.0,N,N,Y
+CPOE,Reports,Investigation Prescription,,1.0,N,N,Y
+CPOE,Reports,Medicine Prescription,,,N,N,Y
+CPOE,Reports,Doctors Notes,,,N,N,Y
+CPOE,Reports,Patient Vitals Table / Graph,,,N,N,Y
+CPOE,Functions,Patient Vitals,,,N,N,Y
