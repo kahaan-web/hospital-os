@@ -82,6 +82,8 @@ export const type = {
 
 export const touchMin = 48;
 
+export type ThemePreference = 'light' | 'dark';
+
 export const fonts = {
   regular: 'IBMPlexSans_400Regular',
   medium: 'IBMPlexSans_500Medium',

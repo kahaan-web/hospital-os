@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { space, touchMin, type } from '../theme';
 import { useTheme } from '../theme-context';
+import { isFocused, webFocusRing } from './focus';
 
 export function ListRow({
   title,
@@ -10,6 +11,7 @@ export function ListRow({
   onPress,
   last,
   accessibilityLabel,
+  disabled,
 }: {
   title: string;
   subtitle?: string;
@@ -17,6 +19,7 @@ export function ListRow({
   onPress?: () => void;
   last?: boolean;
   accessibilityLabel?: string;
+  disabled?: boolean;
 }) {
   const { colors } = useTheme();
   const inner = (
@@ -24,6 +27,7 @@ export function ListRow({
       style={[
         styles.row,
         { borderBottomColor: colors.line, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth },
+        disabled ? { opacity: 0.6 } : null,
       ]}
     >
       <View style={styles.text}>
@@ -35,16 +39,19 @@ export function ListRow({
       {meta ? (
         <Text style={[type.caption, { color: colors.inkMuted, fontVariant: ['tabular-nums'] }]}>{meta}</Text>
       ) : null}
-      {onPress ? <ChevronRight size={16} color={colors.inkMuted} strokeWidth={1.5} /> : null}
+      {onPress && !disabled ? <ChevronRight size={16} color={colors.inkMuted} strokeWidth={1.5} /> : null}
     </View>
   );
-  if (!onPress) return inner;
+  if (!onPress || disabled) return inner;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
-      style={({ pressed }) => ({ backgroundColor: pressed ? colors.tealSubtle : 'transparent' })}
+      style={(state) => [
+        { backgroundColor: state.pressed ? colors.tealSubtle : 'transparent' },
+        webFocusRing(colors.teal, isFocused(state)),
+      ]}
     >
       {inner}
     </Pressable>

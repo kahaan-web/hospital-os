@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View, type ReturnKeyTypeOptions } from 'react-native';
 import { radius, space, type } from '../theme';
 import { useTheme } from '../theme-context';
+import { webFocusRing } from './focus';
+
 
 export function TextField({
   label,
@@ -15,6 +17,9 @@ export function TextField({
   autoCapitalize = 'none',
   autoComplete,
   editable = true,
+  returnKeyType,
+  onSubmitEditing,
+  blurOnSubmit,
 }: {
   label: string;
   value: string;
@@ -27,6 +32,9 @@ export function TextField({
   autoCapitalize?: 'none' | 'sentences' | 'words';
   autoComplete?: 'email' | 'password' | 'off';
   editable?: boolean;
+  returnKeyType?: ReturnKeyTypeOptions;
+  onSubmitEditing?: () => void;
+  blurOnSubmit?: boolean;
 }) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -35,6 +43,7 @@ export function TextField({
   return (
     <View style={styles.wrap}>
       <Text style={[type.label, { color: colors.ink, marginBottom: space[8] }]}>{label}</Text>
+      <View style={webFocusRing(colors.teal, focused)}>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -46,6 +55,9 @@ export function TextField({
         autoComplete={autoComplete}
         autoCorrect={false}
         editable={editable}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
+        blurOnSubmit={blurOnSubmit}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         accessibilityLabel={label}
@@ -59,6 +71,7 @@ export function TextField({
           },
         ]}
       />
+      </View>
       {error ? (
         <Text style={[type.caption, { color: colors.danger, marginTop: space[4] }]}>{error}</Text>
       ) : hint ? (

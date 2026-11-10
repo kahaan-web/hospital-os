@@ -40,6 +40,9 @@ export interface MobileApi {
   listVisits(): Promise<Visit[]>;
   getVisit(id: string): Promise<Visit>;
 
+  listDoctorVisits(): Promise<Visit[]>;
+  getDoctorVisit(id: string): Promise<Visit>;
+
   listBills(): Promise<Bill[]>;
   getBill(id: string): Promise<Bill>;
 

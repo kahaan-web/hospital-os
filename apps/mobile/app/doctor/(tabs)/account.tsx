@@ -15,16 +15,16 @@ export default function DoctorAccountScreen() {
   const user = me?.kind === 'tenant' ? me.user : null;
   const location = me?.kind === 'tenant' ? me.locations.find((l) => l.id === me.currentLocationId)?.name : null;
   const tenant = me?.kind === 'tenant' ? me.tenant.displayName : copy.appName;
-  const role = me?.kind === 'tenant' ? me.roles.map((r) => r.roleName).join(', ') : '';
+  const role = me?.kind === 'tenant' ? me.roles.map((r) => r.roleName).join(', ') : copy.roleDoctor;
 
   return (
     <Screen title={copy.account} locationName={location}>
       <Panel>
-        <FieldRow label="Name" value={user?.name ?? '—'} />
-        <FieldRow label="Email" value={user?.email ?? '—'} />
-        <FieldRow label="Mobile" value={formatPhone(user?.mobile ?? '')} />
-        <FieldRow label="Hospital" value={tenant} />
-        <FieldRow label="Role" value={role || 'Doctor'} last />
+        <FieldRow label={copy.name} value={user?.name ?? '—'} />
+        <FieldRow label={copy.email} value={user?.email ?? '—'} />
+        <FieldRow label={copy.mobile} value={formatPhone(user?.mobile ?? '')} />
+        <FieldRow label={copy.hospitalLabel} value={tenant} />
+        <FieldRow label={copy.role} value={role || copy.roleDoctor} last />
       </Panel>
       <Text style={[type.label, { color: colors.ink, marginBottom: space[8] }]}>{copy.appearance}</Text>
       <View style={{ flexDirection: 'row', gap: space[8], marginBottom: space[24] }}>

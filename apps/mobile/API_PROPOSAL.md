@@ -4,15 +4,25 @@ Phase A implements auth, catalogue, onboarding and billing only. Patient appoint
 
 Base: `{EXPO_PUBLIC_API_URL}` + `/api/v1` (default `http://127.0.0.1:4400/api/v1`).
 
-Auth matches `docs/CONTRACTS.md`: session cookie `hos_session`, header `x-hos-csrf: 1` on mutations. Native clients cannot rely on httpOnly cookies, so this proposal also accepts:
+Auth matches `docs/CONTRACTS.md`: session cookie `hos_session` (httpOnly, SameSite=Lax), header `x-hos-csrf: 1` on mutations. Web clients send `credentials: 'include'` and restore the session with `GET /auth/me`. They must not store the session in `localStorage` or a script-readable cookie (browsers hide `Set-Cookie`).
 
-- Request: `Authorization: Bearer <token>` **or** `x-hos-session: <token>` **or** `Cookie: hos_session=<token>`
+Native clients cannot read httpOnly cookies, so they send **one** header with the opaque session id:
+
+- Request: `x-hos-session: <token>`
 - Login response (optional extra field, additive): `{ …Me, sessionToken?: string }` **or** response header `x-hos-session`
 - Errors: `ApiErrorBody`
+
+Do not send Bearer, Cookie, and `x-hos-session` together.
 
 DTOs live in `packages/shared/src/mobile.ts` (`Appointment`, `Visit`, `Bill`, `DoctorSlot`, `Order`, plus profile/feedback). Money is integer paise. Dates are `YYYY-MM-DD`; slots are `HH:mm` (24-hour). Lists may be a bare array or `{ items, total, page, pageSize }`.
 
 A mobile-only role key `patient` is used for portal users (staff roles stay as in `rbac.ts`).
+
+Access: a caller who is the wrong role gets `403 forbidden`. A row the caller does not own is **`404`**, never `403` (same as CONTRACTS: another principal’s id is invisible).
+
+`GET /doctor/diary` is read-only. `visitId` may be `null` until a visit exists for that appointment; the client must not open `/doctor/visit/null`. The mock does **not** create visits as a side effect of listing the diary.
+
+Healthcare clinical bills (OP consultation, in-house diagnostics from a clinical establishment) are GST-exempt: `gstRateBp` is `0` on each line, and `cgstPaise` / `sgstPaise` / `igstPaise` / `gstPaise` are `0`.
 
 ## Patient portal (A3) — `/patient/*`
 
@@ -35,18 +45,21 @@ Tenant session. Patient role sees only their own rows.
 
 Existing: `POST /auth/login` (`loginSchema`) → `Me`; `POST /auth/logout`; `GET /auth/me`.
 
+`POST /patient/appointments` accepts `Idempotency-Key` (client sends a new UUID per user-initiated submit) so a double tap does not book twice.
+
 ## Doctor portal (A4) — `/doctor/*`
 
-Tenant session, doctor role. Diary is location-scoped via the session’s current location.
+Tenant session, doctor role. Diary is location-scoped via the session’s current location. Doctor visit reads go through `/doctor/visits`, not `/patient/visits`.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | GET | `/doctor/diary?date=YYYY-MM-DD` | — | `Appointment[]` |
-| GET | `/doctor/visits/:id` | — | `Visit` (same DTO; doctor may also use `/patient/visits/:id` once authorised) |
+| GET | `/doctor/visits` | — | `Visit[]` (this doctor’s visits) |
+| GET | `/doctor/visits/:id` | — | `Visit` |
 | GET | `/doctor/orders?visitId=` | — | `Order[]` |
 | POST | `/doctor/orders` | `placeOrderSchema` | `Order` |
 
-`httpClient` reads visits through `/patient/visits/:id` for a shared DTO. When the API lands, prefer `/doctor/visits/:id` if RBAC needs a split.
+`POST /doctor/orders` accepts `Idempotency-Key` (new UUID per submit). The placed order’s `doctorId` is the signed-in doctor, not a hardcoded sample id.
 
 ## Entitlements
 

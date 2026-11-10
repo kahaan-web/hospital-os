@@ -111,9 +111,15 @@ export const visitVitalsSchema = z.object({
 });
 export type VisitVitals = z.infer<typeof visitVitalsSchema>;
 
+export const TEST_STATUSES = ['ordered', 'collected', 'reported'] as const;
+export type TestStatus = (typeof TEST_STATUSES)[number];
+
+export const GENDERS = ['female', 'male', 'other', 'not_recorded'] as const;
+export type Gender = (typeof GENDERS)[number];
+
 export const visitTestSchema = z.object({
   name: z.string(),
-  status: z.enum(['ordered', 'collected', 'reported']),
+  status: z.enum(TEST_STATUSES),
   resultSummary: z.string().nullable(),
 });
 export const visitMedicineSchema = z.object({
@@ -148,6 +154,8 @@ export const billLineSchema = z.object({
   qty: z.number().int().positive(),
   unitPaise: paise,
   amountPaise: paise,
+  /** Basis points. Healthcare from a clinical establishment is 0 (GST-exempt). */
+  gstRateBp: paise,
 });
 export type BillLine = z.infer<typeof billLineSchema>;
 
@@ -161,7 +169,11 @@ export const billSchema = z.object({
   issuedOn: isoDate,
   status: z.enum(BILL_STATUSES),
   subtotalPaise: paise,
+  /** Sum of CGST + SGST + IGST. Kept so older clients still read one tax total. */
   gstPaise: paise,
+  cgstPaise: paise,
+  sgstPaise: paise,
+  igstPaise: paise,
   totalPaise: paise,
   paidPaise: paise,
   lines: z.array(billLineSchema),
@@ -198,7 +210,7 @@ export const patientProfileSchema = z.object({
   email: z.email(),
   mobile: z.string(),
   dob: isoDate,
-  gender: z.enum(['female', 'male', 'other', 'not_recorded']),
+  gender: z.enum(GENDERS),
   bloodGroup: z.string(),
   addressLine1: z.string(),
   city: z.string(),
@@ -290,4 +302,22 @@ export const FEEDBACK_CATEGORY_LABEL: Record<FeedbackCategory, string> = {
   cleanliness: 'Cleanliness',
   treatment: 'Treatment',
   billing: 'Billing',
+};
+
+export const TEST_STATUS_LABEL: Record<TestStatus, string> = {
+  ordered: 'Ordered',
+  collected: 'Collected',
+  reported: 'Reported',
+};
+
+export const GENDER_LABEL: Record<Gender, string> = {
+  female: 'Female',
+  male: 'Male',
+  other: 'Other',
+  not_recorded: 'Not recorded',
+};
+
+export const ORDER_KIND_LABEL: Record<OrderKind, string> = {
+  test: 'Tests',
+  medicine: 'Medicines',
 };

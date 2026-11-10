@@ -1,4 +1,4 @@
-import { formatDate } from '@hos/shared';
+import { formatDate, GENDER_LABEL } from '@hos/shared';
 import { Text, View } from 'react-native';
 import { api } from '../../../src/api';
 import { useAuth } from '../../../src/auth';
@@ -18,25 +18,17 @@ export default function ProfileScreen() {
   const { data, loading, error, reload } = useLoad(() => api.getProfile(), []);
   const location = me?.kind === 'tenant' ? me.locations.find((l) => l.id === me.currentLocationId)?.name : null;
 
-  return (
-    <Screen title={copy.profile} locationName={location} loading={loading} error={error} onRetry={reload}>
-      {data ? (
-        <Panel>
-          <FieldRow label="Name" value={data.name} />
-          <FieldRow label={copy.uhid} value={data.uhid} />
-          <FieldRow label="Date of birth" value={formatDate(data.dob)} />
-          <FieldRow label="Gender" value={data.gender === 'not_recorded' ? copy.notRecorded : data.gender} />
-          <FieldRow label="Blood group" value={dash(data.bloodGroup)} />
-          <FieldRow label="Mobile" value={formatPhone(data.mobile)} />
-          <FieldRow label="Email" value={data.email} />
-          <FieldRow
-            label="Address"
-            value={`${data.addressLine1}, ${data.city}, ${stateName(data.stateCode)} ${data.pincode}`}
-          />
-          <FieldRow label="Emergency contact" value={`${data.emergencyName} · ${formatPhone(data.emergencyMobile)}`} last />
-        </Panel>
-      ) : null}
-
+  const controls = (
+    <View
+      style={{
+        paddingHorizontal: space[16],
+        paddingBottom: space[24],
+        paddingTop: space[12],
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+        backgroundColor: colors.canvas,
+      }}
+    >
       <Text style={[type.label, { color: colors.ink, marginBottom: space[8] }]}>{copy.appearance}</Text>
       <View style={{ flexDirection: 'row', gap: space[8], marginBottom: space[24] }}>
         <View style={{ flex: 1 }}>
@@ -55,6 +47,38 @@ export default function ProfileScreen() {
         </View>
       </View>
       <Button label={copy.signOut} variant="secondary" onPress={() => void signOut()} />
+    </View>
+  );
+
+  return (
+    <Screen
+      title={copy.profile}
+      locationName={location}
+      loading={loading}
+      error={error}
+      onRetry={reload}
+      footer={controls}
+    >
+      {data ? (
+        <Panel>
+          <FieldRow label={copy.name} value={data.name} />
+          <FieldRow label={copy.uhid} value={data.uhid} />
+          <FieldRow label={copy.dateOfBirth} value={formatDate(data.dob)} />
+          <FieldRow label={copy.gender} value={GENDER_LABEL[data.gender]} />
+          <FieldRow label={copy.bloodGroup} value={dash(data.bloodGroup)} />
+          <FieldRow label={copy.mobile} value={formatPhone(data.mobile)} />
+          <FieldRow label={copy.email} value={data.email} />
+          <FieldRow
+            label={copy.address}
+            value={copy.addressLine(data.addressLine1, data.city, stateName(data.stateCode), data.pincode)}
+          />
+          <FieldRow
+            label={copy.emergencyContact}
+            value={copy.emergencyLine(data.emergencyName, formatPhone(data.emergencyMobile))}
+            last
+          />
+        </Panel>
+      ) : null}
     </Screen>
   );
 }

@@ -1,18 +1,17 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+/** Cookie name on the API. Web live sessions use this httpOnly cookie; native sends it as a header. */
 export const SESSION_COOKIE = 'hos_session';
 const STORE_KEY = 'hos_session';
 
 function webGet(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const fromStore = window.localStorage.getItem(STORE_KEY);
-    if (fromStore) return fromStore;
+    return window.localStorage.getItem(STORE_KEY);
   } catch {
-    /* private mode */
+    return null;
   }
-  return readCookie(SESSION_COOKIE);
 }
 
 function webSet(token: string): void {
@@ -20,9 +19,8 @@ function webSet(token: string): void {
   try {
     window.localStorage.setItem(STORE_KEY, token);
   } catch {
-    /* ignore */
+    /* private mode */
   }
-  writeCookie(SESSION_COOKIE, token);
 }
 
 function webClear(): void {
@@ -32,31 +30,15 @@ function webClear(): void {
   } catch {
     /* ignore */
   }
-  writeCookie(SESSION_COOKIE, '', 0);
 }
 
-function readCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const parts = document.cookie.split(';');
-  for (const part of parts) {
-    const [k, ...rest] = part.trim().split('=');
-    if (k === name) return decodeURIComponent(rest.join('='));
-  }
-  return null;
-}
-
-function writeCookie(name: string, value: string, maxAgeSec = 60 * 60 * 12): void {
-  if (typeof document === 'undefined') return;
-  const encoded = encodeURIComponent(value);
-  document.cookie = `${name}=${encoded}; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax`;
-}
-
+/** Mock (any platform) and live native only. Live web uses the httpOnly cookie. */
 export async function getSessionToken(): Promise<string | null> {
   if (Platform.OS === 'web') return webGet();
   try {
     if (await SecureStore.isAvailableAsync()) return SecureStore.getItemAsync(STORE_KEY);
   } catch {
-    /* web fallback inside native test */
+    /* fall through */
   }
   return webGet();
 }

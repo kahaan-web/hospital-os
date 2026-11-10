@@ -34,7 +34,7 @@ export default function AppointmentDetail() {
       reload();
       setConfirm(false);
     } catch (e) {
-      setActionError(e instanceof ApiError ? e.message : 'Could not cancel.');
+      setActionError(e instanceof ApiError ? e.message : copy.couldNotCancel);
     } finally {
       setBusy(false);
     }
@@ -43,7 +43,7 @@ export default function AppointmentDetail() {
   const cancellable = data && data.status !== 'cancelled' && data.status !== 'completed';
 
   return (
-    <Screen title="Appointment" locationName={location} loading={loading} error={error} onRetry={reload}>
+    <Screen title={copy.appointment} locationName={location} loading={loading} error={error} onRetry={reload} hideTitle>
       {data ? (
         <>
           <View style={{ marginBottom: space[12] }}>
@@ -51,15 +51,22 @@ export default function AppointmentDetail() {
           </View>
           {actionError ? <Banner message={actionError} tone="danger" /> : null}
           <Panel>
-            <FieldRow label="When" value={`${formatDate(data.date)} · ${formatSlot(data.slotStart, data.slotEnd)}`} />
-            <FieldRow label="Doctor" value={`${data.doctorName} · ${data.speciality}`} />
-            <FieldRow label="Location" value={data.locationName} />
-            <FieldRow label="UHID" value={data.uhid} />
+            <FieldRow
+              label={copy.when}
+              value={copy.dateAndTime(formatDate(data.date), formatSlot(data.slotStart, data.slotEnd))}
+            />
+            <FieldRow label={copy.doctor} value={copy.nameAndSpeciality(data.doctorName, data.speciality)} />
+            <FieldRow label={copy.location} value={data.locationName} />
+            <FieldRow label={copy.uhid} value={data.uhid} />
             <FieldRow label={copy.reason} value={data.reason} last />
           </Panel>
           {data.visitId ? (
             <View style={{ marginBottom: space[16] }}>
-              <Button label="Open visit summary" variant="secondary" onPress={() => router.push(`/patient/visit/${data.visitId}`)} />
+              <Button
+                label={copy.openVisitSummary}
+                variant="secondary"
+                onPress={() => router.push(`/patient/visit/${data.visitId}`)}
+              />
             </View>
           ) : null}
           {cancellable && !confirm ? (

@@ -26,15 +26,17 @@ export default function ComingSoonHub() {
   const apps = Object.values(roleApps).filter((a) => !a.ready);
 
   return (
-    <Screen title="Android apps" locationName={location}>
-      {me?.kind === 'platform' ? <Text style={[type.body, { color: colors.ink, marginBottom: space[16] }]}>{copy.wrongApp}</Text> : null}
+    <Screen title={copy.androidApps} locationName={location}>
+      {me?.kind === 'platform' ? (
+        <Text style={[type.body, { color: colors.ink, marginBottom: space[16] }]}>{copy.wrongApp}</Text>
+      ) : null}
       <Text style={[type.bodyComfortable, { color: colors.ink, marginBottom: space[16] }]}>{copy.comingSoonBody}</Text>
       <Panel>
         {apps.map((a, i) => (
           <ListRow
             key={a.id}
-            title={`${a.androidCode} · ${a.title}`}
-            subtitle={`${a.features.length} features listed`}
+            title={copy.codeAndTitle(a.androidCode, a.title)}
+            subtitle={copy.featuresListed(a.features.length)}
             last={i === apps.length - 1}
             onPress={() => router.push((HREF[a.id] ?? '/coming-soon') as Href)}
           />

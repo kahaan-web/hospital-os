@@ -33,16 +33,21 @@ export default function DiaryScreen() {
         {formatDate(today)}
       </Text>
       <Panel>
-        {(data ?? []).map((a, i) => (
-          <ListRow
-            key={a.id}
-            title={`${formatSlot(a.slotStart, a.slotEnd)} · ${a.patientName}`}
-            subtitle={`${a.uhid} · ${APPOINTMENT_STATUS_LABEL[a.status]} · ${a.reason}`}
-            last={i === (data?.length ?? 0) - 1}
-            onPress={() => router.push(`/doctor/visit/${a.visitId}`)}
-            accessibilityLabel={`${a.patientName} at ${a.slotStart}, ${APPOINTMENT_STATUS_LABEL[a.status]}`}
-          />
-        ))}
+        {(data ?? []).map((a, i) => {
+          const hasVisit = Boolean(a.visitId);
+          return (
+            <ListRow
+              key={a.id}
+              title={copy.slotAndPatient(formatSlot(a.slotStart, a.slotEnd), a.patientName)}
+              subtitle={copy.diaryRow(a.uhid, APPOINTMENT_STATUS_LABEL[a.status], a.reason)}
+              meta={hasVisit ? undefined : copy.noVisitYet}
+              last={i === (data?.length ?? 0) - 1}
+              onPress={hasVisit ? () => router.push(`/doctor/visit/${a.visitId}`) : undefined}
+              disabled={!hasVisit}
+              accessibilityLabel={copy.patientAtSlot(a.patientName, a.slotStart, APPOINTMENT_STATUS_LABEL[a.status])}
+            />
+          );
+        })}
       </Panel>
     </Screen>
   );

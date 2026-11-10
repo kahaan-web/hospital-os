@@ -14,23 +14,30 @@ import type {
   SubmitFeedbackInput,
   Visit,
 } from '@hos/shared';
+import { Platform } from 'react-native';
+import { copy } from '../copy';
 import { API_BASE } from '../env';
-import { clearSessionToken, getSessionToken, SESSION_COOKIE, setSessionToken } from '../session';
+import { newIdempotencyKey } from '../idempotency';
+import { clearSessionToken, getSessionToken, setSessionToken } from '../session';
 import { ApiError, type MobileApi } from './client';
 
-function cookieHeader(token: string): string {
-  return `${SESSION_COOKIE}=${token}`;
-}
+const isWeb = Platform.OS === 'web';
 
-async function request<T>(method: string, path: string, body?: unknown, authed = true): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  authed = true,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET' && method !== 'HEAD') headers['x-hos-csrf'] = '1';
-  const token = authed ? await getSessionToken() : null;
-  if (token) {
-    headers.Cookie = cookieHeader(token);
-    headers.Authorization = `Bearer ${token}`;
-    headers['x-hos-session'] = token;
+
+  // Native live: one header with the stored opaque session. Web live: httpOnly cookie via credentials.
+  if (authed && !isWeb) {
+    const token = await getSessionToken();
+    if (token) headers['x-hos-session'] = token;
   }
 
   let res: Response;
@@ -42,15 +49,12 @@ async function request<T>(method: string, path: string, body?: unknown, authed =
       credentials: 'include',
     });
   } catch {
-    throw new ApiError(0, 'network', 'Could not reach the server. Check that the API is running.');
+    throw new ApiError(0, 'network', copy.networkError);
   }
 
-  const sessionHeader = res.headers.get('x-hos-session');
-  if (sessionHeader) await setSessionToken(sessionHeader);
-  const setCookie = res.headers.get('set-cookie');
-  if (setCookie) {
-    const m = new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(setCookie);
-    if (m?.[1]) await setSessionToken(decodeURIComponent(m[1]));
+  if (!isWeb) {
+    const sessionHeader = res.headers.get('x-hos-session');
+    if (sessionHeader) await setSessionToken(sessionHeader);
   }
 
   if (res.status === 204) return undefined as T;
@@ -84,7 +88,7 @@ function items<T>(value: T[] | MobileList<T>): T[] {
 export const httpClient: MobileApi = {
   async login(input: LoginInput) {
     const data = await request<Me | { me: Me; sessionToken?: string }>('POST', '/auth/login', input, false);
-    if (data && typeof data === 'object' && 'sessionToken' in data && data.sessionToken) {
+    if (!isWeb && data && typeof data === 'object' && 'sessionToken' in data && data.sessionToken) {
       await setSessionToken(data.sessionToken);
     }
     if (data && typeof data === 'object' && 'me' in data) return data.me;
@@ -121,7 +125,9 @@ export const httpClient: MobileApi = {
     );
   },
   async bookAppointment(input: BookAppointmentInput) {
-    return request<Appointment>('POST', '/patient/appointments', input);
+    return request<Appointment>('POST', '/patient/appointments', input, true, {
+      'Idempotency-Key': newIdempotencyKey(),
+    });
   },
   async cancelAppointment(id) {
     return request<Appointment>('POST', `/patient/appointments/${id}/cancel`);
@@ -132,6 +138,13 @@ export const httpClient: MobileApi = {
   },
   async getVisit(id) {
     return request<Visit>('GET', `/patient/visits/${id}`);
+  },
+
+  async listDoctorVisits() {
+    return items(await request<Visit[] | MobileList<Visit>>('GET', '/doctor/visits'));
+  },
+  async getDoctorVisit(id) {
+    return request<Visit>('GET', `/doctor/visits/${id}`);
   },
 
   async listBills() {
@@ -157,7 +170,9 @@ export const httpClient: MobileApi = {
     );
   },
   async placeOrder(input: PlaceOrderInput) {
-    return request<Order>('POST', '/doctor/orders', input);
+    return request<Order>('POST', '/doctor/orders', input, true, {
+      'Idempotency-Key': newIdempotencyKey(),
+    });
   },
   async listOrders(visitId) {
     const q = visitId ? `?visitId=${encodeURIComponent(visitId)}` : '';

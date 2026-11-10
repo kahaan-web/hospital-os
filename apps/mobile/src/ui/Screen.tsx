@@ -6,6 +6,7 @@ import { space, type } from '../theme';
 import { useTheme } from '../theme-context';
 import { Banner } from './Banner';
 import { EmptyState } from './EmptyState';
+import { isFocused, webFocusRing } from './focus';
 
 export function Screen({
   title,
@@ -18,6 +19,7 @@ export function Screen({
   emptyActionLabel,
   onEmptyAction,
   footer,
+  hideTitle,
 }: {
   title: string;
   locationName?: string | null;
@@ -29,17 +31,20 @@ export function Screen({
   emptyActionLabel?: string;
   onEmptyAction?: () => void;
   footer?: React.ReactNode;
+  hideTitle?: boolean;
 }) {
   const { colors } = useTheme();
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.canvas }]} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: colors.line, backgroundColor: colors.surface }]}>
         <Text style={[type.caption, { color: colors.inkMuted }]}>{copy.appName}</Text>
-        <Text style={[type.section, { color: colors.ink }]} accessibilityRole="header">
-          {title}
-        </Text>
+        {hideTitle ? null : (
+          <Text style={[type.section, { color: colors.ink }]} accessibilityRole="header">
+            {title}
+          </Text>
+        )}
         <Text style={[type.caption, { color: colors.ink, marginTop: 2 }]}>
-          {locationName ? locationName : 'Location not set'}
+          {locationName ? locationName : copy.locationNotSet}
         </Text>
       </View>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -57,7 +62,10 @@ export function Screen({
                 onPress={onRetry}
                 accessibilityRole="button"
                 accessibilityLabel={copy.tryAgain}
-                style={{ minHeight: 48, justifyContent: 'center' }}
+                style={(state) => [
+                  { minHeight: 48, justifyContent: 'center' },
+                  webFocusRing(colors.teal, isFocused(state)),
+                ]}
               >
                 <Text style={[type.label, { color: colors.teal }]}>{copy.tryAgain}</Text>
               </Pressable>

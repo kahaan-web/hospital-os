@@ -9,6 +9,7 @@ import type {
   PatientProfile,
   Visit,
 } from '@hos/shared';
+import { addDaysIso, todayIso } from '../format';
 
 export const TENANT_ID = 'ten_sunrise_demo';
 export const LOC_MUMBAI = 'loc_mumbai';
@@ -23,6 +24,10 @@ export const PAT_ROHAN = 'pat_rohan';
 export const PAT_SUNITA = 'pat_sunita';
 
 const createdAt = '2026-10-01T04:30:00.000Z';
+const today = todayIso();
+const inFourDays = addDaysIso(today, 4);
+const pastVisitOn = addDaysIso(today, -13);
+const openBillOn = addDaysIso(today, -2);
 
 export const doctors: DoctorDirectoryItem[] = [
   {
@@ -111,17 +116,28 @@ function apt(
   };
 }
 
+function emptyVitals(): Visit['vitals'] {
+  return {
+    bpSystolic: null,
+    bpDiastolic: null,
+    pulse: null,
+    tempC: null,
+    spo2: null,
+    weightKg: null,
+  };
+}
+
 export const seedAppointments: Appointment[] = [
-  apt('apt_today_priya', PAT_PRIYA, DOC_ARJUN, '2026-11-10', '09:00', '09:20', 'confirmed', 'Follow-up after viral fever'),
-  apt('apt_today_anita', PAT_ANITA, DOC_ARJUN, '2026-11-10', '09:30', '09:50', 'booked', 'Headache for three days'),
-  apt('apt_today_rohan', PAT_ROHAN, DOC_ARJUN, '2026-11-10', '11:00', '11:20', 'checked_in', 'Knee pain after a fall'),
-  apt('apt_today_sunita', PAT_SUNITA, DOC_ARJUN, '2026-11-10', '14:00', '14:20', 'booked', 'Review of blood sugar'),
-  apt('apt_soon_priya', PAT_PRIYA, DOC_MEERA, '2026-11-14', '10:00', '10:20', 'booked', 'Vaccination query for nephew — own consult'),
+  apt('apt_today_priya', PAT_PRIYA, DOC_ARJUN, today, '09:00', '09:20', 'confirmed', 'Follow-up after viral fever', 'vis_today_priya'),
+  apt('apt_today_anita', PAT_ANITA, DOC_ARJUN, today, '09:30', '09:50', 'booked', 'Headache for three days', 'vis_today_anita'),
+  apt('apt_today_rohan', PAT_ROHAN, DOC_ARJUN, today, '11:00', '11:20', 'checked_in', 'Knee pain after a fall', 'vis_today_rohan'),
+  apt('apt_today_sunita', PAT_SUNITA, DOC_ARJUN, today, '14:00', '14:20', 'booked', 'Review of blood sugar', 'vis_today_sunita'),
+  apt('apt_soon_priya', PAT_PRIYA, DOC_MEERA, inFourDays, '10:00', '10:20', 'booked', 'Vaccination query for nephew — own consult'),
   apt(
     'apt_past_priya',
     PAT_PRIYA,
     DOC_ARJUN,
-    '2026-10-28',
+    pastVisitOn,
     '10:30',
     '10:50',
     'completed',
@@ -141,7 +157,7 @@ export const seedVisits: Visit[] = [
     doctorName: 'Dr. Arjun Fictional',
     locationId: LOC_MUMBAI,
     locationName: LOC_NAME,
-    visitedOn: '2026-10-28',
+    visitedOn: pastVisitOn,
     chiefComplaint: 'Fever and body ache for two days',
     diagnosis: 'Viral fever (sample)',
     notes: 'Advised rest and fluids. Return if fever lasts beyond four days.',
@@ -157,6 +173,49 @@ export const seedVisits: Visit[] = [
     medicines: [{ name: 'Paracetamol 650 mg', dose: '650 mg', frequency: '1-0-1', days: 3 }],
   },
   {
+    id: 'vis_today_priya',
+    appointmentId: 'apt_today_priya',
+    patientId: PAT_PRIYA,
+    patientName: 'Priya Sample',
+    uhid: 'SUN-P-2044',
+    doctorId: DOC_ARJUN,
+    doctorName: 'Dr. Arjun Fictional',
+    locationId: LOC_MUMBAI,
+    locationName: LOC_NAME,
+    visitedOn: today,
+    chiefComplaint: 'Follow-up after viral fever',
+    diagnosis: '',
+    notes: '',
+    vitals: {
+      bpSystolic: 116,
+      bpDiastolic: 74,
+      pulse: 76,
+      tempC: 36.8,
+      spo2: 99,
+      weightKg: 58,
+    },
+    tests: [],
+    medicines: [],
+  },
+  {
+    id: 'vis_today_anita',
+    appointmentId: 'apt_today_anita',
+    patientId: PAT_ANITA,
+    patientName: 'Anita Demo',
+    uhid: 'SUN-P-1882',
+    doctorId: DOC_ARJUN,
+    doctorName: 'Dr. Arjun Fictional',
+    locationId: LOC_MUMBAI,
+    locationName: LOC_NAME,
+    visitedOn: today,
+    chiefComplaint: 'Headache for three days',
+    diagnosis: '',
+    notes: '',
+    vitals: emptyVitals(),
+    tests: [],
+    medicines: [],
+  },
+  {
     id: 'vis_today_rohan',
     appointmentId: 'apt_today_rohan',
     patientId: PAT_ROHAN,
@@ -166,7 +225,7 @@ export const seedVisits: Visit[] = [
     doctorName: 'Dr. Arjun Fictional',
     locationId: LOC_MUMBAI,
     locationName: LOC_NAME,
-    visitedOn: '2026-11-10',
+    visitedOn: today,
     chiefComplaint: 'Right knee pain after a fall yesterday',
     diagnosis: 'Soft-tissue injury (provisional, sample)',
     notes: 'No fracture suspected. Ice, rest, review if swelling increases.',
@@ -181,8 +240,27 @@ export const seedVisits: Visit[] = [
     tests: [{ name: 'Knee X-ray AP/Lat', status: 'ordered', resultSummary: null }],
     medicines: [{ name: 'Aceclofenac 100 mg', dose: '100 mg', frequency: '1-0-1 after food', days: 5 }],
   },
+  {
+    id: 'vis_today_sunita',
+    appointmentId: 'apt_today_sunita',
+    patientId: PAT_SUNITA,
+    patientName: 'Sunita Fictional',
+    uhid: 'SUN-P-1760',
+    doctorId: DOC_ARJUN,
+    doctorName: 'Dr. Arjun Fictional',
+    locationId: LOC_MUMBAI,
+    locationName: LOC_NAME,
+    visitedOn: today,
+    chiefComplaint: 'Review of blood sugar',
+    diagnosis: '',
+    notes: '',
+    vitals: emptyVitals(),
+    tests: [],
+    medicines: [],
+  },
 ];
 
+/** OP consultation and in-house diagnostics from a clinical establishment are GST-exempt. */
 export const seedBills: Bill[] = [
   {
     id: 'bill_priya_oct',
@@ -191,15 +269,18 @@ export const seedBills: Bill[] = [
     patientName: 'Priya Sample',
     uhid: 'SUN-P-2044',
     locationName: LOC_NAME,
-    issuedOn: '2026-10-28',
+    issuedOn: pastVisitOn,
     status: 'paid',
     subtotalPaise: 110000,
-    gstPaise: 19800,
-    totalPaise: 129800,
-    paidPaise: 129800,
+    gstPaise: 0,
+    cgstPaise: 0,
+    sgstPaise: 0,
+    igstPaise: 0,
+    totalPaise: 110000,
+    paidPaise: 110000,
     lines: [
-      { description: 'OP consultation — General Medicine', qty: 1, unitPaise: 80000, amountPaise: 80000 },
-      { description: 'CBC', qty: 1, unitPaise: 30000, amountPaise: 30000 },
+      { description: 'OP consultation — General Medicine', qty: 1, unitPaise: 80000, amountPaise: 80000, gstRateBp: 0 },
+      { description: 'CBC', qty: 1, unitPaise: 30000, amountPaise: 30000, gstRateBp: 0 },
     ],
   },
   {
@@ -209,13 +290,16 @@ export const seedBills: Bill[] = [
     patientName: 'Priya Sample',
     uhid: 'SUN-P-2044',
     locationName: LOC_NAME,
-    issuedOn: '2026-11-08',
+    issuedOn: openBillOn,
     status: 'issued',
     subtotalPaise: 50000,
-    gstPaise: 9000,
-    totalPaise: 59000,
+    gstPaise: 0,
+    cgstPaise: 0,
+    sgstPaise: 0,
+    igstPaise: 0,
+    totalPaise: 50000,
     paidPaise: 0,
-    lines: [{ description: 'OP consultation — follow-up deposit', qty: 1, unitPaise: 50000, amountPaise: 50000 }],
+    lines: [{ description: 'OP consultation — follow-up deposit', qty: 1, unitPaise: 50000, amountPaise: 50000, gstRateBp: 0 }],
   },
 ];
 
@@ -230,7 +314,7 @@ export const seedOrders: Order[] = [
     kind: 'test',
     items: [{ name: 'Knee X-ray AP/Lat', notes: 'Right knee' }],
     status: 'placed',
-    createdAt: '2026-11-10T05:40:00.000Z',
+    createdAt: `${today}T05:40:00.000Z`,
   },
 ];
 

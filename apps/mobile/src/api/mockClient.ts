@@ -1,5 +1,6 @@
 import {
   bookAppointmentSchema,
+  fieldErrors,
   placeOrderSchema,
   submitFeedbackSchema,
   type Appointment,
@@ -10,7 +11,8 @@ import {
   type Order,
   type Visit,
 } from '@hos/shared';
-import { ApiError, type MobileApi } from './client';
+import { z } from 'zod';
+import { copy } from '../copy';
 import {
   buildSlots,
   clone,
@@ -22,9 +24,9 @@ import {
   seedFeedback,
   seedOrders,
   seedVisits,
-  DOC_ARJUN,
   TENANT_ID,
 } from '../mock/fixtures';
+import { ApiError, type MobileApi } from './client';
 
 type Store = {
   token: string | null;
@@ -47,7 +49,7 @@ const store: Store = {
 };
 
 function requireMe(): Me {
-  if (!store.me) throw new ApiError(401, 'unauthenticated', 'Sign in to continue.');
+  if (!store.me) throw new ApiError(401, 'unauthenticated', copy.signInToContinue);
   return store.me;
 }
 
@@ -67,8 +69,44 @@ function isDoctor(): boolean {
   return me.kind === 'tenant' && me.roles.some((r) => r.roleKey === 'doctor');
 }
 
+function requirePatient(): void {
+  if (!isPatient()) throw new ApiError(403, 'forbidden', 'This screen is for patients.');
+}
+
+function requireDoctor(): void {
+  if (!isDoctor()) throw new ApiError(403, 'forbidden', 'This screen is for doctors.');
+}
+
 function notFound(entity: string): never {
   throw new ApiError(404, 'not_found', `${entity} was not found.`);
+}
+
+function parseBody<T>(schema: z.ZodType<T>, input: unknown): T {
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    const fields = fieldErrors(parsed.error);
+    const message = Object.values(fields)[0] ?? copy.checkForm;
+    throw new ApiError(400, 'validation', message, fields);
+  }
+  return parsed.data;
+}
+
+function ownAppointment(row: Appointment): boolean {
+  const me = requireMe();
+  if (me.kind !== 'tenant') return false;
+  if (isPatient()) return row.patientId === me.user.id;
+  if (isDoctor()) return row.doctorId === me.user.id;
+  return false;
+}
+
+function ownPatientVisit(row: Visit): boolean {
+  const me = requireMe();
+  return me.kind === 'tenant' && isPatient() && row.patientId === me.user.id;
+}
+
+function ownDoctorVisit(row: Visit): boolean {
+  const me = requireMe();
+  return me.kind === 'tenant' && isDoctor() && row.doctorId === me.user.id;
 }
 
 let seq = 500;
@@ -93,36 +131,34 @@ export const mockClient: MobileApi = {
   },
 
   async listAppointments() {
+    requirePatient();
     const id = tenantUserId();
-    const rows = isPatient()
-      ? store.appointments.filter((a) => a.patientId === id)
-      : store.appointments.filter((a) => a.doctorId === id);
+    const rows = store.appointments.filter((a) => a.patientId === id);
     return clone(rows.sort((a, b) => `${b.date}${b.slotStart}`.localeCompare(`${a.date}${a.slotStart}`)));
   },
 
   async getAppointment(id) {
     const row = store.appointments.find((a) => a.id === id);
-    if (!row) notFound('Appointment');
+    if (!row || !ownAppointment(row)) notFound('Appointment');
     return clone(row);
   },
 
   async listDoctors() {
-    requireMe();
+    requirePatient();
     return clone(doctors);
   },
 
   async listSlots(doctorId, date) {
-    requireMe();
+    requirePatient();
     if (!doctors.some((d) => d.id === doctorId)) notFound('Doctor');
     return buildSlots(doctorId, date, store.appointments);
   },
 
   async bookAppointment(input) {
-    const parsed = bookAppointmentSchema.parse(input);
+    const parsed = parseBody(bookAppointmentSchema, input);
+    requirePatient();
     const me = requireMe();
-    if (me.kind !== 'tenant' || !isPatient()) {
-      throw new ApiError(403, 'forbidden', 'Only a patient can book from this app.');
-    }
+    if (me.kind !== 'tenant') throw new ApiError(403, 'forbidden', 'Only a patient can book from this app.');
     const slots = buildSlots(parsed.doctorId, parsed.date, store.appointments);
     const slot = slots.find((s) => s.start === parsed.slotStart);
     if (!slot || !slot.available) {
@@ -153,9 +189,9 @@ export const mockClient: MobileApi = {
   },
 
   async cancelAppointment(id) {
-    requireMe();
+    requirePatient();
     const row = store.appointments.find((a) => a.id === id);
-    if (!row) notFound('Appointment');
+    if (!row || !ownAppointment(row)) notFound('Appointment');
     if (row.status === 'completed' || row.status === 'cancelled') {
       throw new ApiError(422, 'not_cancellable', 'This appointment cannot be cancelled.');
     }
@@ -164,38 +200,54 @@ export const mockClient: MobileApi = {
   },
 
   async listVisits() {
+    requirePatient();
     const id = tenantUserId();
-    const rows = isPatient() ? store.visits.filter((v) => v.patientId === id) : store.visits.filter((v) => v.doctorId === id);
+    const rows = store.visits.filter((v) => v.patientId === id);
     return clone(rows.sort((a, b) => b.visitedOn.localeCompare(a.visitedOn)));
   },
 
   async getVisit(id) {
-    requireMe();
+    requirePatient();
     const row = store.visits.find((v) => v.id === id);
-    if (!row) notFound('Visit');
+    if (!row || !ownPatientVisit(row)) notFound('Visit');
+    return clone(row);
+  },
+
+  async listDoctorVisits() {
+    requireDoctor();
+    const id = tenantUserId();
+    const rows = store.visits.filter((v) => v.doctorId === id);
+    return clone(rows.sort((a, b) => b.visitedOn.localeCompare(a.visitedOn)));
+  },
+
+  async getDoctorVisit(id) {
+    requireDoctor();
+    const row = store.visits.find((v) => v.id === id);
+    if (!row || !ownDoctorVisit(row)) notFound('Visit');
     return clone(row);
   },
 
   async listBills() {
+    requirePatient();
     const id = tenantUserId();
     return clone(store.bills.filter((b) => b.patientId === id));
   },
 
   async getBill(id) {
-    requireMe();
+    requirePatient();
     const row = store.bills.find((b) => b.id === id);
-    if (!row) notFound('Bill');
+    if (!row || row.patientId !== tenantUserId()) notFound('Bill');
     return clone(row);
   },
 
   async getProfile() {
-    requireMe();
-    if (!isPatient()) throw new ApiError(403, 'forbidden', 'Profile here is the patient record.');
+    requirePatient();
     return clone(patientPriya);
   },
 
   async submitFeedback(input) {
-    const parsed = submitFeedbackSchema.parse(input);
+    const parsed = parseBody(submitFeedbackSchema, input);
+    requirePatient();
     const me = requireMe();
     if (me.kind !== 'tenant') throw new ApiError(403, 'forbidden', 'Sign in as a patient to send feedback.');
     const row: Feedback = {
@@ -212,58 +264,28 @@ export const mockClient: MobileApi = {
   },
 
   async listDiary(date) {
-    requireMe();
-    if (!isDoctor()) throw new ApiError(403, 'forbidden', 'The diary is for doctors.');
+    requireDoctor();
     const id = tenantUserId();
     const rows = store.appointments
       .filter((a) => a.doctorId === id && a.date === date && a.status !== 'cancelled')
       .sort((a, b) => a.slotStart.localeCompare(b.slotStart));
-    for (const a of rows) {
-      if (a.visitId && store.visits.some((v) => v.id === a.visitId)) continue;
-      const visit: Visit = {
-        id: `vis_auto_${a.id}`,
-        appointmentId: a.id,
-        patientId: a.patientId,
-        patientName: a.patientName,
-        uhid: a.uhid,
-        doctorId: a.doctorId,
-        doctorName: a.doctorName,
-        locationId: a.locationId,
-        locationName: a.locationName,
-        visitedOn: a.date,
-        chiefComplaint: a.reason,
-        diagnosis: '',
-        notes: '',
-        vitals: {
-          bpSystolic: null,
-          bpDiastolic: null,
-          pulse: null,
-          tempC: null,
-          spo2: null,
-          weightKg: null,
-        },
-        tests: [],
-        medicines: [],
-      };
-      store.visits.push(visit);
-      a.visitId = visit.id;
-    }
     return clone(rows);
   },
 
   async placeOrder(input) {
-    const parsed = placeOrderSchema.parse(input);
-    requireMe();
-    if (!isDoctor()) throw new ApiError(403, 'forbidden', 'Only a doctor can place this order.');
+    const parsed = parseBody(placeOrderSchema, input);
+    requireDoctor();
+    const me = requireMe();
+    if (me.kind !== 'tenant') throw new ApiError(403, 'forbidden', 'Only a doctor can place this order.');
     const visit = store.visits.find((v) => v.id === parsed.visitId);
-    if (!visit) notFound('Visit');
+    if (!visit || !ownDoctorVisit(visit)) notFound('Visit');
     const row: Order = {
       id: `ord_${++seq}`,
       visitId: visit.id,
       patientId: visit.patientId,
       patientName: visit.patientName,
       uhid: visit.uhid,
-      doctorId: DOC_ARJUN,
+      doctorId: me.user.id,
       kind: parsed.kind,
       items: parsed.items,
       status: 'placed',
@@ -288,8 +310,9 @@ export const mockClient: MobileApi = {
   },
 
   async listOrders(visitId) {
-    requireMe();
-    const rows = visitId ? store.orders.filter((o) => o.visitId === visitId) : store.orders;
+    requireDoctor();
+    const id = tenantUserId();
+    const rows = store.orders.filter((o) => o.doctorId === id && (!visitId || o.visitId === visitId));
     return clone(rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   },
 };

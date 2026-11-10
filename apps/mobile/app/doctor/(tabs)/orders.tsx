@@ -1,4 +1,4 @@
-import { ORDER_STATUS_LABEL } from '@hos/shared';
+import { ORDER_KIND_LABEL, ORDER_STATUS_LABEL } from '@hos/shared';
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 import { api } from '../../../src/api';
@@ -25,13 +25,16 @@ export default function OrdersScreen() {
       </View>
       <Panel>
         {(data ?? []).length === 0 ? (
-          <ListRow title="No orders placed yet." last />
+          <ListRow title={copy.noOrders} last />
         ) : (
           (data ?? []).map((o, i) => (
             <ListRow
               key={o.id}
-              title={`${o.kind === 'test' ? 'Tests' : 'Medicines'} · ${o.patientName}`}
-              subtitle={`${o.items.map((it) => it.name).join(', ')} · ${formatDate(o.createdAt)}`}
+              title={copy.kindAndPatient(ORDER_KIND_LABEL[o.kind], o.patientName)}
+              subtitle={copy.itemsAndDate(
+                o.items.map((it) => it.name).join(', '),
+                formatDate(o.createdAt),
+              )}
               meta={ORDER_STATUS_LABEL[o.status]}
               last={i === (data?.length ?? 0) - 1}
               onPress={() => router.push(`/doctor/visit/${o.visitId}`)}

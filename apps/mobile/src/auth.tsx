@@ -1,9 +1,11 @@
 import { fieldErrors, loginSchema, type Me } from '@hos/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { api, ApiError, hydrateMockSession } from './api';
+import { currentMockToken } from './api/mockClient';
+import { copy } from './copy';
 import { USE_MOCK } from './env';
 import { clearSessionToken, getSessionToken, setSessionToken } from './session';
-import { currentMockToken } from './api/mockClient';
 
 type AuthContextValue = {
   me: Me | null;
@@ -25,15 +27,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const token = await getSessionToken();
-      if (!token) {
-        setMe(null);
-        return;
-      }
       if (USE_MOCK) {
+        const token = await getSessionToken();
+        if (!token) {
+          setMe(null);
+          return;
+        }
         const restored = hydrateMockSession(token);
         setMe(restored);
         return;
+      }
+      if (Platform.OS !== 'web') {
+        const token = await getSessionToken();
+        if (!token) {
+          setMe(null);
+          return;
+        }
       }
       const profile = await api.me();
       setMe(profile);
@@ -54,7 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const parsed = loginSchema.safeParse({ email, password });
     if (!parsed.success) {
       const fields = fieldErrors(parsed.error);
-      throw new ApiError(400, 'validation', fields.email ?? fields.password ?? 'Check your email and password.', fields);
+      throw new ApiError(
+        400,
+        'validation',
+        fields.email ?? fields.password ?? copy.checkForm,
+        fields,
+      );
     }
     const profile = await api.login(parsed.data);
     if (USE_MOCK) {

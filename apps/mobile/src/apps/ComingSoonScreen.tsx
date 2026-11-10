@@ -1,8 +1,8 @@
 import { Text, View } from 'react-native';
+import { useAuth } from '../auth';
 import { copy } from '../copy';
 import { space, type } from '../theme';
 import { useTheme } from '../theme-context';
-import { useAuth } from '../auth';
 import { Badge } from '../ui/Badge';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
@@ -20,13 +20,15 @@ export function ComingSoonScreen({ app }: { app: RoleAppConfig }) {
   return (
     <Screen title={app.title} locationName={location}>
       <View style={{ marginBottom: space[16] }}>
-        <Badge label={`${app.androidCode} · ${copy.comingSoon}`} tone="warning" />
+        <Badge label={copy.codeAndTitle(app.androidCode, copy.comingSoon)} tone="warning" />
       </View>
       <Text style={[type.bodyComfortable, { color: colors.ink, marginBottom: space[16] }]}>
         {copy.comingSoonBody}
       </Text>
       {userName ? (
-        <Text style={[type.caption, { color: colors.inkMuted, marginBottom: space[12] }]}>Signed in as {userName}</Text>
+        <Text style={[type.caption, { color: colors.inkMuted, marginBottom: space[12] }]}>
+          {copy.signedInAs(userName)}
+        </Text>
       ) : null}
       <Panel>
         {app.features.length === 0 ? (

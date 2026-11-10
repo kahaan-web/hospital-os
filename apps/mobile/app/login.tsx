@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { hrefForMe } from '../src/apps';
-import { useAuth } from '../src/auth';
 import { ApiError } from '../src/api';
+import { useAuth } from '../src/auth';
 import { copy } from '../src/copy';
+import { USE_MOCK } from '../src/env';
 import { space, type } from '../src/theme';
 import { useTheme } from '../src/theme-context';
 import { Banner } from '../src/ui/Banner';
@@ -19,18 +20,25 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   if (!loading && me) return <Redirect href={hrefForMe(me) as Href} />;
 
   async function onSubmit() {
     setError(null);
+    setFields({});
     setBusy(true);
     try {
       await signIn(email, password);
       router.replace('/');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not sign in. Try again.');
+      if (e instanceof ApiError) {
+        setFields(e.fields ?? {});
+        setError(e.fields ? null : e.message);
+      } else {
+        setError(copy.couldNotSignIn);
+      }
     } finally {
       setBusy(false);
     }
@@ -51,6 +59,9 @@ export default function LoginScreen() {
           placeholder={copy.emailPlaceholder}
           keyboardType="email-address"
           autoComplete="email"
+          error={fields.email}
+          returnKeyType="next"
+          blurOnSubmit={false}
         />
         <TextField
           label={copy.password}
@@ -59,9 +70,14 @@ export default function LoginScreen() {
           placeholder={copy.passwordPlaceholder}
           secure
           autoComplete="password"
+          error={fields.password}
+          returnKeyType="go"
+          onSubmitEditing={() => void onSubmit()}
         />
         <Button label={busy ? copy.signingIn : copy.signIn} onPress={() => void onSubmit()} loading={busy} />
-        <Text style={[type.caption, { color: colors.inkMuted, marginTop: space[16] }]}>{copy.demoHint}</Text>
+        {USE_MOCK ? (
+          <Text style={[type.caption, { color: colors.inkMuted, marginTop: space[16] }]}>{copy.demoHint}</Text>
+        ) : null}
       </View>
     </SafeAreaView>
   );

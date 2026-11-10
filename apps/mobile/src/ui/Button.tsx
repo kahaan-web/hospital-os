@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { radius, space, touchMin, type } from '../theme';
 import { useTheme } from '../theme-context';
+import { isFocused, webFocusRing } from './focus';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -33,13 +34,14 @@ export function Button({
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!disabled, busy: !!loading }}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.base,
         {
           backgroundColor: bg,
-          borderColor: variant === 'primary' && pressed ? colors.tealHover : border,
-          opacity: disabled ? 0.5 : pressed ? 0.88 : 1,
+          borderColor: variant === 'primary' && state.pressed ? colors.tealHover : border,
+          opacity: disabled ? 0.5 : state.pressed ? 0.88 : 1,
         },
+        webFocusRing(colors.teal, isFocused(state)),
       ]}
     >
       {loading ? (

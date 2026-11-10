@@ -45,3 +45,19 @@ export function formatBp(sys: number | null, dia: number | null): string {
   if (sys === null || dia === null) return `${sys ?? '—'} / ${dia ?? '—'} mmHg`;
   return `${sys} / ${dia} mmHg`;
 }
+
+export function formatPulse(n: number | null): string {
+  return n === null ? '—' : `${n} /min`;
+}
+
+export function formatTempC(n: number | null): string {
+  return n === null ? '—' : `${n} °C`;
+}
+
+export function formatSpo2(n: number | null): string {
+  return n === null ? '—' : `${n} %`;
+}
+
+export function formatWeightKg(n: number | null): string {
+  return n === null ? '—' : `${n} kg`;
+}

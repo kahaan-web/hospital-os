@@ -24,25 +24,25 @@ export default function BillDetail() {
   const due = data ? data.totalPaise - data.paidPaise : 0;
 
   return (
-    <Screen title={copy.billDetail} locationName={location} loading={loading} error={error} onRetry={reload}>
+    <Screen title={copy.billDetail} locationName={location} loading={loading} error={error} onRetry={reload} hideTitle>
       {data ? (
         <>
           <View style={{ marginBottom: space[12] }}>
             <Badge label={BILL_STATUS_LABEL[data.status]} tone={billTone(data.status)} />
           </View>
           <Panel>
-            <FieldRow label="Number" value={data.number} />
-            <FieldRow label="Date" value={formatDate(data.issuedOn)} />
-            <FieldRow label="Patient" value={`${data.patientName} · ${data.uhid}`} />
-            <FieldRow label="Location" value={data.locationName} last />
+            <FieldRow label={copy.number} value={data.number} />
+            <FieldRow label={copy.date} value={formatDate(data.issuedOn)} />
+            <FieldRow label={copy.patient} value={copy.nameAndUhid(data.patientName, data.uhid)} />
+            <FieldRow label={copy.location} value={data.locationName} last />
           </Panel>
-          <Text style={[type.label, { color: colors.ink, marginBottom: space[8] }]}>Charges</Text>
+          <Text style={[type.label, { color: colors.ink, marginBottom: space[8] }]}>{copy.charges}</Text>
           <Panel>
             {data.lines.map((line, i) => (
               <ListRow
                 key={`${line.description}-${i}`}
                 title={line.description}
-                subtitle={`Qty ${line.qty} · ${formatINR(line.unitPaise, { decimals: 'always' })}`}
+                subtitle={copy.qtyAndUnit(line.qty, formatINR(line.unitPaise, { decimals: 'always' }))}
                 meta={formatINR(line.amountPaise, { decimals: 'always' })}
                 last={i === data.lines.length - 1}
               />
@@ -50,14 +50,13 @@ export default function BillDetail() {
           </Panel>
           <Panel>
             <FieldRow label={copy.subtotal} value={formatINR(data.subtotalPaise, { decimals: 'always' })} />
-            <FieldRow label={copy.gst} value={formatINR(data.gstPaise, { decimals: 'always' })} />
+            <FieldRow label={copy.cgst} value={formatINR(data.cgstPaise, { decimals: 'always' })} />
+            <FieldRow label={copy.sgst} value={formatINR(data.sgstPaise, { decimals: 'always' })} />
+            <FieldRow label={copy.igst} value={formatINR(data.igstPaise, { decimals: 'always' })} />
+            <FieldRow label={copy.gst} value={formatINR(data.gstPaise, { decimals: 'always' })} hint={copy.gstExemptNote} />
             <FieldRow label={copy.total} value={formatINR(data.totalPaise, { decimals: 'always' })} />
             <FieldRow label={copy.paid} value={formatINR(data.paidPaise, { decimals: 'always' })} />
-            <FieldRow
-              label={copy.due}
-              value={due === 0 ? formatINR(0, { decimals: 'always' }) : formatINR(due, { decimals: 'always' })}
-              last
-            />
+            <FieldRow label={copy.due} value={formatINR(due, { decimals: 'always' })} last />
           </Panel>
         </>
       ) : null}

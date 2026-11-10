@@ -27,11 +27,11 @@ export default function VisitsScreen() {
         {(data ?? []).map((v, i) => (
           <ListRow
             key={v.id}
-            title={`${formatDate(v.visitedOn)} · ${v.doctorName}`}
+            title={copy.dateAndDoctor(formatDate(v.visitedOn), v.doctorName)}
             subtitle={v.diagnosis || v.chiefComplaint}
             last={i === (data?.length ?? 0) - 1}
             onPress={() => router.push(`/patient/visit/${v.id}`)}
-            accessibilityLabel={`Visit on ${formatDate(v.visitedOn)} with ${v.doctorName}`}
+            accessibilityLabel={copy.visitWith(formatDate(v.visitedOn), v.doctorName)}
           />
         ))}
       </Panel>

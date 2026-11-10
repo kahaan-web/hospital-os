@@ -2,7 +2,17 @@ import { StyleSheet, Text, View } from 'react-native';
 import { space, type } from '../theme';
 import { useTheme } from '../theme-context';
 
-export function FieldRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
+export function FieldRow({
+  label,
+  value,
+  hint,
+  last,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  last?: boolean;
+}) {
   const { colors } = useTheme();
   return (
     <View
@@ -13,6 +23,7 @@ export function FieldRow({ label, value, last }: { label: string; value: string;
     >
       <Text style={[type.caption, { color: colors.inkMuted }]}>{label}</Text>
       <Text style={[type.body, { color: colors.ink, fontVariant: ['tabular-nums'] }]}>{value}</Text>
+      {hint ? <Text style={[type.caption, { color: colors.inkMuted }]}>{hint}</Text> : null}
     </View>
   );
 }
