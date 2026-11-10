@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
+import { wt } from '@/i18n';
 import { formatDate, formatINR } from '@/lib/format';
 import { API_BASE, apiGet, apiText } from '@/lib/api';
 
@@ -39,7 +40,7 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
       } catch {
         if (!toastErrorRef.current) {
           toastErrorRef.current = true;
-          showToast({ tone: 'error', title: 'Invoice not ready yet' });
+          showToast({ tone: 'error', title: wt('invoice.notReadyToast') });
         }
       }
     },
@@ -52,16 +53,13 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
 
   return (
     <>
-      <PageHeader
-        title="GST tax invoice"
-        description="Download PDF or print this HTML invoice. Supplier details use platform placeholders."
-      />
+      <PageHeader title={wt('invoice.title')} description={wt('invoice.description')} />
       {invoice ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-4)' }}>
-          <p style={{ margin: 0 }}>
+        <div className="hos-invoice-print-area" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-4)' }}>
+          <p className="hos-invoice-meta" style={{ margin: 0 }}>
             <strong>{invoice.number}</strong> · {formatDate(invoice.issueDate)} · {formatINR(invoice.totalPaise)}
           </p>
-          <div style={{ display: 'flex', gap: 'var(--hos-space-3)', flexWrap: 'wrap' }}>
+          <div className="hos-invoice-actions no-print" style={{ display: 'flex', gap: 'var(--hos-space-3)', flexWrap: 'wrap' }}>
             <Button asChild>
               <a href={`${API_BASE}/billing/invoices/${invoice.id}/pdf`} download>
                 Download PDF
@@ -71,11 +69,12 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
               Print
             </Button>
             <Button type="button" onClick={() => router.push('/onboarding/provisioning')}>
-              Continue to provisioning
+              {wt('invoice.continueProvisioning')}
             </Button>
           </div>
           {html ? (
             <iframe
+              className="hos-invoice-iframe"
               title={`Invoice ${invoice.number}`}
               srcDoc={html}
               sandbox=""
@@ -90,7 +89,8 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
         </div>
       ) : (
         <p>
-          Complete payment first. <Link href="/onboarding/checkout">Back to checkout</Link>
+          {wt('invoice.notReady')}{' '}
+          <Link href="/onboarding/checkout">{wt('invoice.backCheckout')}</Link>
         </p>
       )}
     </>

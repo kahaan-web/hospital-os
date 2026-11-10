@@ -4,6 +4,7 @@ import { Button, Stepper, type StepperStep } from '@hos/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { wt } from '@/i18n';
 import { WIZARD_ROUTES, wizardBackHref } from '@/lib/onboarding-steps';
 
 export function OnboardingWizardShell({
@@ -22,8 +23,9 @@ export function OnboardingWizardShell({
   const router = useRouter();
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--hos-bg-canvas)' }}>
+    <div className="hos-wizard-shell" style={{ minHeight: '100vh', background: 'var(--hos-bg-canvas)' }}>
       <header
+        className="hos-wizard-header"
         style={{
           borderBottom: '1px solid var(--hos-border)',
           background: 'var(--hos-bg-surface)',
@@ -50,19 +52,19 @@ export function OnboardingWizardShell({
               textDecoration: 'none',
             }}
           >
-            Hospital OS
+            {wt('app.name')}
           </Link>
-          <p style={{ margin: 0, fontSize: 'var(--hos-text-sm)', color: 'var(--hos-fg-muted)' }}>Setup wizard</p>
+          <p style={{ margin: 0, fontSize: 'var(--hos-text-sm)', color: 'var(--hos-fg-muted)' }}>{wt('wizard.shellTitle')}</p>
         </div>
       </header>
       <main style={{ maxWidth: '72rem', margin: '0 auto', padding: 'var(--hos-page-pad)' }}>
-        <div style={{ marginBottom: 'var(--hos-space-6)', overflowX: 'auto' }}>
+        <div className="hos-wizard-stepper" style={{ marginBottom: 'var(--hos-space-6)', overflowX: 'auto' }}>
           <Stepper steps={steps} currentStepId={current} orientation="horizontal" />
         </div>
         {backHref ? (
-          <div style={{ marginBottom: 'var(--hos-space-4)' }}>
+          <div className="hos-wizard-back" style={{ marginBottom: 'var(--hos-space-4)' }}>
             <Button type="button" variant="secondary" size="sm" onClick={() => router.push(backHref)}>
-              Back
+              {wt('wizard.back')}
             </Button>
           </div>
         ) : null}

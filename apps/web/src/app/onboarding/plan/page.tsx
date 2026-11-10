@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
 import { QuoteSummary, useClientQuote } from '@/features/billing/QuoteSummary';
+import { wt } from '@/i18n';
 import { ApiError, apiGet, apiPut } from '@/lib/api';
 
 export default function PlanPage() {
@@ -72,7 +73,7 @@ function PlanForm({
     setBusy(true);
     try {
       await apiPut('/onboarding/plan', parsed.data);
-      showToast({ tone: 'success', title: 'Plan selected' });
+      showToast({ tone: 'success', title: wt('plan.saved') });
       onSaved();
     } catch (e) {
       setErrors(e instanceof ApiError ? { form: e.message } : { form: 'Save failed' });
@@ -85,7 +86,7 @@ function PlanForm({
 
   return (
     <>
-      <PageHeader title="Choose plan" description="Live comparison from App Admin. Toggle monthly or annual billing." />
+      <PageHeader title={wt('plan.title')} description={wt('plan.description')} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--hos-space-3)', marginBottom: 'var(--hos-space-4)' }}>
         <Switch checked={cycle === 'annual'} onCheckedChange={(v) => setCycle(v ? 'annual' : 'monthly')} label="Annual billing (2 months free)" />
       </div>
@@ -107,7 +108,7 @@ function PlanForm({
             monthlyPaise={plan.monthlyPaise}
             annualPaise={plan.annualPaise}
             selected={planId === plan.id}
-            badge={plan.pricePlaceholder ? 'Sample price' : plan.badge}
+            badge={plan.pricePlaceholder ? wt('plan.samplePriceBadge') : plan.badge}
             highlight={plan.highlight}
             onSelect={() => setPlanId(plan.id)}
             featureSummary={`${catalog?.matrix[plan.id]?.length ?? plan.featureCount} entitlements`}
@@ -121,7 +122,7 @@ function PlanForm({
       ) : null}
       {errors.form ? <p style={{ color: 'var(--hos-fg-danger)' }}>{errors.form}</p> : null}
       <Button type="button" style={{ marginTop: 'var(--hos-space-4)' }} onClick={save} loading={busy} disabled={!planId}>
-        Continue to add-ons
+        {wt('plan.saveContinue')}
       </Button>
     </>
   );

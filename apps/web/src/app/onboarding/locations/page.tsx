@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
+import { wt } from '@/i18n';
 import { ApiError, apiPut } from '@/lib/api';
 
 const DEMO_LOCATIONS: LocationInput[] = [
@@ -107,7 +108,7 @@ function LocationsForm({
     setBusy(true);
     try {
       await apiPut('/onboarding/locations', parsed.data);
-      showToast({ tone: 'success', title: 'Locations saved' });
+      showToast({ tone: 'success', title: wt('locations.saved') });
       onSaved();
     } catch (e) {
       setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: 'Save failed' });
@@ -123,11 +124,11 @@ function LocationsForm({
   return (
     <>
       <PageHeader
-        title="Locations"
-        description="Add every branch that will share this subscription. State drives GST on invoices."
+        title={wt('locations.title')}
+        description={wt('locations.description')}
         actions={
           <Button type="button" variant="secondary" onClick={() => setLocations(DEMO_LOCATIONS)}>
-            Prefill Mumbai, Indore, Jaipur
+            {wt('locations.useDemo')}
           </Button>
         }
       />
@@ -215,7 +216,7 @@ function LocationsForm({
           </p>
         ) : null}
         <Button type="button" onClick={save} loading={busy}>
-          Continue to plan
+          {wt('locations.saveContinue')}
         </Button>
       </div>
     </>

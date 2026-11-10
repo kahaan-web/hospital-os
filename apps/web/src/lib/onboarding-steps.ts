@@ -1,15 +1,16 @@
 import type { OnboardingStep } from '@hos/shared';
+import { wt } from '@/i18n';
 
 /** Wizard UI routes (step 1 is signup; API step starts at facility after OTP). */
 export const WIZARD_ROUTES = [
-  { key: 'signup', label: 'Sign up', href: '/onboarding/signup' },
-  { key: 'facility', label: 'Facility', href: '/onboarding/facility' },
-  { key: 'locations', label: 'Locations', href: '/onboarding/locations' },
-  { key: 'plan', label: 'Plan', href: '/onboarding/plan' },
-  { key: 'addons', label: 'Add-ons', href: '/onboarding/addons' },
-  { key: 'checkout', label: 'Payment', href: '/onboarding/checkout' },
-  { key: 'invoice', label: 'Invoice', href: '/onboarding/invoice' },
-  { key: 'provisioning', label: 'Go live', href: '/onboarding/provisioning' },
+  { key: 'signup', label: wt('wizard.steps.signup'), href: '/onboarding/signup' },
+  { key: 'facility', label: wt('wizard.steps.facility'), href: '/onboarding/facility' },
+  { key: 'locations', label: wt('wizard.steps.locations'), href: '/onboarding/locations' },
+  { key: 'plan', label: wt('wizard.steps.plan'), href: '/onboarding/plan' },
+  { key: 'addons', label: wt('wizard.steps.addons'), href: '/onboarding/addons' },
+  { key: 'checkout', label: wt('wizard.steps.checkout'), href: '/onboarding/checkout' },
+  { key: 'invoice', label: wt('wizard.steps.invoice'), href: '/onboarding/invoice' },
+  { key: 'provisioning', label: wt('wizard.steps.provisioning'), href: '/onboarding/provisioning' },
 ] as const;
 
 const STEP_ORDER: OnboardingStep[] = [

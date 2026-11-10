@@ -8,6 +8,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
 import { QuoteSummary, useClientQuote } from '@/features/billing/QuoteSummary';
+import { wt } from '@/i18n';
+import { formatINR } from '@/lib/format';
 import { ApiError, apiGet, apiPut } from '@/lib/api';
 
 export default function AddonsPage() {
@@ -75,7 +77,7 @@ function AddonsForm({
     setBusy(true);
     try {
       await apiPut('/onboarding/addons', parsed.data);
-      showToast({ tone: 'success', title: 'Add-ons saved' });
+      showToast({ tone: 'success', title: wt('addons.saved') });
       onSaved();
     } catch (e) {
       setErrors({ form: e instanceof ApiError ? e.message : 'Save failed' });
@@ -86,24 +88,34 @@ function AddonsForm({
 
   return (
     <>
-      <PageHeader title="Add-on modules" description="Buy modules not in your tier. Prices are sample values per location." />
+      <PageHeader title={wt('addons.title')} description={wt('addons.description')} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(14rem, 1fr))', gap: 'var(--hos-space-3)' }}>
         {addons.map((mod) => {
           const on = selected.includes(mod.id);
+          const priceLine =
+            mod.addonMonthlyPaise != null
+              ? wt('addons.pricePerLocation', { price: formatINR(mod.addonMonthlyPaise) })
+              : wt('wizard.samplePrice');
+          const toggle = () => setSelected((ids) => (on ? ids.filter((x) => x !== mod.id) : [...ids, mod.id]));
           return (
             <ModuleTile
               key={mod.id}
               title={mod.name}
-              description={mod.description}
-              state={on ? 'enabled' : 'locked'}
-              onOpen={() =>
-                setSelected((ids) => (on ? ids.filter((x) => x !== mod.id) : [...ids, mod.id]))
+              description={
+                <>
+                  {mod.description}
+                  <span style={{ display: 'block', marginTop: 'var(--hos-space-1)', color: 'var(--hos-fg-muted)' }}>{priceLine}</span>
+                </>
               }
+              state={on ? 'enabled' : 'locked'}
+              ctaLabel={on ? wt('addons.remove') : wt('addons.add')}
+              onCta={toggle}
+              onOpen={toggle}
             />
           );
         })}
       </div>
-      {addons.length === 0 ? <p style={{ color: 'var(--hos-fg-muted)' }}>No purchasable add-ons for this plan.</p> : null}
+      {addons.length === 0 ? <p style={{ color: 'var(--hos-fg-muted)' }}>{wt('addons.empty')}</p> : null}
       {preview ? (
         <div style={{ marginTop: 'var(--hos-space-6)', maxWidth: '20rem' }}>
           <QuoteSummary totals={preview.totals} label="Live price summary" />
@@ -111,7 +123,7 @@ function AddonsForm({
       ) : null}
       {errors.form ? <p style={{ color: 'var(--hos-fg-danger)' }}>{errors.form}</p> : null}
       <Button type="button" style={{ marginTop: 'var(--hos-space-4)' }} onClick={save} loading={busy}>
-        Review and pay
+        {wt('addons.saveContinue')}
       </Button>
     </>
   );
