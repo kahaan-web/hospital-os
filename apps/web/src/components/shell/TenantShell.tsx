@@ -12,6 +12,7 @@ import {
   Shield,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { clinicalNavItems } from '@/features/clinical/nav';
 import { isNavActive } from '@/lib/navActive';
 import { moduleLucideIcon } from '@/lib/moduleLucideIcon';
 import { DensityToggle } from './DensityToggle';
@@ -28,6 +29,7 @@ export interface TenantShellProps {
   onLocationChange?: (locationId: string) => void;
   userName?: string;
   userEmail?: string;
+  permissions?: readonly string[];
   tenantDisplayName?: string;
   activePath?: string;
   onNavigate?: (href: string) => void;
@@ -43,6 +45,7 @@ export function TenantShell({
   onLocationChange,
   userName = 'Staff user',
   userEmail,
+  permissions,
   tenantDisplayName = 'Hospital OS',
   activePath,
   onNavigate,
@@ -90,6 +93,8 @@ export function TenantShell({
     };
   });
 
+  const clinicalNav = clinicalNavItems({ modules, permissions, activePath, onNavigate });
+
   const settingsNav: ShellNavItem[] = [
     {
       id: 'billing',
@@ -128,7 +133,7 @@ export function TenantShell({
   return (
     <SidebarLayout
       brand={tenantDisplayName}
-      navItems={[...coreNav, ...moduleNav, ...settingsNav]}
+      navItems={[...coreNav, ...clinicalNav, ...moduleNav, ...settingsNav]}
       locationSwitcher={
         locations.length > 0 ? (
           <LocationSwitcher
