@@ -64,4 +64,5 @@ export * from './print';
 export * from './features';
 export * from './contracts';
 export * from './contract-dtos';
+export * from './appointments';
 export { clinicalEn } from './i18n';
