@@ -26,6 +26,7 @@
     "build": "npm run build -w @hos/api && npm run build -w @hos/web",
     "start:api": "npm run start -w @hos/api",
     "start:web": "npm run start -w @hos/web",
+    "smoke": "node scripts/smoke.mjs",
     "test": "vitest run",
     "test:e2e": "npm run e2e -w @hos/web",
     "lint": "eslint .",
