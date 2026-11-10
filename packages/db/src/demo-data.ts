@@ -4,15 +4,16 @@
 //
 // Formats follow what Indian hospital staff expect to read:
 // - dates are written DD/MM/YYYY here and converted to ISO (YYYY-MM-DD) for the `date` column,
-// - mobiles are +91 E.164 in the 90000 xxxxx block (made up, not allocated to anyone we know of),
+// - mobiles are Indian numbers in the made-up +91 90000 xxxxx block (stored as 10 digits, like users.mobile),
 // - ABHA-style numbers start with `00-`, which no issued ABHA number uses, and every ABHA address ends in
-//   `@sbx` (the ABDM sandbox suffix). The patients table refuses ABHA values on non-sample rows.
+//   `@sbx` (the ABDM sandbox suffix).
+// Patients go into the Phase B `patients` table (migration 0100, owned by B0); until it exists they are skipped.
 
 export type Sex = 'male' | 'female' | 'other';
 export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
 
 export interface DemoPatient {
-  /** Location code inside the tenant (MUM / IDR / JAI / PUN). */
+  /** Location code inside the tenant (MUM / IDR / JAI), or PRIMARY for the tenant's primary location. */
   loc: string;
   first: string;
   last: string;
@@ -123,27 +124,13 @@ export const SUNRISE_PATIENTS: DemoPatient[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Lotus Nursing Home (Demo): a second, unrelated tenant. It exists so the demo and the smoke test can show that one
-// hospital never sees another hospital's patients, staff or invoices.
+// Lotus (second demo tenant). The tenant itself is created by the Phase B B0 seed (docs/PHASE_B_PLAN.md, decision 10);
+// these five patients are added to its primary location once it exists. `loc: 'PRIMARY'` = that tenant's primary site.
 // ---------------------------------------------------------------------------------------------------------------------
-export const LOTUS_STAFF: DemoStaff[] = [
-  { email: 'owner@lotus.demo', name: 'Dr. Madhuri Kale', role: 'tenant_admin', loc: null, designation: 'owner' },
-  { email: 'frontdesk@lotus.demo', name: 'Swapnil More', role: 'front_desk', loc: 'PUN' },
-  { email: 'nurse@lotus.demo', name: 'Sister Archana Jadhav', role: 'nurse', loc: 'PUN' },
-];
-
 export const LOTUS_PATIENTS: DemoPatient[] = [
-  { loc: 'PUN', first: 'Siddharth', last: 'Gokhale', sex: 'male', dob: '09/10/1980', blood: 'O+', area: 'Kothrud', registered: '10/06/2026', abha: true, emergencyName: 'Manasi Gokhale', emergencyRelation: 'Spouse' },
-  { loc: 'PUN', first: 'Rutuja', last: 'Bhosale', sex: 'female', dob: '02/02/1994', blood: 'B+', area: 'Hadapsar', registered: '18/06/2026', abha: false, emergencyName: 'Amol Bhosale', emergencyRelation: 'Spouse' },
-  { loc: 'PUN', first: 'Vinayak', last: 'Kulkarni', sex: 'male', dob: '15/05/1962', blood: 'A+', area: 'Shivajinagar', registered: '01/07/2026', abha: true, emergencyName: 'Shubhada Kulkarni', emergencyRelation: 'Spouse' },
-  { loc: 'PUN', first: 'Aishwarya', last: 'Pawar', sex: 'female', dob: '27/12/2005', blood: 'AB+', area: 'Aundh', registered: '15/07/2026', abha: false, emergencyName: 'Sachin Pawar', emergencyRelation: 'Father' },
-  { loc: 'PUN', first: 'Nilesh', last: 'Thorat', sex: 'male', dob: '06/08/1976', blood: 'O-', area: 'Baner', registered: '29/07/2026', abha: true, emergencyName: 'Varsha Thorat', emergencyRelation: 'Spouse' },
+  { loc: 'PRIMARY', first: 'Siddharth', last: 'Gokhale', sex: 'male', dob: '09/10/1980', blood: 'O+', area: 'Kothrud', registered: '10/06/2026', abha: true, emergencyName: 'Manasi Gokhale', emergencyRelation: 'Spouse' },
+  { loc: 'PRIMARY', first: 'Rutuja', last: 'Bhosale', sex: 'female', dob: '02/02/1994', blood: 'B+', area: 'Hadapsar', registered: '18/06/2026', abha: false, emergencyName: 'Amol Bhosale', emergencyRelation: 'Spouse' },
+  { loc: 'PRIMARY', first: 'Vinayak', last: 'Kulkarni', sex: 'male', dob: '15/05/1962', blood: 'A+', area: 'Shivajinagar', registered: '01/07/2026', abha: true, emergencyName: 'Shubhada Kulkarni', emergencyRelation: 'Spouse' },
+  { loc: 'PRIMARY', first: 'Aishwarya', last: 'Pawar', sex: 'female', dob: '27/12/2005', blood: 'AB+', area: 'Aundh', registered: '15/07/2026', abha: false, emergencyName: 'Sachin Pawar', emergencyRelation: 'Father' },
+  { loc: 'PRIMARY', first: 'Nilesh', last: 'Thorat', sex: 'male', dob: '06/08/1976', blood: 'O-', area: 'Baner', registered: '29/07/2026', abha: true, emergencyName: 'Varsha Thorat', emergencyRelation: 'Spouse' },
 ];
-
-/** City, GST state code and pincode by location code, for patient addresses. */
-export const LOCATION_ADDRESS: Record<string, { city: string; stateCode: string; pincode: string }> = {
-  MUM: { city: 'Mumbai', stateCode: '27', pincode: '400014' },
-  IDR: { city: 'Indore', stateCode: '23', pincode: '452010' },
-  JAI: { city: 'Jaipur', stateCode: '08', pincode: '302017' },
-  PUN: { city: 'Pune', stateCode: '27', pincode: '411038' },
-};
