@@ -13,3 +13,6 @@ playwright-report/
 test-results/
 uploads/
 .claude/settings.local.json
+
+# Cursor worker task files
+.cursor-task.md
