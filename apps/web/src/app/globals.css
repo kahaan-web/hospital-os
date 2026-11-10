@@ -11,3 +11,29 @@ body {
   min-height: 100%;
   margin: 0;
 }
+
+/* Print only the invoice preview (wizard chrome hidden). */
+@media print {
+  .hos-wizard-header,
+  .hos-wizard-stepper,
+  .hos-wizard-back,
+  .hos-page-header,
+  .no-print,
+  .hos-invoice-meta {
+    display: none !important;
+  }
+
+  .hos-wizard-shell,
+  body {
+    background: #fff !important;
+  }
+
+  .hos-invoice-iframe {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: 100vh !important;
+    border: none !important;
+    margin: 0 !important;
+  }
+}
