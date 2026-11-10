@@ -1,77 +1,129 @@
-# Security and compliance (Phase A)
+# Security and compliance
 
-This note is the Phase A position for Hospital OS. It is not a legal opinion and it is not a certification. Production still needs a reviewed privacy notice, a DPA with each hospital, and a pen test before real patient data is stored. Phase A stores **mock data only**.
+This is the Phase A position for Hospital OS: what is built, what is only designed, and what is missing. It is not a legal opinion and not a certification. Production still needs a reviewed privacy notice, a Data Processing Agreement (DPA) with each hospital, a security review and a pen test before any real patient data is stored.
 
-## Tenancy
+**Phase A stores mock data only.** Every seeded hospital is a sandbox tenant (`tenants.sandbox = true`), every seeded patient has `is_sample = true` and a `DEMO-` UHID, and the payment gateway, SMS and email are mocks.
 
-Every tenant-owned table has row-level security enabled and forced. Policies match `tenant_id` (or `tenants.id`) to `nullif(current_setting('app.tenant_id', true), '')::uuid`. The API sets that value, and `app.scope`, with `set_config(..., true)` inside the request transaction, so a pooled connection cannot leak a tenant into the next request.
+## Roles under the DPDP Act, 2023
 
-Two database roles exist, both `NOSUPERUSER` and `NOBYPASSRLS`:
+- **Data Principal**: the patient (and the hospital's staff, for their own accounts).
+- **Data Fiduciary**: the hospital. It decides why and how patient data is processed.
+- **Data Processor**: Hospital OS, acting on the hospital's instructions under a DPA. For the hospital's own account data (owner, staff, billing) Hospital OS is the fiduciary for its SaaS relationship.
 
-- `hos_migrator` owns the schema and runs migrations and seeds. Forced RLS means the owner still needs an explicit `USING (true)` policy.
-- `hos_app` is what the API connects as. It has explicit grants only. It cannot read `sessions` or `invoice_sequences` directly; those go through `SECURITY DEFINER` functions owned by `hos_migrator`, with `search_path` locked to `pg_catalog, public` and `EXECUTE` revoked from `PUBLIC`.
+Health data is not a separate "sensitive" category in the DPDP Act, but we treat it as the highest-risk data we hold, and the hospital remains bound by clinical record rules (for example the medico-legal and state retention rules) that override a simple erase.
 
-**Limit.** `hos_app` sets its own GUCs. RLS stops application bugs that forget a `WHERE tenant_id = …`. It does not stop a compromised API process: that process can set `app.tenant_id` to any tenant it knows. Defence in depth is the app role's lack of `BYPASSRLS`, statement timeouts (`statement_timeout` 10s, `idle_in_transaction_session_timeout` 15s), and keeping the API host off the public internet except through TLS.
+## DPDP duties mapped to the build
 
-The audit trigger hashes with `pg_catalog.sha256(bytea)`, built into Postgres since version 11. No `pgcrypto` extension remains after migrate. The frozen file `0001_rls.sql` still creates a `public.sha256` wrapper, so bootstrap creates `pgcrypto` only long enough for that file to apply on a fresh database. `0003_review_fixes.sql` points the trigger at `pg_catalog.sha256`, drops the wrapper, and the migrator then drops the extension.
+Status: **Built** (in code and tested), **Partial** (some of it is in code), **Designed** (written down here, not built), **Gap** (not addressed yet).
 
-## Sessions and CSRF
-
-The cookie `hos_session` is an opaque 32-byte token. The database stores only its SHA-256. Passwords use argon2id (`@node-rs/argon2`). A login for an unknown email still runs a verify against a dummy hash. Every state-changing request must send `x-hos-csrf: 1`. Auth routes are rate-limited. OTP resend keeps the attempt count of the previous code and stops after five codes in an hour. Mock SMS and email go through `SmsSender` and `EmailSender`; the mock writes `outbox_messages`. OTP codes are logged only when `NODE_ENV` is not `production`. `MOCK_EXPOSE_SECRETS` may echo a code in the JSON response in development. In production the process refuses to start without `MOCK_GATEWAY_KEY_SECRET`, and secret exposure is forced off.
-
-## Audit
-
-`audit_log` is append-only. A trigger rejects `UPDATE`, `DELETE` and `TRUNCATE`, including for the table owner. Each tenant (and the platform, chain key `platform`) has its own hash chain: the trigger takes an advisory lock, overwrites `chain_key`, `seq`, `prev_hash`, `hash` and `created_at`, and sets `hash` to SHA-256 of a canonical JSON array. The genesis previous hash is 64 zeroes. `GET /api/v1/tenant/audit/verify` and `GET /api/v1/admin/audit/verify` recompute that hash in the application and report the first broken sequence.
-
-## DPDP Act 2023
-
-Hospital OS is a processor for each hospital (the data fiduciary) once real clinical data exists. Phase A captures the scaffolding only:
-
-- A versioned privacy notice (`privacy_notices`). Signup records consent against the current version and its purpose tags (`consents`).
-- Data-principal requests: access, correction, erasure and grievance (`data_principal_requests`), with a 30-day due date. Staff with `privacy.manage` record the outcome. This is a register, not an automated export or wipe of clinical records (those modules are not built yet).
-- Purpose limitation is represented as the purpose list on the notice. New purposes need a new notice version and fresh consent.
-- The App Admin and tenant audit logs are the accountability trail.
-
-Before go-live: publish the real notice, name a grievance officer, sign a DPA, and define who at the hospital may raise a request on a patient's behalf.
-
-## Encryption, transport, residency
-
-- **In transit.** Production terminates TLS at the edge. The dev API listens on `127.0.0.1:4400` without TLS.
-- **At rest.** Production databases and backups sit on managed disks with encryption enabled (for example a cloud disk encryption key, or Postgres on an encrypted volume). Backups are encrypted with a key separate from the database password and are stored in an India region.
-- **Field level.** A later phase encrypts government identifiers (ABHA, Aadhaar tokens if ever stored, and similar) with envelope encryption: a data key per tenant wrapped by a KMS key that never leaves the India region. Phase A does not store those identifiers and does not implement the KMS call.
-- **Residency.** Primary database, backups, object storage for logos and invoices, and the KMS key stay in India. No subprocessors outside India for personal data.
-
-## Retention
-
-| Data | Phase A default | Production intent |
+| DPDP duty (section) | What Hospital OS does today | Status |
 | --- | --- | --- |
-| Audit log | Kept. Append-only. | Retain at least 7 years (clinical record practice) or the hospital's policy, whichever is longer. |
-| Tax invoices | Kept with the subscription. | 8 years, GST record-keeping. |
-| Sessions | Idle and absolute timeouts (tenant 2h/12h, platform 30min/8h). | Same. |
-| OTP and invites | Short expiry; rows remain for the audit of the attempt. | Purge consumed challenges after 30 days. |
-| Mock outbox | Dev only. | Replace with a real provider; do not store message bodies longer than the delivery receipt needs. |
-| Uploaded logos | On local disk under `UPLOAD_DIR`. | Object storage in India, deleted with the tenant. |
-| Erasure requests | Status on the register. | When clinical modules exist, erasure follows the hospital's retention exceptions (medico-legal), not a hard delete of the audit chain. |
+| Notice before consent (s.5) | Versioned `privacy_notices` with purpose list; signup shows the current notice and records the version accepted. The notice text is a sample. | Partial |
+| Consent: free, specific, for a stated purpose (s.6) | `consents` stores user, notice version, purpose tags, IP, user agent and time. Required vs optional purposes are separate. | Built (staff accounts) |
+| Withdrawal of consent as easy as giving it (s.6(4)) | `consents.withdrawn_at` exists. There is **no withdraw endpoint or screen** yet. | Gap |
+| Patient consent at registration | Patients are not consented through the product yet: Phase A has no patient-facing capture. | Gap (Phase B, Patient Registration) |
+| Purpose limitation (s.4, s.6) | Purposes are declared on the notice. A new purpose needs a new notice version and fresh consent. Nothing in code blocks use for an undeclared purpose. | Partial |
+| Accuracy and completeness (s.8(3)) | Input validation (zod) on every write; Indian formats enforced in the database (mobile `+91`, GSTIN check digit, pincode, DOB range). Correction requests go through the register. | Partial |
+| Reasonable security safeguards (s.8(5)) | Tenant isolation in Postgres, RBAC per location, argon2id passwords, hashed session tokens, CSRF header, rate limits, TOTP for App Admin, append-only audit log. Details below. | Built (Phase A scope) |
+| Breach intimation to the Board and each affected principal (s.8(6)) | Runbook below. Detection and notification tooling is not built. As processor we notify the hospital; the hospital notifies the Board and patients. | Designed |
+| Erase when the purpose is served or consent is withdrawn (s.8(7)) | Erasure requests are logged in `data_principal_requests` with a 30-day due date. No automated erase or anonymise job. `hos_app` has no `DELETE` on `patients`. | Partial |
+| Grievance redressal and contact person (s.8(9), s.8(10)) | Grievance is a request type in the register. No named grievance officer or published contact yet. | Partial |
+| Right to access a summary of data (s.11) | Access requests are logged. No self-service export. | Partial |
+| Right to correction and erasure (s.12) | Logged and tracked to closure by staff with `privacy.manage`. Manual fulfilment. | Partial |
+| Right to nominate (s.14) | Not modelled. | Gap |
+| Children's data: verifiable guardian consent (s.9) | Seeded sample patients include minors with an emergency contact. There is no guardian-consent flow or age check. | Gap |
+| Processor only on a contract (s.8(2)) | DPA template not written. | Gap |
+| Accountability record | Hash-chained audit log per tenant, verifiable from the API. Opening a patient record writes `patient.view`. | Built |
+| Cross-border transfer (s.16) | Intent: India-only hosting, backups and KMS. No hosting is chosen yet. | Designed |
 
-## Breach response
+## Tenant isolation (row-level security)
 
-1. Contain: revoke the API credentials, rotate `hos_app` / `hos_migrator` passwords and the session pepper equivalent (invalidate `sessions`), and block the host.
-2. Determine which `tenant_id` values appear in access logs for the window. RLS does not help after a credential theft of `hos_app`; the audit chain and reverse-proxy logs do.
-3. Notify the hospital (fiduciary) without undue delay so they can meet the DPDP Board timeline. Do not notify patients directly unless the hospital asks and the contract says so.
-4. Preserve the audit log. Do not `UPDATE` it; the trigger will reject that anyway.
-5. Record the incident, the tenants affected, and the remediation in the platform audit chain.
+Every tenant-owned table, `patients` included, has row-level security **enabled and forced**. Policies compare `tenant_id` with `nullif(current_setting('app.tenant_id', true), '')::uuid` (wrapped as `hos_tenant_id()`). The API sets `app.tenant_id` and `app.scope` with `set_config(..., true)` at the start of each request transaction, so the setting dies with the transaction and a pooled connection cannot carry one hospital into the next request. With no tenant set, every tenant table reads as empty.
+
+Two database roles, both `NOSUPERUSER` and `NOBYPASSRLS`:
+
+- `hos_migrator` owns the schema and runs migrations and seeds. Because RLS is forced, even the owner goes through an explicit policy.
+- `hos_app` is what the API connects as. Explicit grants only. It cannot read `sessions` or `invoice_sequences`; those go through `SECURITY DEFINER` functions with `search_path` pinned and `EXECUTE` revoked from `PUBLIC`. It has no `DELETE` on `patients` or `audit_log`.
+
+Children reference parents by `(tenant_id, id)` composite foreign keys, so a row cannot point at another tenant's location, user or order even by mistake.
+
+How it is checked:
+
+- `apps/api/src/security.test.ts` (vitest, throwaway database) checks that another tenant's invoice and user come back as 404, plus idempotency replay, entitlement and payment-signature checks.
+- `scripts/smoke.mjs` logs in as two hospitals (Sunrise Care and Lotus Nursing Home) and asserts that Lotus gets 404 on Sunrise's patients and invoices, sees only its own location and staff, and cannot switch into a Sunrise location. With `--db` it connects as `hos_app` and checks that no tenant set means zero rows, Lotus sees only its five patients, an `UPDATE` on Sunrise rows touches nothing, and `DELETE` is refused.
+
+**Limit.** `hos_app` sets its own GUCs. RLS protects against application bugs (a query that forgets `WHERE tenant_id = …`). It does not protect against a fully compromised API process, which could set `app.tenant_id` to any tenant id it learns. Mitigations: no `BYPASSRLS`, statement timeout 10s and idle-in-transaction timeout 15s on `hos_app`, the API never exposed except behind TLS, and the audit chain plus proxy logs for forensics.
+
+## Access control
+
+- RBAC is per hospital **and per location**. A role assignment has a `location_id`, or `NULL` for all locations. Permissions are checked against the location the session is working in.
+- Nine system roles: Tenant Admin, Location Admin, Front Desk, Doctor, Nurse, Cashier, Pharmacist, Lab Tech, Accounts (`packages/shared/src/rbac.ts`). Staff cannot grant a role above their own or at a location they do not manage.
+- Patient records: listing needs `patients.manage` at the current location. Staff tied to specific locations cannot open a patient registered at another branch (the API answers 404, so it does not confirm the record exists).
+- App Admin (platform) is a separate account type with its own sessions. Platform sessions see no tenant rows unless an admin action targets one tenant, and that action is written to the tenant's own audit chain.
+- **Gaps:** no "break-the-glass" emergency access, no time-boxed access, no MFA enforcement for hospital staff (TOTP exists but is optional), no per-field masking (for example hiding the mobile number from roles that do not need it).
+
+## Audit log
+
+`audit_log` is append-only. A trigger rejects `UPDATE`, `DELETE` and `TRUNCATE`, for the owner too. Each hospital has its own hash chain (the platform has chain `platform`): the trigger takes an advisory lock, sets `seq`, `prev_hash` and `created_at`, and stores `hash` = SHA-256 (`pg_catalog.sha256`) of a canonical JSON form of the row. The genesis previous hash is 64 zeroes. `GET /api/v1/tenant/audit/verify` and `GET /api/v1/admin/audit/verify` recompute the chain and report the first broken sequence.
+
+Logged today: sign-in, failed sign-in, staff invites and role changes, onboarding steps, plan and add-on purchases, App Admin changes, privacy requests, seeds, and every opening of a patient record (`patient.view`).
+
+**Gaps:** list views and searches are not logged (only opening one record is), and there is no external anchor for the chain (a database owner could in principle rebuild a whole chain; periodically exporting the head hash to write-once storage would close that).
+
+## Encryption
+
+- **In transit.** Production terminates TLS 1.2+ at the edge and forwards to the API on a private network. The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`. **Dev runs plain HTTP on 127.0.0.1** (API 4400, web 3400, Postgres 55432 bound to localhost only).
+- **At rest.** Intended: managed Postgres or an encrypted volume, encrypted backups with a separate key, all in an India region. **Not in place in dev**: the Docker volume `hospital-os-pgdata` is not encrypted.
+- **Secrets.** Passwords are argon2id. Session tokens are 32 random bytes; only their SHA-256 is stored. OTP and invite tokens are stored hashed. `.env` is git-ignored; `.env.example` holds dev-only values. Production refuses to start without a real `MOCK_GATEWAY_KEY_SECRET` and forces secret echoing off.
+- **Field level.** Designed, not built: government identifiers (ABHA number and address, any Aadhaar token) encrypted with a per-tenant data key wrapped by an India-region KMS key. Until then the database **refuses** ABHA values on non-sample rows (`patients_abha_sample_only_chk`), so a real ABHA cannot be stored by accident. Seeded ABHA-style numbers start with `00-` (never issued) and addresses end in `@sbx` (the ABDM sandbox suffix).
+
+## Consent
+
+Staff and owner consent is captured at signup against the current notice version and its purpose tags, with IP and user agent. Optional purposes (product updates) are separate from required ones. Gaps: no withdrawal endpoint or screen, no patient consent capture, no guardian consent for minors, no consent receipt sent to the principal.
+
+## Data retention and deletion
+
+| Data | Phase A behaviour | Production intent |
+| --- | --- | --- |
+| Patient records | Sample only. No delete grant for the app; erasure goes through the request register. | Keep for the hospital's clinical retention period (NMC/state rules, often cited as at least 3 years for inpatient records, longer for medico-legal cases, or the hospital's policy if longer). After that, anonymise or delete on a scheduled job, and log it. |
+| Audit log | Kept forever, append-only. | At least as long as the clinical records it covers (we plan 7 years) or the hospital's policy if longer. |
+| Tax invoices | Kept with the subscription. | 8 years (GST record keeping). |
+| Sessions | Idle and absolute timeouts (tenant 2h / 12h, platform 30min / 8h). | Same; purge expired rows after 30 days. |
+| OTP challenges, invites | Short expiry; rows kept as evidence of the attempt. | Purge consumed rows after 30 days. |
+| Mock outbox | Dev only. | Real provider; keep only delivery receipts. |
+| Uploaded logos | Local disk under `UPLOAD_DIR`. | Object storage in India, deleted with the tenant. |
+| Tenant offboarding | Not built. | Export, then delete or anonymise all tenant rows after the contractual notice period, keeping only what law requires (invoices, audit). |
+
+**Gap:** no retention job exists yet. Nothing is purged automatically.
+
+## Breach handling
+
+Runbook (Designed; not rehearsed):
+
+1. **Contain.** Revoke API credentials, rotate the `hos_app` and `hos_migrator` passwords, invalidate all sessions, and isolate the host.
+2. **Scope.** Work out which `tenant_id` values and which records were exposed in the window, from the audit chain, `patient.view` entries and proxy logs. After a theft of `hos_app` credentials RLS no longer helps; the logs do.
+3. **Notify the hospital** (the fiduciary) without delay with what we know, so it can inform the Data Protection Board and affected patients within the time the DPDP Rules set (the DPDP Rules, 2025 ask for a detailed report to the Board within 72 hours). We do not contact patients directly unless the hospital asks and the DPA allows it. CERT-In reporting (6 hours for listed incident types) applies to us as the service provider.
+4. **Preserve evidence.** Do not modify the audit log (the trigger refuses anyway). Snapshot logs and the database.
+5. **Record** the incident, the tenants affected, the timeline and the fix in the platform audit chain.
+
+**Gaps:** no intrusion detection, no alerting on unusual access (for example one user opening hundreds of records), no tested restore, no named incident owner.
+
+## Application security, other
+
+- Every state-changing request must carry `x-hos-csrf: 1`; auth routes are rate limited (30 a minute per IP); idempotency keys on payments and other writes.
+- A login for an unknown email still runs an argon2 verify against a dummy hash, so timing does not reveal which emails exist.
+- Mock payments: a capture is accepted only when `HMAC-SHA256(secret, orderPublicId|paymentPublicId)` matches (timing-safe compare). No real gateway, no card data.
+- **Gaps:** no security headers middleware (CSP, HSTS, frame-ancestors) on the API, no dependency or container scanning in CI, no pen test.
 
 ## ABDM readiness (not implemented)
 
-ABDM is optional per tenant and is not called in Phase A. The hooks, when a later phase adds them, are:
+ABDM is optional per tenant and is not called in Phase A: ABHA linking, HFR facility registration, HPR practitioner registration and FHIR R4 exchange are later features behind the plan matrix. Until they are entitled and configured, the API neither collects real ABHA identifiers nor talks to the ABDM gateway.
 
-- **ABHA** — patient account linking, behind a module feature the plan matrix can turn on.
-- **HFR** — facility registration for each location.
-- **HPR** — practitioner registration for doctors.
-- **FHIR R4** — a later exchange boundary. Phase A tables are not a FHIR server.
+## Before any real patient data
 
-Until those features are entitled and configured, the API neither collects ABHA addresses nor talks to the ABDM gateway.
-
-## Payments
-
-The gateway is a mock. Orders and payments never leave this process. A captured payment is acknowledged only when `HMAC-SHA256(secret, orderPublicId|paymentPublicId)` matches, compared with a timing-safe equality check. There is no real payment gateway and no card data.
+1. Real privacy notice, DPA template and named grievance officer.
+2. Patient consent at registration, guardian consent for minors, and consent withdrawal.
+3. Field-level encryption for identifiers; drop the sample-only ABHA check once it is in place.
+4. Encrypted storage and backups in an India region, TLS everywhere, security headers.
+5. Retention and erasure jobs, tenant offboarding.
+6. Access alerting, breach drill, pen test.
