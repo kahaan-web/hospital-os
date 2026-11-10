@@ -43,6 +43,7 @@ export interface Side {
   seriesId: string;
   patientId: string;
   alertId: string;
+  documentId: string;
   serviceId: string;
   tariffId: string;
   encounterId: string;
@@ -52,6 +53,7 @@ export interface Side {
   noteId: string;
   chargeId: string;
   cashId: string;
+  mlcId: string;
 }
 
 export interface FixturePair {
@@ -368,6 +370,18 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      ) values ($1, $2, 'receipt', 'in', 'cash', 100, $3, $4, $5, 'bill', $5) returning id`,
     [tenant.id, location.id, `ZC${runId}${mark}`, patient.id, encounter.id],
   );
+  const document = await one<{ id: string }>(
+    migrator,
+    `insert into patient_documents (tenant_id, patient_id, kind, file_path, mime, size)
+     values ($1, $2, 'Consent', 'nope.pdf', 'application/pdf', 1) returning id`,
+    [tenant.id, patient.id],
+  );
+  const mlc = await one<{ id: string }>(
+    migrator,
+    `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary)
+     values ($1, $2, $3, $4, 'Fixture MLC') returning id`,
+    [tenant.id, patient.id, encounter.id, `ZML${runId}${mark}`],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -392,6 +406,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     seriesId: series.id,
     patientId: patient.id,
     alertId: alert.id,
+    documentId: document.id,
     serviceId: service.id,
     tariffId: tariff.id,
     encounterId: encounter.id,
@@ -401,6 +416,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     noteId: note.id,
     chargeId: charge.id,
     cashId: cash.id,
+    mlcId: mlc.id,
   };
 }
 
@@ -415,6 +431,8 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from vital_signs where tenant_id = any($1::uuid[])`,
     `delete from clinical_notes where tenant_id = any($1::uuid[])`,
     `delete from patient_alerts where tenant_id = any($1::uuid[])`,
+    `delete from patient_documents where tenant_id = any($1::uuid[])`,
+    `delete from mlc_cases where tenant_id = any($1::uuid[])`,
     `delete from encounters where tenant_id = any($1::uuid[])`,
     `delete from tariffs where tenant_id = any($1::uuid[])`,
     `delete from services where tenant_id = any($1::uuid[])`,
