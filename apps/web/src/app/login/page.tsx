@@ -5,15 +5,19 @@ import { loginSchema, fieldErrors } from '@hos/shared';
 import { Button, Card, CardBody, CardHeader, Field, Input, PageHeader, Tabs, useToast } from '@hos/ui';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ApiError, apiPost } from '@/lib/api';
+import { safeNextPath } from '@/lib/safe-redirect';
 
 export default function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
   const admin = params.get('admin') === '1';
-  const next = params.get('next') ?? (admin ? '/admin' : '/app');
-  const toast = useToast();
+  const next = useMemo(
+    () => safeNextPath(params.get('next'), admin ? '/admin' : '/app'),
+    [params, admin],
+  );
+  const { toast: showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +38,7 @@ export default function LoginPage() {
       setErrors({});
       try {
         const me = await apiPost<Me>('/auth/login', parsed.data);
-        toast.toast({ tone: 'success', title: 'Signed in', description: me.kind === 'platform' ? 'App Admin session' : me.user.name });
+        showToast({ tone: 'success', title: 'Signed in', description: me.kind === 'platform' ? 'App Admin session' : me.user.name });
         if (me.kind === 'platform') {
           router.replace(mode === 'platform' ? next : '/admin');
         } else if (me.tenant.status === 'onboarding') {
@@ -52,7 +56,7 @@ export default function LoginPage() {
         setBusy(false);
       }
     },
-    [email, password, totp, router, next, mode, toast],
+    [email, password, totp, router, next, mode, showToast],
   );
 
   return (

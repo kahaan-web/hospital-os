@@ -46,6 +46,17 @@ export function wizardStepFromApi(step: OnboardingStep, paid: boolean): number {
   return map[step] ?? idx + 1;
 }
 
+export function wizardHrefIndex(href: string): number {
+  const i = WIZARD_ROUTES.findIndex((s) => s.href === href);
+  return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+}
+
+export function wizardBackHref(currentHref: string): string | null {
+  const idx = wizardHrefIndex(currentHref);
+  if (idx <= 0) return null;
+  return WIZARD_ROUTES[idx - 1]?.href ?? null;
+}
+
 export function routeForApiStep(step: OnboardingStep, paid: boolean): string {
   if (step === 'done') return '/app';
   if (step === 'facility') return '/onboarding/facility';

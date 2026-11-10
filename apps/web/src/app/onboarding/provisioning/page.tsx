@@ -3,40 +3,47 @@
 import type { ProvisioningResult } from '@hos/shared';
 import { Button, PageHeader, Spinner, useToast } from '@hos/ui';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
 import { ApiError, apiPost } from '@/lib/api';
 
 export default function ProvisioningPage() {
   const router = useRouter();
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [result, setResult] = useState<ProvisioningResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const provisionKeyRef = useRef(crypto.randomUUID());
+  const startedRef = useRef(false);
 
   const run = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await apiPost<ProvisioningResult>('/onboarding/provision', undefined, `provision-${Date.now()}`);
+      const res = await apiPost<ProvisioningResult>('/onboarding/provision', undefined, provisionKeyRef.current);
       setResult(res);
-      toast.toast({ tone: 'success', title: 'Tenant provisioned' });
+      showToast({ tone: 'success', title: 'Tenant provisioned' });
       window.setTimeout(() => router.replace('/app'), 2000);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Provisioning failed');
     } finally {
       setBusy(false);
     }
-  }, [router, toast]);
+  }, [router, showToast]);
 
   useEffect(() => {
-    run();
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void run();
   }, [run]);
 
   return (
     <OnboardingWizardShell currentHref="/onboarding/provisioning">
-      <OnboardingGate allowedHrefs={['/onboarding/provisioning', '/onboarding/invoice']}>
+      <OnboardingGate
+        allowedHrefs={['/onboarding/provisioning', '/onboarding/invoice']}
+        currentHref="/onboarding/provisioning"
+      >
         {() => (
           <>
             <PageHeader title="Provisioning" description="Creating tenant, locations, roles and sample masters." />

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PlatformMe } from '@hos/shared';
 import { AdminShell } from '@/components/shell/AdminShell';
 import { ApiError } from '@/lib/api';
@@ -12,6 +12,8 @@ import { PageError, PageLoading } from '@/features/common/LoadState';
 export function AdminAppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
   const [me, setMe] = useState<PlatformMe | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export function AdminAppLayout({ children }: { children: ReactNode }) {
     fetchMe()
       .then((session) => {
         if (!session) {
-          router.replace(`/login?admin=1&next=${encodeURIComponent(pathname)}`);
+          router.replace(`/login?admin=1&next=${encodeURIComponent(pathnameRef.current)}`);
           return;
         }
         if (!isPlatformMe(session)) {
@@ -33,7 +35,7 @@ export function AdminAppLayout({ children }: { children: ReactNode }) {
       })
       .catch((e: unknown) => setError(e instanceof ApiError ? e.message : 'Session error'))
       .finally(() => setLoading(false));
-  }, [router, pathname]);
+  }, [router]);
 
   useEffect(() => {
     refresh();
@@ -46,8 +48,8 @@ export function AdminAppLayout({ children }: { children: ReactNode }) {
     router.replace('/login?admin=1');
   }, [router]);
 
-  if (loading) return <PageLoading label="Opening App Admin…" />;
-  if (error) return <PageError error={error} onRetry={refresh} />;
+  if (loading && !me) return <PageLoading label="Opening App Admin…" />;
+  if (error && !me) return <PageError error={error} onRetry={refresh} />;
   if (!me) return null;
 
   return (

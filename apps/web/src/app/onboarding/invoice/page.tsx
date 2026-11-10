@@ -1,10 +1,10 @@
 'use client';
 
 import type { InvoiceDto, OnboardingState } from '@hos/shared';
-import { Button, PageHeader, PrintLayout, useToast } from '@hos/ui';
+import { Button, PageHeader, useToast } from '@hos/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
 import { formatDate, formatINR } from '@/lib/format';
@@ -13,7 +13,7 @@ import { API_BASE, apiGet, apiText } from '@/lib/api';
 export default function InvoicePage() {
   return (
     <OnboardingWizardShell currentHref="/onboarding/invoice">
-      <OnboardingGate allowedHrefs={['/onboarding/invoice', '/onboarding/checkout']}>
+      <OnboardingGate allowedHrefs={['/onboarding/invoice', '/onboarding/checkout']} currentHref="/onboarding/invoice">
         {(state) => <InvoiceBody state={state} />}
       </OnboardingGate>
     </OnboardingWizardShell>
@@ -22,24 +22,32 @@ export default function InvoicePage() {
 
 function InvoiceBody({ state }: { state: OnboardingState }) {
   const router = useRouter();
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [invoice, setInvoice] = useState<InvoiceDto | null>(null);
   const [html, setHtml] = useState<string | null>(null);
   const id = state.invoiceId;
+  const toastErrorRef = useRef(false);
 
-  const load = useCallback(async (invoiceId: string) => {
-    try {
-      const inv = await apiGet<InvoiceDto>(`/billing/invoices/${invoiceId}`);
-      setInvoice(inv);
-      const printable = await apiText(`/billing/invoices/${invoiceId}/html`);
-      setHtml(printable);
-    } catch {
-      toast.toast({ tone: 'error', title: 'Invoice not ready yet' });
-    }
-  }, [toast]);
+  const load = useCallback(
+    async (invoiceId: string) => {
+      try {
+        const inv = await apiGet<InvoiceDto>(`/billing/invoices/${invoiceId}`);
+        setInvoice(inv);
+        const printable = await apiText(`/billing/invoices/${invoiceId}/html`);
+        setHtml(printable);
+        toastErrorRef.current = false;
+      } catch {
+        if (!toastErrorRef.current) {
+          toastErrorRef.current = true;
+          showToast({ tone: 'error', title: 'Invoice not ready yet' });
+        }
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
-    if (id) load(id);
+    if (id) void load(id);
   }, [id, load]);
 
   return (
@@ -67,9 +75,17 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
             </Button>
           </div>
           {html ? (
-            <PrintLayout title={`Invoice ${invoice.number}`}>
-              <div dangerouslySetInnerHTML={{ __html: html }} />
-            </PrintLayout>
+            <iframe
+              title={`Invoice ${invoice.number}`}
+              srcDoc={html}
+              sandbox=""
+              style={{
+                width: '100%',
+                minHeight: '28rem',
+                border: '1px solid var(--hos-border)',
+                background: '#fff',
+              }}
+            />
           ) : null}
         </div>
       ) : (

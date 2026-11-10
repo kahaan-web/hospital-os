@@ -12,7 +12,7 @@ import { ApiError, apiGet, apiPut } from '@/lib/api';
 
 export default function PlanPage() {
   const router = useRouter();
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
 
   useEffect(() => {
@@ -21,13 +21,13 @@ export default function PlanPage() {
 
   return (
     <OnboardingWizardShell currentHref="/onboarding/plan">
-      <OnboardingGate allowedHrefs={['/onboarding/plan']}>
+      <OnboardingGate allowedHrefs={['/onboarding/plan']} currentHref="/onboarding/plan">
         {(state) => (
           <PlanForm
             state={state}
             catalog={catalog}
             onSaved={() => router.push('/onboarding/addons')}
-            toast={toast}
+            showToast={showToast}
           />
         )}
       </OnboardingGate>
@@ -39,12 +39,12 @@ function PlanForm({
   state,
   catalog,
   onSaved,
-  toast,
+  showToast,
 }: {
   state: OnboardingState;
   catalog: Catalog | null;
   onSaved: () => void;
-  toast: ReturnType<typeof useToast>;
+  showToast: ReturnType<typeof useToast>['toast'];
 }) {
   const [planId, setPlanId] = useState(state.draft.planId ?? catalog?.plans[0]?.id ?? '');
   const [cycle, setCycle] = useState<BillingCycle>(state.draft.cycle);
@@ -54,7 +54,7 @@ function PlanForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
-  const placeState = state.locations[0]?.stateCode ?? 'MH';
+  const placeState = state.locations[0]?.stateCode ?? '27';
   const preview = useClientQuote(
     catalog,
     planId
@@ -72,14 +72,14 @@ function PlanForm({
     setBusy(true);
     try {
       await apiPut('/onboarding/plan', parsed.data);
-      toast.toast({ tone: 'success', title: 'Plan selected' });
+      showToast({ tone: 'success', title: 'Plan selected' });
       onSaved();
     } catch (e) {
       setErrors(e instanceof ApiError ? { form: e.message } : { form: 'Save failed' });
     } finally {
       setBusy(false);
     }
-  }, [planId, cycle, locationCount, onSaved, toast]);
+  }, [planId, cycle, locationCount, onSaved, showToast]);
 
   const plans = catalog?.plans.filter((p) => p.status === 'active').sort((a, b) => a.sortOrder - b.sortOrder) ?? [];
 

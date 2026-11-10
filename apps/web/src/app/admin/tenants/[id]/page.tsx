@@ -1,28 +1,32 @@
 'use client';
 
-import type { AdminTenantDetailDto, OverrideDto } from '@hos/shared';
+import type { AdminTenantDetailDto, Catalog, OverrideDto } from '@hos/shared';
 import { overrideSchema, suspendSchema, fieldErrors } from '@hos/shared';
-import { Badge, Button, DataTable, Field, Input, PageHeader, Select, Textarea, useToast } from '@hos/ui';
+import { Badge, Button, DataTable, Dialog, Field, Input, PageHeader, Select, Textarea, useToast } from '@hos/ui';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { PageError, PageLoading } from '@/features/common/LoadState';
 import { ApiError, apiDelete, apiGet, apiPost } from '@/lib/api';
-import { formatINR } from '@/lib/format';
+import { formatINR, isoToDDMMYYYY } from '@/lib/format';
 
 export default function AdminTenantDetailPage() {
   const params = useParams();
   const id = String(params.id);
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [detail, setDetail] = useState<AdminTenantDetailDto | null>(null);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [override, setOverride] = useState({
     target: 'module' as 'module' | 'feature',
     moduleId: '',
+    featureId: '',
     effect: 'grant' as 'grant' | 'revoke',
     reason: '',
   });
   const [suspendReason, setSuspendReason] = useState('');
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -34,36 +38,70 @@ export default function AdminTenantDetailPage() {
 
   useEffect(() => {
     load();
+    apiGet<Catalog>('/catalog').then(setCatalog).catch(() => null);
   }, [load]);
 
   const addOverride = async () => {
     const parsed = overrideSchema.safeParse({
-      ...override,
-      moduleId: override.moduleId || undefined,
+      target: override.target,
+      moduleId: override.target === 'module' ? override.moduleId || undefined : undefined,
+      featureId: override.target === 'feature' ? override.featureId || undefined : undefined,
+      effect: override.effect,
+      reason: override.reason,
     });
     if (!parsed.success) {
-      toast.toast({ tone: 'error', title: fieldErrors(parsed.error).reason ?? 'Check override fields' });
+      showToast({ tone: 'error', title: 'Check override fields', description: fieldErrors(parsed.error).reason });
       return;
     }
     try {
       await apiPost<OverrideDto>(`/admin/tenants/${id}/overrides`, parsed.data);
-      toast.toast({ tone: 'success', title: 'Override saved' });
+      showToast({ tone: 'success', title: 'Override saved' });
       load();
     } catch (e) {
-      toast.toast({ tone: 'error', title: e instanceof ApiError ? e.message : 'Failed' });
+      showToast({ tone: 'error', title: e instanceof ApiError ? e.message : 'Failed' });
     }
   };
 
   const suspend = async () => {
     const parsed = suspendSchema.safeParse({ reason: suspendReason });
-    if (!parsed.success) return;
-    await apiPost(`/admin/tenants/${id}/suspend`, parsed.data);
-    load();
+    if (!parsed.success) {
+      showToast({ tone: 'error', title: fieldErrors(parsed.error).reason ?? 'Give a suspend reason' });
+      return;
+    }
+    setActionBusy(true);
+    try {
+      await apiPost(`/admin/tenants/${id}/suspend`, parsed.data);
+      showToast({ tone: 'success', title: 'Tenant suspended' });
+      setSuspendOpen(false);
+      setSuspendReason('');
+      load();
+    } catch (e) {
+      showToast({ tone: 'error', title: e instanceof ApiError ? e.message : 'Suspend failed' });
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const reactivate = async () => {
-    await apiPost(`/admin/tenants/${id}/reactivate`);
-    load();
+    setActionBusy(true);
+    try {
+      await apiPost(`/admin/tenants/${id}/reactivate`);
+      showToast({ tone: 'success', title: 'Tenant reactivated' });
+      load();
+    } catch (e) {
+      showToast({ tone: 'error', title: e instanceof ApiError ? e.message : 'Reactivate failed' });
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const removeOverride = async (overrideId: string) => {
+    try {
+      await apiDelete(`/admin/tenants/${id}/overrides/${overrideId}`);
+      load();
+    } catch (e) {
+      showToast({ tone: 'error', title: e instanceof ApiError ? e.message : 'Could not remove override' });
+    }
   };
 
   if (loading) return <PageLoading />;
@@ -71,6 +109,8 @@ export default function AdminTenantDetailPage() {
   if (!detail) return null;
 
   const t = detail.tenant;
+  const features =
+    catalog?.modules.flatMap((m) => m.features.map((f) => ({ ...f, moduleName: m.name }))) ?? [];
 
   return (
     <>
@@ -88,16 +128,45 @@ export default function AdminTenantDetailPage() {
       <section style={{ marginTop: 'var(--hos-space-6)' }}>
         <h2 style={{ fontWeight: 600 }}>Overrides</h2>
         <Stack>
-          <Field label="Module">
-            <Select value={override.moduleId} onChange={(e) => setOverride((o) => ({ ...o, moduleId: e.target.value }))}>
-              <option value="">Choose module</option>
-              {detail.modules.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
+          <Field label="Target type">
+            <Select
+              value={override.target}
+              onChange={(e) =>
+                setOverride((o) => ({
+                  ...o,
+                  target: e.target.value as 'module' | 'feature',
+                  moduleId: '',
+                  featureId: '',
+                }))
+              }
+            >
+              <option value="module">Module</option>
+              <option value="feature">Feature</option>
             </Select>
           </Field>
+          {override.target === 'module' ? (
+            <Field label="Module">
+              <Select value={override.moduleId} onChange={(e) => setOverride((o) => ({ ...o, moduleId: e.target.value }))}>
+                <option value="">Choose module</option>
+                {detail.modules.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <Field label="Feature">
+              <Select value={override.featureId} onChange={(e) => setOverride((o) => ({ ...o, featureId: e.target.value }))}>
+                <option value="">Choose feature</option>
+                {features.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.moduleName}: {f.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field label="Effect">
             <Select
               value={override.effect}
@@ -126,7 +195,7 @@ export default function AdminTenantDetailPage() {
               header: '',
               accessor: () => '',
               render: (o) => (
-                <Button type="button" variant="ghost" size="sm" onClick={() => apiDelete(`/admin/tenants/${id}/overrides/${o.id}`).then(load)}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => removeOverride(o.id)}>
                   Remove
                 </Button>
               ),
@@ -138,17 +207,21 @@ export default function AdminTenantDetailPage() {
       <section style={{ marginTop: 'var(--hos-space-6)' }}>
         <h2 style={{ fontWeight: 600 }}>Suspend / reactivate</h2>
         <Stack>
-          <Field label="Reason">
-            <Input value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} />
-          </Field>
-          <span style={{ display: 'flex', gap: 'var(--hos-space-2)' }}>
-            <Button type="button" variant="danger" onClick={suspend}>
-              Suspend tenant
+          {t.status === 'active' || t.status === 'onboarding' ? (
+            <>
+              <Field label="Suspend reason" hint="Recorded in the audit log">
+                <Input value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} />
+              </Field>
+              <Button type="button" variant="danger" onClick={() => setSuspendOpen(true)}>
+                Suspend tenant
+              </Button>
+            </>
+          ) : null}
+          {t.status === 'suspended' ? (
+            <Button type="button" variant="secondary" disabled={actionBusy} onClick={reactivate}>
+              Reactivate tenant
             </Button>
-            <Button type="button" variant="secondary" onClick={reactivate}>
-              Reactivate
-            </Button>
-          </span>
+          ) : null}
         </Stack>
       </section>
 
@@ -164,6 +237,41 @@ export default function AdminTenantDetailPage() {
           ]}
         />
       </section>
+
+      <section style={{ marginTop: 'var(--hos-space-6)' }}>
+        <h2 style={{ fontWeight: 600 }}>Payments</h2>
+        <DataTable
+          data={detail.payments}
+          getRowId={(p) => p.id}
+          columns={[
+            { id: 'order', header: 'Order', accessor: (p) => p.orderId },
+            { id: 'method', header: 'Method', accessor: (p) => p.methodLabel },
+            { id: 'amount', header: 'Amount', accessor: (p) => formatINR(p.amountPaise) },
+            { id: 'status', header: 'Status', accessor: (p) => p.status },
+            { id: 'date', header: 'Date', accessor: (p) => isoToDDMMYYYY(p.createdAt) },
+          ]}
+          emptyMessage="No payments recorded"
+        />
+      </section>
+
+      <Dialog
+        open={suspendOpen}
+        onOpenChange={setSuspendOpen}
+        title="Suspend tenant?"
+        description="Staff will lose access until you reactivate. This is audited."
+      >
+        <p style={{ fontSize: 'var(--hos-text-sm)', margin: '0 0 var(--hos-space-4)' }}>
+          Reason: <strong>{suspendReason || '—'}</strong>
+        </p>
+        <div style={{ display: 'flex', gap: 'var(--hos-space-2)', justifyContent: 'flex-end' }}>
+          <Button type="button" variant="secondary" onClick={() => setSuspendOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="danger" loading={actionBusy} onClick={suspend}>
+            Confirm suspend
+          </Button>
+        </div>
+      </Dialog>
     </>
   );
 }

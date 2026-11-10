@@ -12,7 +12,7 @@ import { ApiError, apiGet, apiPut } from '@/lib/api';
 
 export default function AddonsPage() {
   const router = useRouter();
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   useEffect(() => {
     apiGet<Catalog>('/catalog').then(setCatalog).catch(() => null);
@@ -20,13 +20,13 @@ export default function AddonsPage() {
 
   return (
     <OnboardingWizardShell currentHref="/onboarding/addons">
-      <OnboardingGate allowedHrefs={['/onboarding/addons']}>
+      <OnboardingGate allowedHrefs={['/onboarding/addons']} currentHref="/onboarding/addons">
         {(state) => (
           <AddonsForm
             state={state}
             catalog={catalog}
             onSaved={() => router.push('/onboarding/checkout')}
-            toast={toast}
+            showToast={showToast}
           />
         )}
       </OnboardingGate>
@@ -38,12 +38,12 @@ function AddonsForm({
   state,
   catalog,
   onSaved,
-  toast,
+  showToast,
 }: {
   state: OnboardingState;
   catalog: Catalog | null;
   onSaved: () => void;
-  toast: ReturnType<typeof useToast>;
+  showToast: ReturnType<typeof useToast>['toast'];
 }) {
   const [selected, setSelected] = useState<string[]>(state.draft.addonModuleIds);
   const [busy, setBusy] = useState(false);
@@ -58,7 +58,7 @@ function AddonsForm({
         addonModuleIds: selected,
       }
     : null;
-  const preview = useClientQuote(catalog, cfg, state.locations[0]?.stateCode ?? 'MH');
+  const preview = useClientQuote(catalog, cfg, state.locations[0]?.stateCode ?? '27');
 
   const planFeatures = planId && catalog ? new Set(catalog.matrix[planId] ?? []) : new Set<string>();
   const addons =
@@ -75,14 +75,14 @@ function AddonsForm({
     setBusy(true);
     try {
       await apiPut('/onboarding/addons', parsed.data);
-      toast.toast({ tone: 'success', title: 'Add-ons saved' });
+      showToast({ tone: 'success', title: 'Add-ons saved' });
       onSaved();
     } catch (e) {
       setErrors({ form: e instanceof ApiError ? e.message : 'Save failed' });
     } finally {
       setBusy(false);
     }
-  }, [selected, onSaved, toast]);
+  }, [selected, onSaved, showToast]);
 
   return (
     <>

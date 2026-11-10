@@ -11,12 +11,12 @@ import { ApiError, apiPut, apiRequest } from '@/lib/api';
 
 export default function FacilityPage() {
   const router = useRouter();
-  const toast = useToast();
+  const { toast: showToast } = useToast();
 
   return (
     <OnboardingWizardShell currentHref="/onboarding/facility">
-      <OnboardingGate allowedHrefs={['/onboarding/facility', '/onboarding/signup']}>
-        {(state) => <FacilityForm state={state} onSaved={() => router.push('/onboarding/locations')} toast={toast} />}
+      <OnboardingGate allowedHrefs={['/onboarding/facility', '/onboarding/signup']} currentHref="/onboarding/facility">
+        {(state) => <FacilityForm state={state} onSaved={() => router.push('/onboarding/locations')} showToast={showToast} />}
       </OnboardingGate>
     </OnboardingWizardShell>
   );
@@ -25,11 +25,11 @@ export default function FacilityPage() {
 function FacilityForm({
   state,
   onSaved,
-  toast,
+  showToast,
 }: {
   state: OnboardingState;
   onSaved: () => void;
-  toast: ReturnType<typeof useToast>;
+  showToast: ReturnType<typeof useToast>['toast'];
 }) {
   const t = state.tenant;
   const [form, setForm] = useState({
@@ -53,14 +53,14 @@ function FacilityForm({
     setBusy(true);
     try {
       await apiPut('/onboarding/facility', parsed.data);
-      toast.toast({ tone: 'success', title: 'Facility saved' });
+      showToast({ tone: 'success', title: 'Facility saved' });
       onSaved();
     } catch (e) {
       setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: 'Save failed' });
     } finally {
       setBusy(false);
     }
-  }, [form, onSaved, toast]);
+  }, [form, onSaved, showToast]);
 
   return (
     <>
@@ -127,7 +127,7 @@ function FacilityForm({
                 try {
                   await apiRequest('/onboarding/logo', { method: 'POST', formData: fd });
                 } catch {
-                  toast.toast({ tone: 'error', title: 'Logo upload failed' });
+                  showToast({ tone: 'error', title: 'Logo upload failed' });
                 }
               }}
             />

@@ -1,9 +1,9 @@
 'use client';
 
-import type { OnboardingState, OrderDto, QuoteDto } from '@hos/shared';
+import type { OrderDto, QuoteDto } from '@hos/shared';
 import { Button, Card, CardBody, PageHeader, useToast } from '@hos/ui';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckoutModal } from '@/features/billing/CheckoutModal';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
@@ -12,19 +12,29 @@ import { ApiError, apiGet, apiPost } from '@/lib/api';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [quote, setQuote] = useState<QuoteDto | null>(null);
   const [order, setOrder] = useState<OrderDto | null>(null);
   const [modal, setModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const orderKeyRef = useRef<string | null>(null);
+  const toastErrorRef = useRef(false);
 
   const loadQuote = useCallback(() => {
     setLoading(true);
     apiGet<QuoteDto>('/onboarding/quote')
-      .then(setQuote)
-      .catch(() => toast.toast({ tone: 'error', title: 'Could not load quote' }))
+      .then((q) => {
+        setQuote(q);
+        toastErrorRef.current = false;
+      })
+      .catch(() => {
+        if (!toastErrorRef.current) {
+          toastErrorRef.current = true;
+          showToast({ tone: 'error', title: 'Could not load quote' });
+        }
+      })
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [showToast]);
 
   useEffect(() => {
     loadQuote();
@@ -32,13 +42,14 @@ export default function CheckoutPage() {
 
   const createOrder = useCallback(async () => {
     try {
-      const o = await apiPost<OrderDto>('/billing/orders', { purpose: 'onboarding' }, `onboarding-${Date.now()}`);
+      if (!orderKeyRef.current) orderKeyRef.current = `onboarding-${crypto.randomUUID()}`;
+      const o = await apiPost<OrderDto>('/billing/orders', { purpose: 'onboarding' }, orderKeyRef.current);
       setOrder(o);
       setModal(true);
     } catch (e) {
-      toast.toast({ tone: 'error', title: 'Order failed', description: e instanceof ApiError ? e.message : '' });
+      showToast({ tone: 'error', title: 'Order failed', description: e instanceof ApiError ? e.message : '' });
     }
-  }, [toast]);
+  }, [showToast]);
 
   const onPaid = useCallback(() => {
     router.push('/onboarding/invoice');
@@ -46,7 +57,7 @@ export default function CheckoutPage() {
 
   return (
     <OnboardingWizardShell currentHref="/onboarding/checkout">
-      <OnboardingGate allowedHrefs={['/onboarding/checkout']}>
+      <OnboardingGate allowedHrefs={['/onboarding/checkout']} currentHref="/onboarding/checkout">
         {() => (
           <>
             <PageHeader title="Review and pay" description="Mock Razorpay-style checkout with UPI, card, and net banking." />

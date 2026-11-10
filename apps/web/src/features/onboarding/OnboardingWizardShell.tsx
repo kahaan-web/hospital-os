@@ -1,9 +1,10 @@
 'use client';
 
-import { Stepper, type StepperStep } from '@hos/ui';
+import { Button, Stepper, type StepperStep } from '@hos/ui';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { WIZARD_ROUTES } from '@/lib/onboarding-steps';
+import { WIZARD_ROUTES, wizardBackHref } from '@/lib/onboarding-steps';
 
 export function OnboardingWizardShell({
   currentHref,
@@ -17,6 +18,8 @@ export function OnboardingWizardShell({
     label: s.label,
   }));
   const current = WIZARD_ROUTES.find((s) => s.href === currentHref)?.href ?? currentHref;
+  const backHref = wizardBackHref(currentHref);
+  const router = useRouter();
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--hos-bg-canvas)' }}>
@@ -56,6 +59,13 @@ export function OnboardingWizardShell({
         <div style={{ marginBottom: 'var(--hos-space-6)', overflowX: 'auto' }}>
           <Stepper steps={steps} currentStepId={current} orientation="horizontal" />
         </div>
+        {backHref ? (
+          <div style={{ marginBottom: 'var(--hos-space-4)' }}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => router.push(backHref)}>
+              Back
+            </Button>
+          </div>
+        ) : null}
         {children}
       </main>
     </div>

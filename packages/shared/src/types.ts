@@ -60,11 +60,26 @@ export interface CatalogModule {
   features: CatalogFeature[];
 }
 
+export interface CatalogBillingMeta {
+  supplierStateCode: string;
+  planGstRateBp: number;
+  planSacCode: string;
+}
+
 export interface Catalog {
   plans: CatalogPlan[];
   modules: CatalogModule[];
   /** planId → feature ids included in that plan. */
   matrix: Record<string, string[]>;
+  /** Populated when the catalogue is built with platform billing defaults. */
+  billing?: CatalogBillingMeta;
+}
+
+export interface AdminMatrixDto {
+  plans: CatalogPlan[];
+  modules: CatalogModule[];
+  features: CatalogFeature[];
+  included: Record<string, string[]>;
 }
 
 export interface PrivacyNoticeDto {

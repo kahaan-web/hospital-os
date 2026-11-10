@@ -6,9 +6,12 @@ import { PriceDisplay } from '@hos/ui';
 import { useMemo } from 'react';
 import { formatINR } from '@/lib/format';
 
-const SUPPLIER_STATE = '27';
+const FALLBACK_SUPPLIER_STATE = '27';
+const FALLBACK_PLAN_GST_BP = 1800;
+const FALLBACK_PLAN_SAC = '998314';
 
 export function catalogToPriceBook(catalog: Catalog): PriceBook {
+  const billing = catalog.billing;
   return {
     plans: catalog.plans.map((p) => ({
       id: p.id,
@@ -26,8 +29,8 @@ export function catalogToPriceBook(catalog: Catalog): PriceBook {
         gstRateBp: m.gstRateBp,
         sacCode: m.sacCode,
       })),
-    planGstRateBp: 1800,
-    planSacCode: '998314',
+    planGstRateBp: billing?.planGstRateBp ?? FALLBACK_PLAN_GST_BP,
+    planSacCode: billing?.planSacCode ?? FALLBACK_PLAN_SAC,
   };
 }
 
@@ -35,10 +38,12 @@ export function clientQuotePreview(
   catalog: Catalog,
   cfg: SubscriptionConfig,
   placeOfSupplyStateCode: string,
+  supplierStateCode?: string,
 ): { lines: QuoteDto['lines']; totals: TaxTotals } {
   const book = catalogToPriceBook(catalog);
   const lines = priceSubscription(book, cfg);
-  return applyGst(lines, SUPPLIER_STATE, placeOfSupplyStateCode);
+  const supplier = supplierStateCode ?? catalog.billing?.supplierStateCode ?? FALLBACK_SUPPLIER_STATE;
+  return applyGst(lines, supplier, placeOfSupplyStateCode);
 }
 
 export function QuoteSummary({ totals, label = 'Estimated total' }: { totals: TaxTotals; label?: string }) {
@@ -91,13 +96,14 @@ export function useClientQuote(
   catalog: Catalog | null,
   cfg: SubscriptionConfig | null,
   stateCode: string | null,
+  supplierStateCode?: string,
 ) {
   return useMemo(() => {
     if (!catalog || !cfg || !stateCode) return null;
     try {
-      return clientQuotePreview(catalog, cfg, stateCode);
+      return clientQuotePreview(catalog, cfg, stateCode, supplierStateCode);
     } catch {
       return null;
     }
-  }, [catalog, cfg, stateCode]);
+  }, [catalog, cfg, stateCode, supplierStateCode]);
 }

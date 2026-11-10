@@ -1,23 +1,16 @@
 'use client';
 
-import type { CatalogFeature, CatalogModule, CatalogPlan } from '@hos/shared';
+import type { AdminMatrixDto, CatalogModule } from '@hos/shared';
 import { Button, Checkbox, Spinner, useToast } from '@hos/ui';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError, apiGet, apiPatch } from '@/lib/api';
-
-export interface AdminMatrixDto {
-  plans: CatalogPlan[];
-  modules: CatalogModule[];
-  features: CatalogFeature[];
-  included: Record<string, string[]>;
-}
 
 function featureKey(planId: string, featureId: string): string {
   return `${planId}:${featureId}`;
 }
 
 export function MatrixEditor() {
-  const toast = useToast();
+  const { toast: showToast } = useToast();
   const [data, setData] = useState<AdminMatrixDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +48,16 @@ export function MatrixEditor() {
     }
     return false;
   }, [baseline, selected]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   const toggle = useCallback((planId: string, featureId: string, on: boolean) => {
     const k = featureKey(planId, featureId);
@@ -101,10 +104,10 @@ export function MatrixEditor() {
     setSaving(true);
     try {
       await apiPatch('/admin/matrix', { changes });
-      toast.toast({ tone: 'success', title: 'Matrix saved', description: `${changes.length} cells updated.` });
+      showToast({ tone: 'success', title: 'Matrix saved', description: `${changes.length} cells updated.` });
       setBaseline(new Set(selected));
     } catch (e) {
-      toast.toast({
+      showToast({
         tone: 'error',
         title: 'Save failed',
         description: e instanceof ApiError ? e.message : 'Try again',
@@ -112,7 +115,7 @@ export function MatrixEditor() {
     } finally {
       setSaving(false);
     }
-  }, [data, dirty, baseline, selected, toast]);
+  }, [data, dirty, baseline, selected, showToast]);
 
   if (loading) {
     return (
@@ -170,7 +173,7 @@ export function MatrixEditor() {
 
       <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 12rem)', border: '1px solid var(--hos-border)' }}>
         <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%', fontSize: 'var(--hos-text-sm)' }}>
-          <thead style={{ position: 'sticky', top: dirty ? 48 : 0, zIndex: 10, background: 'var(--hos-bg-surface-muted)' }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--hos-bg-surface-muted)' }}>
             <tr>
               <th
                 style={{
