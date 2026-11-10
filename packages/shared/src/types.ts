@@ -169,11 +169,15 @@ export interface TenantMe {
   subscription: SubscriptionDto | null;
   modules: ModuleStateDto[];
   features: string[];
+  /** Set only when login was called with `x-hos-client: native`. */
+  sessionToken?: string;
 }
 
 export interface PlatformMe {
   kind: 'platform';
   admin: { id: string; name: string; email: string; totpEnabled: boolean };
+  /** Set only when login was called with `x-hos-client: native`. */
+  sessionToken?: string;
 }
 
 export type Me = TenantMe | PlatformMe;

@@ -15,7 +15,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { tenantMe } from '../catalog';
 import { generateTotpSecret, otpauthUrl, otpCode, randomToken, safeEqual, sha256Hex, verifyTotp } from '../crypto';
 import { openTenant, type Deps } from '../guard';
-import { ApiError, cookieOptions, platform, requestMeta, resolveSession, SESSION_COOKIE, tenant, writeAudit } from '../http';
+import { ApiError, cookieOptions, platform, readSessionToken, requestMeta, resolveSession, SESSION_COOKIE, tenant, writeAudit } from '../http';
 
 const limit = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
 
@@ -171,7 +171,8 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
         await writeAudit(tx, platformActor(admin.id, email, meta), 'auth.session.login', 'platform_admin', admin.id, null, {});
       });
       reply.setCookie(SESSION_COOKIE, token, cookieOptions(deps.env, 8 * 60 * 60));
-      return { kind: 'platform' as const, admin: { id: admin.id, name: admin.name, email: admin.email, totpEnabled: admin.totpEnabled } };
+      const platformMe = { kind: 'platform' as const, admin: { id: admin.id, name: admin.name, email: admin.email, totpEnabled: admin.totpEnabled } };
+      return req.headers['x-hos-client'] === 'native' ? { ...platformMe, sessionToken: token } : platformMe;
     }
 
     const lookup = await deps.db.execute<{ tenant_id: string; user_id: string }>(sql`select tenant_id, user_id from hos_login_lookup(${email})`);
@@ -212,11 +213,12 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
     if (outcome.kind === 'totp_required') throw new ApiError(401, 'totp_required', 'Enter the 6-digit authenticator code');
     if (outcome.kind === 'totp_invalid') throw new ApiError(401, 'totp_invalid', 'That authenticator code is not right');
     reply.setCookie(SESSION_COOKIE, token, cookieOptions(deps.env, 12 * 60 * 60));
-    return tenant(deps.db, hit.tenant_id, (tx) => tenantMe(tx, outcome.userId, null));
+    const me = await tenant(deps.db, hit.tenant_id, (tx) => tenantMe(tx, outcome.userId, null));
+    return req.headers['x-hos-client'] === 'native' ? { ...me, sessionToken: token } : me;
   });
 
   r.post('/api/v1/auth/logout', async (req, reply) => {
-    const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+    const resolved = await resolveSession(deps.db, readSessionToken(req));
     const meta = requestMeta(req);
     if (resolved?.session.kind === 'tenant' && resolved.session.tenantId) {
       await tenant(deps.db, resolved.session.tenantId, async (tx) => {
@@ -234,7 +236,7 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
   });
 
   r.get('/api/v1/auth/me', async (req, reply) => {
-    const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+    const resolved = await resolveSession(deps.db, readSessionToken(req));
     if (!resolved) throw new ApiError(401, 'unauthenticated', 'Sign in to continue');
     if (resolved.session.kind === 'platform' && resolved.session.platformAdminId) {
       return platform(deps.db, async (tx) => {
@@ -257,7 +259,7 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
   });
 
   r.post('/api/v1/auth/totp/setup', async (req, reply) => {
-    const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+    const resolved = await resolveSession(deps.db, readSessionToken(req));
     if (!resolved) throw new ApiError(401, 'unauthenticated', 'Sign in to continue');
     const secret = generateTotpSecret();
     if (resolved.session.kind === 'platform' && resolved.session.platformAdminId) {
@@ -281,7 +283,7 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
   });
 
   r.post('/api/v1/auth/totp/enable', { schema: { body: totpCodeSchema } }, async (req, reply) => {
-    const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+    const resolved = await resolveSession(deps.db, readSessionToken(req));
     if (!resolved) throw new ApiError(401, 'unauthenticated', 'Sign in to continue');
     if (resolved.session.kind === 'platform' && resolved.session.platformAdminId) {
       await platform(deps.db, async (tx) => {

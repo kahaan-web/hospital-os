@@ -321,3 +321,69 @@ export const ORDER_KIND_LABEL: Record<OrderKind, string> = {
   test: 'Tests',
   medicine: 'Medicines',
 };
+
+export interface WardPatient {
+  encounterId: string;
+  patientId: string;
+  uhid: string;
+  fullName: string;
+  ageLabel: string;
+  gender: string;
+  wardCode: string | null;
+  bedLabel: string | null;
+  doctorName: string | null;
+}
+
+export interface MarDose {
+  id: string;
+  encounterId: string;
+  orderItemId: string;
+  drugName: string;
+  dose: string | null;
+  scheduledAt: string;
+  status: 'due' | 'given' | 'held' | 'refused' | 'missed' | 'self';
+  givenAt: string | null;
+  givenBy: string | null;
+  reason: string | null;
+}
+
+export interface DietOrderView {
+  orderItemId: string;
+  encounterId: string;
+  patientName: string;
+  bedLabel: string | null;
+  dietCode: string;
+  instructions: string | null;
+  status: string;
+}
+
+export const giveDoseSchema = z.object({
+  status: z.enum(['given', 'held', 'refused', 'missed', 'self']),
+  doseGiven: z.string().trim().max(80).optional(),
+  reason: z.string().trim().max(300).optional(),
+  witnessUserId: z.string().min(1).optional(),
+});
+export type GiveDoseInput = z.infer<typeof giveDoseSchema>;
+
+export const recordVitalsMobileSchema = z.object({
+  recordedAt: z.string().optional(),
+  bpSystolic: z.number().int().min(40).max(260).nullable().optional(),
+  bpDiastolic: z.number().int().min(20).max(180).nullable().optional(),
+  pulse: z.number().int().min(20).max(240).nullable().optional(),
+  respRate: z.number().int().min(4).max(80).nullable().optional(),
+  tempC: z.number().min(30).max(45).nullable().optional(),
+  spo2: z.number().int().min(40).max(100).nullable().optional(),
+  weightKg: z.number().min(0.2).max(400).nullable().optional(),
+  heightCm: z.number().min(20).max(250).nullable().optional(),
+  painScore: z.number().int().min(0).max(10).nullable().optional(),
+  grbsMgDl: z.number().int().min(10).max(800).nullable().optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const patientSignupSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  mobile: z.string().trim().min(10).max(15),
+  dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+  password: z.string().min(8).max(128),
+  otp: z.string().regex(/^\d{6}$/).optional(),
+});

@@ -5,14 +5,15 @@ const ALL_EXCEPT = (...excluded: PermissionKey[]): PermissionKey[] => PERMISSION
 
 const EXPECTED: Record<RoleKey, readonly PermissionKey[]> = {
   tenant_admin: PERMISSION_KEYS,
-  location_admin: ALL_EXCEPT('billing.manage', 'tenant.manage', 'privacy.manage'),
-  front_desk: ['patients.manage', 'appointments.manage', 'opd.manage', 'reports.view'],
-  doctor: ['appointments.manage', 'clinical.order', 'reports.view'],
-  nurse: ['nursing.manage', 'adt.manage'],
-  cashier: ['billing.op.post', 'billing.op.refund', 'billing.ip.manage', 'reports.view'],
-  pharmacist: ['pharmacy.manage', 'reports.view'],
-  lab_tech: ['lab.manage', 'reports.view'],
+  location_admin: ALL_EXCEPT('billing.manage', 'tenant.manage', 'privacy.manage', 'portal.self'),
+  front_desk: ['patients.manage', 'patients.view', 'appointments.manage', 'opd.manage', 'reports.view'],
+  doctor: ['patients.view', 'clinical.view', 'appointments.manage', 'clinical.order', 'reports.view'],
+  nurse: ['patients.view', 'clinical.view', 'nursing.manage', 'adt.manage'],
+  cashier: ['patients.view', 'billing.op.post', 'billing.op.refund', 'billing.ip.manage', 'reports.view'],
+  pharmacist: ['patients.view', 'pharmacy.manage', 'reports.view'],
+  lab_tech: ['patients.view', 'lab.manage', 'lab.verify', 'reports.view'],
   accounts: ['accounts.manage', 'billing.view', 'reports.view'],
+  patient: ['portal.self'],
 };
 
 describe('permissionsAt', () => {
@@ -39,7 +40,7 @@ describe('permissionsAt', () => {
 });
 
 describe('system roles', () => {
-  it('defines the nine tenant roles and no others', () => {
+  it('defines the ten tenant roles and no others', () => {
     expect(SYSTEM_ROLES.map((r) => r.key)).toEqual([
       'tenant_admin',
       'location_admin',
@@ -50,6 +51,7 @@ describe('system roles', () => {
       'pharmacist',
       'lab_tech',
       'accounts',
+      'patient',
     ]);
     expect(new Set(SYSTEM_ROLES.map((r) => r.key)).size).toBe(SYSTEM_ROLES.length);
   });

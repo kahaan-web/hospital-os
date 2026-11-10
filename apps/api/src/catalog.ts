@@ -3,6 +3,8 @@ import {
   applyGst,
   computeEntitlements,
   permissionsAt,
+  STAFF_ROLES,
+  SYSTEM_ROLES,
   priceSubscription,
   quoteChange,
   stateName,
@@ -489,7 +491,9 @@ export async function userDtos(db: Queryable): Promise<UserDto[]> {
 export async function roleDtos(db: Queryable): Promise<RoleDto[]> {
   const roles = await db.select().from(schema.roles).orderBy(asc(schema.roles.sortOrder));
   const perms = await db.select().from(schema.rolePermissions);
-  return roles.map((role) => ({
+  const staff = new Set<string>(STAFF_ROLES.map((role) => role.key));
+  const system = new Set<string>(SYSTEM_ROLES.map((role) => role.key));
+  return roles.filter((role) => staff.has(role.key) || !system.has(role.key)).map((role) => ({
     id: role.id,
     key: role.key,
     name: role.name,
