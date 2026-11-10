@@ -433,6 +433,12 @@ export const invitations = pgTable(
       foreignColumns: [users.tenantId, users.id],
       name: 'invitations_user_fk',
     }).onDelete('cascade'),
+    // 0024: ON DELETE SET NULL (invited_by) on Postgres 15+. Drizzle cannot name that column.
+    foreignKey({
+      columns: [t.tenantId, t.invitedBy],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'invitations_invited_by_fk',
+    }).onDelete('set null'),
     check('invitations_status_chk', sql`status in ('pending', 'accepted', 'revoked')`),
   ],
 );
@@ -727,6 +733,12 @@ export const dataPrincipalRequests = pgTable(
   },
   (t) => [
     index('dpr_tenant_idx').on(t.tenantId),
+    // 0024: ON DELETE SET NULL (created_by) on Postgres 15+. Drizzle cannot name that column.
+    foreignKey({
+      columns: [t.tenantId, t.createdBy],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'data_principal_requests_created_by_fk',
+    }).onDelete('set null'),
     check('dpr_type_chk', sql`type in ('access', 'correction', 'erasure', 'grievance')`),
     check('dpr_status_chk', sql`status in ('open', 'in_progress', 'completed', 'rejected')`),
   ],
@@ -740,7 +752,15 @@ export const checklistItems = pgTable(
     doneAt: ts('done_at'),
     doneBy: uuid('done_by'),
   },
-  (t) => [primaryKey({ columns: [t.tenantId, t.key] })],
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.key] }),
+    // 0024: ON DELETE SET NULL (done_by) on Postgres 15+. Drizzle cannot name that column.
+    foreignKey({
+      columns: [t.tenantId, t.doneBy],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'checklist_items_done_by_fk',
+    }).onDelete('set null'),
+  ],
 );
 
 /** Mock notification outbox (SMS / email are never really sent in Phase A). */
@@ -792,10 +812,10 @@ export const sessions = pgTable(
     id: id(),
     tokenHash: text('token_hash').notNull().unique(),
     kind: text('kind').notNull(),
-    userId: uuid('user_id').references(() => users.id),
+    userId: uuid('user_id'),
     platformAdminId: uuid('platform_admin_id').references(() => platformAdmins.id),
     tenantId: uuid('tenant_id').references(() => tenants.id),
-    locationId: uuid('location_id').references(() => locations.id, { onDelete: 'set null' }),
+    locationId: uuid('location_id'),
     ip: text('ip'),
     userAgent: text('user_agent'),
     createdAt: createdAt(),
@@ -806,6 +826,18 @@ export const sessions = pgTable(
   (t) => [
     index('sessions_user_idx').on(t.userId),
     index('sessions_expires_idx').on(t.expiresAt),
+    // MATCH SIMPLE (Postgres default): NULL tenant_id or NULL location_id skips the check.
+    // 0024 nulls only location_id when a location is deleted (Postgres 15+).
+    foreignKey({
+      columns: [t.tenantId, t.userId],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'sessions_user_fk',
+    }),
+    foreignKey({
+      columns: [t.tenantId, t.locationId],
+      foreignColumns: [locations.tenantId, locations.id],
+      name: 'sessions_location_fk',
+    }).onDelete('set null'),
     check(
       'sessions_kind_chk',
       sql`(kind = 'tenant' and user_id is not null and tenant_id is not null and platform_admin_id is null) or (kind = 'platform' and platform_admin_id is not null and user_id is null and tenant_id is null)`,
