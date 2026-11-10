@@ -481,7 +481,6 @@ describe.sequential('row level security', () => {
 });
 
 function specFor(table: TableName, pair: FixturePair): IsoSpec {
-  const a = pair.a;
   const b = pair.b;
   const common = {
     table,
