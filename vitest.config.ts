@@ -8,7 +8,9 @@ export default defineConfig({
     include: ['packages/**/src/**/*.test.ts', 'apps/api/src/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',
     fileParallelism: false,
-    testTimeout: 20_000,
-    hookTimeout: 20_000,
+    sequence: { concurrent: false },
+    // Wizard signup hashes passwords, and the RLS file shares one Postgres session.
+    testTimeout: 180_000,
+    hookTimeout: 120_000,
   },
 });
