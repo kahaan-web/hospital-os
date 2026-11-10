@@ -24,7 +24,7 @@ const CODE128 = [
   '114131', '311141', '411131', '211412', '211214', '211232', '2331112',
 ] as const;
 
-const PAGE: Record<PrintDoc['size'], [number, number]> = {
+export const PAGE: Record<PrintDoc['size'], [number, number]> = {
   A4: [595.28, 841.89],
   A5: [419.53, 595.28],
   label_50x25: [(50 * 72) / 25.4, (25 * 72) / 25.4],
