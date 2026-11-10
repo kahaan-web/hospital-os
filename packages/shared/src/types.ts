@@ -254,7 +254,7 @@ export interface OrderDto {
 export interface PayAttemptResult {
   order: OrderDto;
   payment: PaymentDto;
-  /** Present when the mock gateway captured the payment: the client must send these to /billing/payments/verify. */
+  /** Present when the mock gateway captured the payment: the client must send these to /billing/verify. */
   checkout: { orderId: string; paymentId: string; signature: string } | null;
 }
 
@@ -440,6 +440,19 @@ export interface AdminTenantDetailDto {
   invoices: InvoiceListItem[];
   payments: (PaymentDto & { orderId: string })[];
   overrides: OverrideDto[];
+}
+
+export interface PageDto<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** JSON form of `Entitlements` (sets and maps do not survive the wire). */
+export interface EntitlementsDto {
+  features: string[];
+  modules: ModuleStateDto[];
 }
 
 export interface PlatformSettingsDto {

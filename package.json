@@ -19,6 +19,7 @@
     "db:seed:demo": "npm run seed:demo -w @hos/db",
     "gen:catalog": "node scripts/gen-catalog.mjs",
     "openapi": "npm run openapi -w @hos/api",
+    "demo": "npm run db:up && npm run db:migrate && npm run db:seed && npm run db:seed:demo && node scripts/dev.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:api": "npm run dev -w @hos/api",
     "dev:web": "npm run dev -w @hos/web",

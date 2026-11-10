@@ -23,12 +23,19 @@ export function createDb(connectionString: string, opts: { max?: number } = {}):
   return { db, pool, close: () => pool.end() };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function assertUuid(id: string, label = 'id'): void {
+  if (!UUID_RE.test(id)) throw new Error(`Invalid ${label}`);
+}
+
 /**
  * Run `fn` in a transaction scoped to one tenant. Row-level security policies read `app.tenant_id`, so every
  * query inside sees and writes only that tenant's rows — even a query with no WHERE clause.
  * The settings are transaction-local (`set_config(..., true)`), so pooled connections never leak a tenant.
  */
 export async function withTenant<T>(db: Db, tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  assertUuid(tenantId, 'tenant id');
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.scope', 'tenant', true), set_config('app.tenant_id', ${tenantId}, true)`);
     return fn(tx);
@@ -36,12 +43,27 @@ export async function withTenant<T>(db: Db, tenantId: string, fn: (tx: Tx) => Pr
 }
 
 /**
- * Run `fn` in platform scope: App Admin console, authentication look-ups and provisioning.
- * Platform scope can see every tenant, so call sites are deliberately few and explicit.
+ * Run `fn` in platform scope with no tenant selected. Catalogue tables stay readable and writable.
+ * This sees no tenant-owned rows: `app.tenant_id` is empty, so every tenant policy matches nothing.
+ * To work on one hospital as App Admin, use `withPlatformOnTenant`.
  */
 export async function withPlatform<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.scope', 'platform', true), set_config('app.tenant_id', '', true)`);
+    return fn(tx);
+  });
+}
+
+/**
+ * Platform scope aimed at a single tenant (suspend, overrides, admin actions that must land on that tenant's
+ * audit chain). Tenant policies match the target; write policies that also require `app.scope = 'platform'` pass.
+ */
+export async function withPlatformOnTenant<T>(db: Db, tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  assertUuid(tenantId, 'tenant id');
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('app.scope', 'platform', true), set_config('app.tenant_id', ${tenantId}, true)`,
+    );
     return fn(tx);
   });
 }

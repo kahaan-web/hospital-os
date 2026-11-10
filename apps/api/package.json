@@ -8,7 +8,7 @@
     "build": "tsup",
     "start": "node dist/server.js",
     "openapi": "tsx src/cli/openapi.ts",
-    "seed:demo": "tsx src/cli/seed-demo.ts",
+    "seed:demo": "npm run seed:demo -w @hos/db",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
