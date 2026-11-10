@@ -18,9 +18,14 @@ export type GuardKeySpec = string | { param: string };
  * The route-inventory test compares this map to Fastify `printRoutes`.
  */
 export interface TenantRouteGuard {
-  /** Null only for session identity (`/auth/me`) and session teardown (`/auth/logout`). */
-  permission: string | null;
-  module?: GuardKeySpec;
+  /**
+   * Null only for session identity (`/auth/me`) and session teardown (`/auth/logout`).
+   * A string is one required permission (`authenticated` = any active tenant user).
+   * An array means any one of those permissions is enough (`requireAnyPermission`).
+   */
+  permission: string | readonly string[] | null;
+  /** One module, or any one of several (`requireAnyModule`). */
+  module?: GuardKeySpec | readonly GuardKeySpec[];
   feature?: GuardKeySpec;
   /** Suspended hospitals may still read their own session and billing documents. */
   allowWhenSuspended?: boolean;
@@ -81,6 +86,72 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     module: { param: 'moduleKey' },
     feature: { param: 'featureKey' },
   }),
+
+  // B0 clinical routes. Arrays match the handler's requireAnyPermission / requireAnyModule.
+  // Kind-specific order gates stay in the handler; the row is the union that can succeed.
+  entry('GET', '/api/v1/tenant/clinical/patients', {
+    permission: ['patients.view', 'patients.manage'],
+    module: 'patient-registration',
+  }),
+  entry('GET', '/api/v1/tenant/clinical/patients/:id', {
+    permission: ['patients.view', 'patients.manage'],
+    module: 'patient-registration',
+  }),
+  entry('GET', '/api/v1/tenant/clinical/patients/:id/alerts', {
+    permission: ['clinical.view', 'clinical.order', 'patients.manage', 'patients.view'],
+    module: 'patient-registration',
+  }),
+  entry('POST', '/api/v1/tenant/clinical/patients/:id/alerts', {
+    permission: ['clinical.order', 'patients.manage'],
+    module: 'patient-registration',
+  }),
+  entry('GET', '/api/v1/tenant/clinical/encounters', {
+    permission: ['clinical.view', 'opd.manage', 'adt.manage'],
+    module: ['opd-visit', 'adt'],
+  }),
+  entry('GET', '/api/v1/tenant/clinical/encounters/:id', {
+    permission: ['clinical.view', 'opd.manage', 'adt.manage'],
+    module: ['opd-visit', 'adt'],
+  }),
+  entry('GET', '/api/v1/tenant/clinical/encounters/:id/orders', {
+    permission: ['clinical.view', 'clinical.order', 'opd.manage', 'nursing.manage', 'adt.manage'],
+    module: ['opd-visit', 'cpoe', 'lab', 'nurse-station', 'adt'],
+  }),
+  entry('POST', '/api/v1/tenant/clinical/encounters/:id/orders', {
+    permission: ['clinical.order', 'opd.manage', 'nursing.manage'],
+    module: ['lab', 'opd-visit', 'cpoe', 'nurse-station', 'adt'],
+  }),
+  entry('POST', '/api/v1/tenant/clinical/orders/:id/cancel', {
+    permission: ['clinical.order', 'opd.manage', 'nursing.manage'],
+    module: ['lab', 'opd-visit', 'cpoe', 'nurse-station', 'adt'],
+  }),
+  entry('GET', '/api/v1/tenant/clinical/encounters/:id/vitals', {
+    permission: ['clinical.order', 'nursing.manage', 'opd.manage', 'clinical.view'],
+    module: ['opd-visit', 'nurse-station', 'cpoe'],
+  }),
+  entry('POST', '/api/v1/tenant/clinical/encounters/:id/vitals', {
+    permission: ['clinical.order', 'nursing.manage', 'opd.manage'],
+    module: ['opd-visit', 'nurse-station', 'cpoe'],
+  }),
+  entry('POST', '/api/v1/tenant/clinical/vitals/:id/entered-in-error', {
+    permission: ['clinical.order', 'nursing.manage', 'opd.manage'],
+    module: ['opd-visit', 'nurse-station', 'cpoe'],
+  }),
+  entry('GET', '/api/v1/tenant/clinical/encounters/:id/notes', {
+    permission: ['clinical.view', 'clinical.order', 'nursing.manage'],
+    module: ['opd-visit', 'cpoe', 'nurse-station'],
+  }),
+  entry('POST', '/api/v1/tenant/clinical/encounters/:id/notes', {
+    permission: ['clinical.order', 'nursing.manage'],
+    module: ['opd-visit', 'cpoe', 'nurse-station'],
+  }),
+  entry('GET', '/api/v1/tenant/clinical/encounters/:id/charges', {
+    permission: ['billing.op.post', 'billing.ip.manage'],
+    module: 'op-billing',
+  }),
+  entry('GET', '/api/v1/tenant/clinical/codes', { permission: AUTHENTICATED }),
+  entry('GET', '/api/v1/tenant/clinical/doctors', { permission: AUTHENTICATED }),
+  entry('GET', '/api/v1/tenant/clinical/services', { permission: AUTHENTICATED }),
 ];
 
 const keys = ENTRIES.map(([key]) => key);

@@ -141,6 +141,18 @@ function title(p: DemoPatient, age: number): string {
   return 'Mx';
 }
 
+/** Demo sheets say "Spouse" / "Father". The patients check only allows the coded relations. */
+function guardianRelation(label: string): string {
+  const key = label.trim().toLowerCase();
+  if (key === 'spouse' || key === 'wife' || key === 'husband') return 'spouse';
+  if (key === 'father' || key === 'mother' || key === 'parent') return 'parent';
+  if (key === 'son' || key === 'daughter' || key === 'child') return 'child';
+  if (key === 'brother' || key === 'sister' || key === 'sibling') return 'sibling';
+  if (key === 'guardian') return 'guardian';
+  if (key === 'friend') return 'friend';
+  return 'other';
+}
+
 function patientRow(ctx: TenantCtx, p: DemoPatient, i: number, seq: number): Record<string, unknown> {
   const n = ctx.numberBase + i + 1;
   const site = loc(ctx, p.loc);
@@ -173,13 +185,13 @@ function patientRow(ctx: TenantCtx, p: DemoPatient, i: number, seq: number): Rec
     state_code: site.stateCode,
     pincode: site.pincode,
     blood_group: p.blood,
-    marital_status: null,
+    marital_status: '',
     guardian_name: minor ? p.emergencyName : '',
-    guardian_relation: minor ? p.emergencyRelation : '',
+    guardian_relation: minor ? guardianRelation(p.emergencyRelation) : null,
     emergency_name: p.emergencyName,
     emergency_relation: p.emergencyRelation,
     emergency_mobile: demoMobile(n + 500),
-    id_type: null,
+    id_type: 'none',
     id_last4: null,
     abha_number: p.abha ? demoAbhaNumber(n) : null,
     abha_address: p.abha ? `${handle}.${String(n).padStart(3, '0')}@sbx` : null,
@@ -254,10 +266,11 @@ export async function seedDemoPeople(db: Db, log: (m: string) => void = console.
   await seedTenant(db, await tenantCtx(db, sunrise.id, 'Sunrise Care', 'SUN', 0), SUNRISE_STAFF, SUNRISE_PATIENTS, passwordHash, true, log);
 
   // Lotus is created by the Phase B seed. Add its sample patients only when it exists; never create the tenant here.
+  // seedClinicalFoundation calls this again after creating Lotus, so one `db:seed:demo` still loads them.
   const lotus = await db.execute<{ tenant_id: string }>(sql`select tenant_id from users where lower(email) = ${LOTUS_OWNER_EMAIL} limit 1`);
   const lotusId = lotus.rows[0]?.tenant_id;
   if (lotusId) await seedTenant(db, await tenantCtx(db, lotusId, 'Lotus', 'LOT', 2000), [], LOTUS_PATIENTS, passwordHash, false, log);
-  else log('Lotus: not present yet (created by the Phase B seed); its 5 sample patients will load on the next run');
+  else log('Lotus: not present yet (created by the Phase B seed); its 5 sample patients load once that tenant exists');
   printPeopleLogins(log);
 }
 

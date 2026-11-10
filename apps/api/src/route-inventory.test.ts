@@ -26,9 +26,12 @@ it('fails when a tenant route is missing requireTenant guards', () => {
     if (sessionOnly) {
       expect(guard.permission).toBeNull();
       expect(guard.allowWhenSuspended).toBe(true);
+    } else if (Array.isArray(guard.permission)) {
+      expect(guard.permission.length, route.url).toBeGreaterThan(0);
     } else {
       expect(guard.permission, route.url).toBeTruthy();
     }
+    if (Array.isArray(guard.module)) expect(guard.module.length, route.url).toBeGreaterThan(0);
     if (route.url.startsWith('/api/v1/tenant/m/')) expect(guard.module).toBeTruthy();
     if (route.url.includes('/features/')) expect(guard.feature).toBeTruthy();
     if (route.method === 'GET' && route.url.startsWith('/api/v1/billing/')) expect(guard.allowWhenSuspended).toBe(true);

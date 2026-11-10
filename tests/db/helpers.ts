@@ -41,6 +41,18 @@ export interface Side {
   checklistKey: string;
   outboxId: string;
   idemKey: string;
+  seriesId: string;
+  patientId: string;
+  alertId: string;
+  serviceId: string;
+  tariffId: string;
+  encounterId: string;
+  clinicalOrderId: string;
+  orderItemId: string;
+  vitalId: string;
+  noteId: string;
+  chargeId: string;
+  cashId: string;
 }
 
 export interface FixturePair {
@@ -316,6 +328,77 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, 'POST /test', $2, 'hash', now() + interval '1 day')`,
     [tenant.id, idemKey],
   );
+  const series = await one<{ id: string }>(
+    migrator,
+    `insert into number_series (tenant_id, series_key, period, last_no) values ($1, 'iso', '', 1) returning id`,
+    [tenant.id],
+  );
+  const patient = await one<{ id: string }>(
+    migrator,
+    `insert into patients (tenant_id, uhid, first_name, gender, is_sample, mobile)
+     values ($1, $2, 'Fiction', 'other', true, '9000000099') returning id`,
+    [tenant.id, `DEMO-${mark}-${runId}`],
+  );
+  const alert = await one<{ id: string }>(
+    migrator,
+    `insert into patient_alerts (tenant_id, patient_id, kind, text) values ($1, $2, 'alert', 'Sample') returning id`,
+    [tenant.id, patient.id],
+  );
+  const service = await one<{ id: string }>(
+    migrator,
+    `insert into services (tenant_id, code, name, category) values ($1, $2, 'Sample service', 'misc') returning id`,
+    [tenant.id, `ZZ${mark}${runId}`],
+  );
+  const tariff = await one<{ id: string }>(
+    migrator,
+    `insert into tariffs (tenant_id, service_id, price_paise, effective_from) values ($1, $2, 100, current_date) returning id`,
+    [tenant.id, service.id],
+  );
+  const encounter = await one<{ id: string }>(
+    migrator,
+    `insert into encounters (tenant_id, location_id, patient_id, kind, number)
+     values ($1, $2, $3, 'opd', $4) returning id`,
+    [tenant.id, location.id, patient.id, `ZV${runId}${mark}`],
+  );
+  const clinicalOrder = await one<{ id: string }>(
+    migrator,
+    `insert into clinical_orders (tenant_id, location_id, encounter_id, patient_id, kind, number, source)
+     values ($1, $2, $3, $4, 'medicine', $5, 'opd') returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, `ZO${runId}${mark}`],
+  );
+  const orderItem = await one<{ id: string }>(
+    migrator,
+    `insert into clinical_order_items (tenant_id, order_id, line_no, drug_name) values ($1, $2, 1, 'Sample') returning id`,
+    [tenant.id, clinicalOrder.id],
+  );
+  const vital = await one<{ id: string }>(
+    migrator,
+    `insert into vital_signs (tenant_id, location_id, encounter_id, patient_id, pulse) values ($1, $2, $3, $4, 70) returning id`,
+    [tenant.id, location.id, encounter.id, patient.id],
+  );
+  const note = await one<{ id: string }>(
+    migrator,
+    `insert into clinical_notes (tenant_id, encounter_id, patient_id, kind, body)
+     values ($1, $2, $3, 'chief_complaint', 'Sample') returning id`,
+    [tenant.id, encounter.id, patient.id],
+  );
+  const charge = await one<{ id: string }>(
+    migrator,
+    `insert into charges (
+       tenant_id, location_id, encounter_id, patient_id, service_id, description, qty,
+       unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id
+     ) values (
+       $1, $2, $3, $4, $5, 'Sample', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', $3
+     ) returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, service.id],
+  );
+  const cash = await one<{ id: string }>(
+    migrator,
+    `insert into cash_ledger (
+       tenant_id, location_id, entry_type, direction, mode, amount_paise, number, patient_id, encounter_id, ref_type, ref_id
+     ) values ($1, $2, 'receipt', 'in', 'cash', 100, $3, $4, $5, 'bill', $5) returning id`,
+    [tenant.id, location.id, `ZC${runId}${mark}`, patient.id, encounter.id],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -338,6 +421,18 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     checklistKey,
     outboxId: outbox.id,
     idemKey,
+    seriesId: series.id,
+    patientId: patient.id,
+    alertId: alert.id,
+    serviceId: service.id,
+    tariffId: tariff.id,
+    encounterId: encounter.id,
+    clinicalOrderId: clinicalOrder.id,
+    orderItemId: orderItem.id,
+    vitalId: vital.id,
+    noteId: note.id,
+    chargeId: charge.id,
+    cashId: cash.id,
   };
 }
 
@@ -346,8 +441,20 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   const ids = [pair.a.id, pair.b.id];
   // Immutability triggers fire for the superuser too. Disable them only for this
   // transaction, then turn them back on before commit (DDL rolls back with the tx).
-  const guarded = ['credit_notes', 'invoice_lines', 'invoices'];
+  const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes'];
   const steps = [
+    `delete from cash_ledger where tenant_id = any($1::uuid[])`,
+    `delete from charges where tenant_id = any($1::uuid[])`,
+    `delete from clinical_order_items where tenant_id = any($1::uuid[])`,
+    `delete from clinical_orders where tenant_id = any($1::uuid[])`,
+    `delete from vital_signs where tenant_id = any($1::uuid[])`,
+    `delete from clinical_notes where tenant_id = any($1::uuid[])`,
+    `delete from patient_alerts where tenant_id = any($1::uuid[])`,
+    `delete from encounters where tenant_id = any($1::uuid[])`,
+    `delete from tariffs where tenant_id = any($1::uuid[])`,
+    `delete from services where tenant_id = any($1::uuid[])`,
+    `delete from patients where tenant_id = any($1::uuid[])`,
+    `delete from number_series where tenant_id = any($1::uuid[])`,
     `delete from sessions where tenant_id = any($1::uuid[]) or user_id in (select id from users where tenant_id = any($1::uuid[]))`,
     `delete from credit_notes where tenant_id = any($1::uuid[])`,
     `delete from invoice_lines where tenant_id = any($1::uuid[])`,
@@ -373,6 +480,8 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   ];
   await admin.query('BEGIN');
   try {
+    // Immutability and append-only guards fire for the superuser too. Disable user triggers
+    // (credit notes, invoices, vitals, clinical notes) only for this cleanup transaction.
     for (const table of guarded) await admin.query(`alter table ${table} disable trigger user`);
     for (const text of steps) await admin.query(text, [ids]);
     for (const table of guarded) await admin.query(`alter table ${table} enable trigger user`);

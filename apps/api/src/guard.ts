@@ -12,9 +12,9 @@ import {
   idempotencyRequired,
   requestHash,
   requestMeta,
+  readSessionToken,
   resolveSession,
   routeTemplate,
-  SESSION_COOKIE,
   tenant,
   withIdempotency,
   writeAudit,
@@ -40,18 +40,24 @@ export interface TenantGate {
   tokenHash: string;
   audit: (action: string, entityType: string, entityId: string | null, before: unknown, after: unknown) => Promise<void>;
   requirePermission: (key: string) => void;
+  requireAnyPermission: (keys: string[]) => void;
   requireModule: (key: string) => Promise<void>;
+  requireAnyModule: (keys: string[]) => Promise<void>;
   /**
-   * 403 `not_entitled` unless this request's `computeEntitlements` result contains `featureKey`.
-   * Phase B module handlers call this with a sheet key such as `nurse-station.lab-orders`.
-   * The result is memoised for the request and recomputed on the next one, so a plan change,
-   * add-on purchase, or App Admin override is visible immediately.
+   * 403 `not_entitled` unless this request's entitlement set contains `featureKey`.
+   * The module and feature load is memoised for this request and recomputed on the next one,
+   * so a plan change, add-on purchase, or App Admin override is visible immediately.
    */
   requireFeature: (featureKey: string) => Promise<void>;
 }
 
+/** `Array.isArray` does not narrow `readonly T[]` out of a union with `T`. */
+function isList<T>(value: T | readonly T[] | null | undefined): value is readonly T[] {
+  return Array.isArray(value);
+}
+
 export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: FastifyReply, fn: (gate: TenantGate) => Promise<T>): Promise<T> {
-  const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+  const resolved = await resolveSession(deps.db, readSessionToken(req));
   if (!resolved || resolved.session.kind !== 'tenant' || !resolved.session.tenantId || !resolved.session.userId) {
     throw new ApiError(401, 'unauthenticated', 'Sign in to continue');
   }
@@ -92,17 +98,21 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       ip: meta.ip,
       userAgent: meta.userAgent,
     };
-    let entitlements: { features: Set<string>; accessByModule: Map<string, string> } | null = null;
-    const loadEntitlements = async () => {
-      if (entitlements) return entitlements;
-      const subscription = await subscriptionDto(tx);
-      const access = await moduleStates(tx, subscription?.planId ?? null, subscription?.addons.map((addon) => addon.moduleId) ?? []);
-      entitlements = {
-        features: new Set(access.features),
-        accessByModule: new Map(access.states.map((state) => [state.key, state.access])),
-      };
+    let entitlements: Promise<{ features: Set<string>; accessByModule: Map<string, string> }> | null = null;
+    const loadEntitlements = () => {
+      if (!entitlements) {
+        entitlements = (async () => {
+          const subscription = await subscriptionDto(tx);
+          const access = await moduleStates(tx, subscription?.planId ?? null, subscription?.addons.map((addon) => addon.moduleId) ?? []);
+          return {
+            features: new Set(access.features),
+            accessByModule: new Map(access.states.map((state) => [state.key, state.access])),
+          };
+        })();
+      }
       return entitlements;
     };
+    const notEntitled = (moduleKey: string) => new ApiError(403, 'not_entitled', 'This module is not included in your plan', undefined, { moduleKey });
     const gate: TenantGate = {
       tx,
       actor,
@@ -116,11 +126,26 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
         if (key === AUTHENTICATED) return;
         assertPermission(assignments, locationId, key);
       },
+      requireAnyPermission: (keys) => {
+        if (keys.includes(AUTHENTICATED)) return;
+        if (!keys.some((key) => {
+          try {
+            assertPermission(assignments, locationId, key);
+            return true;
+          } catch {
+            return false;
+          }
+        })) {
+          throw new ApiError(403, 'forbidden', 'You do not have permission to do that', undefined, { permission: keys[0] });
+        }
+      },
       requireModule: async (key) => {
         const loaded = await loadEntitlements();
-        if (loaded.accessByModule.get(key) !== 'enabled') {
-          throw new ApiError(403, 'not_entitled', 'This module is not included in your plan', undefined, { moduleKey: key });
-        }
+        if (loaded.accessByModule.get(key) !== 'enabled') throw notEntitled(key);
+      },
+      requireAnyModule: async (keys) => {
+        const loaded = await loadEntitlements();
+        if (!keys.some((key) => loaded.accessByModule.get(key) === 'enabled')) throw notEntitled(keys[0] ?? '');
       },
       requireFeature: async (featureKey) => {
         const loaded = await loadEntitlements();
@@ -129,9 +154,11 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
         }
       },
     };
-    if (policy.permission) gate.requirePermission(policy.permission);
-    if (policy.module && policy.feature) {
-      const moduleKey = resolveGuardKey(policy.module, req);
+    if (isList(policy.permission)) gate.requireAnyPermission([...policy.permission]);
+    else if (policy.permission) gate.requirePermission(policy.permission);
+    const moduleSpec = policy.module;
+    if (moduleSpec && policy.feature && !isList(moduleSpec)) {
+      const moduleKey = resolveGuardKey(moduleSpec, req);
       const featureKey = resolveGuardKey(policy.feature, req);
       if (!featureKey.startsWith(`${moduleKey}.`)) {
         throw new ApiError(403, 'not_entitled', 'This feature is not included in your plan', undefined, { moduleKey, featureKey });
@@ -139,7 +166,8 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       await gate.requireModule(moduleKey);
       await gate.requireFeature(featureKey);
     } else {
-      if (policy.module) await gate.requireModule(resolveGuardKey(policy.module, req));
+      if (isList(moduleSpec)) await gate.requireAnyModule(moduleSpec.map((item) => resolveGuardKey(item, req)));
+      else if (moduleSpec) await gate.requireModule(resolveGuardKey(moduleSpec, req));
       if (policy.feature) await gate.requireFeature(resolveGuardKey(policy.feature, req));
     }
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return fn(gate);
@@ -155,7 +183,7 @@ export interface PlatformGate {
 }
 
 async function requirePlatformSession(deps: Deps, req: FastifyRequest) {
-  const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+  const resolved = await resolveSession(deps.db, readSessionToken(req));
   if (!resolved || resolved.session.kind !== 'platform' || !resolved.session.platformAdminId) {
     throw new ApiError(resolved?.session.kind === 'tenant' ? 403 : 401, resolved ? 'forbidden' : 'unauthenticated', resolved ? 'App Admin access only' : 'Sign in to continue');
   }
