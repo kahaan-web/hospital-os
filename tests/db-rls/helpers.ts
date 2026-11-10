@@ -169,16 +169,26 @@ export async function attempt(client: pg.Client, text: string, values: unknown[]
   }
 }
 
-export type Denial = 'rls' | 'privilege' | 'append-only';
+export type Denial = 'rls' | 'privilege' | 'append-only' | 'trigger';
 
 /**
- * 42501 covers "permission denied", "new row violates row-level security policy", and the audit trigger
- * (`audit_log is append-only`, same errcode). The message tells them apart.
+ * 42501 covers "permission denied" (no GRANT, including a column-level revoke), "new row violates row-level
+ * security policy", and guards that reuse that errcode (`audit_log is append-only`, `vital_signs is append-only`).
+ * An immutability trigger may instead use the default RAISE (P0001) or say the row cannot be changed.
+ * A unique or check violation is not a rejection: the statement saw a row it should not have written.
  */
 export function denial(a: Attempt): Denial | null {
-  if (a.ok || a.code !== '42501') return null;
+  if (a.ok) return null;
+  if (a.code !== '42501' && !isTriggerRejection(a)) return null;
   if (/append-only/i.test(a.message)) return 'append-only';
-  return /row-level security/i.test(a.message) ? 'rls' : 'privilege';
+  if (/row-level security/i.test(a.message)) return 'rls';
+  if (a.code === '42501' && !isTriggerRejection(a)) return 'privilege';
+  return 'trigger';
+}
+
+function isTriggerRejection(a: Extract<Attempt, { ok: false }>): boolean {
+  if (a.code === 'P0001') return true;
+  return /immutable|immutab|entered in error|cannot be (updated|deleted|changed)/i.test(a.message);
 }
 
 export function ident(name: string): string {

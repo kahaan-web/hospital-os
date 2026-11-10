@@ -41,7 +41,7 @@ Typecheck: `npx tsc -p tests/db-rls/tsconfig.json`. This is also part of `npm ru
 
 The suite discovers, from `pg_catalog`, every ordinary table in `public` that has a `tenant_id` column, plus `tenants`
 (the tenant key is `id`, so it has no `tenant_id` column). `tenants` is included because it is tenant-owned. A new
-table with `tenant_id` is covered without editing the test. It fails until `fixtures.ts` inserts a row for both tenants.
+table with `tenant_id` is covered without editing the test. It fails until a fixture module inserts a row for both tenants.
 
 | Check | Pass condition |
 |---|---|
@@ -49,30 +49,43 @@ table with `tenant_id` is covered without editing the test. It fails until `fixt
 | Both fixtures have a row | Tenant A (`rls-alpha`) and tenant B (`rls-beta`) each have at least one row. |
 | SELECT the other tenant | 0 rows, or `42501` when `hos_app` has no SELECT grant (`sessions`). |
 | INSERT a copy of the other tenant's row | `42501` (RLS or missing GRANT). |
-| UPDATE / DELETE the other tenant's rows | 0 rows, or `42501`. Then, still inside that transaction, the victim tenant reads its own rows and they match the pre-attack fingerprint. |
+| UPDATE / DELETE the other tenant's rows | 0 rows, or a rejection: `42501` (RLS, missing table or column GRANT) or a trigger (`append-only`, `immutable`, `P0001`). Then, still inside that transaction, the victim tenant reads its own rows and they match the pre-attack fingerprint. A rejection that changed those rows fails. |
 | Move own row onto the other tenant's id | `42501`, or 0 rows when the policy hides the row before `WITH CHECK` (`tenant_entitlement_overrides` outside platform scope). The other tenant's fingerprint is unchanged either way. |
 | No tenant context | With no settings, with `app.tenant_id` empty, or with platform scope and no tenant id: 0 rows (or a clean privilege error). A non-uuid tenant id errors with `22P02` on tables `hos_app` can read. |
 | Role | `hos_app` is not superuser, has no `BYPASSRLS`, owns nothing, and belongs to no role. `SET ROLE hos_migrator` and `DISABLE ROW LEVEL SECURITY` are `42501`. `row_security=off` makes the next read error instead of returning rows. |
 | Audit log | `UPDATE` / `DELETE` / `TRUNCATE` as `hos_app` are `42501` (no grant). The append-only triggers are present and enabled. An insert's client-supplied `seq`, `hash`, `prev_hash`, `chain_key` and `created_at` are overwritten by `audit_log_chain`. |
 | Definer functions | See below. |
 
-**Permission denied counts as a pass** for a read or write the role was never granted. Grant-level denials:
+**Permission denied and trigger rejection count as a pass** for a cross-tenant UPDATE or DELETE, but only together with the victim fingerprint. `feat/mt-hardening` revokes UPDATE/DELETE on `invoices`, `invoice_lines` and `payments`, and revokes them in part on `orders` and `consents` (column privileges). Those statements come back `42501`. An immutability trigger that raises `42501` or `P0001` (`append-only`, `immutable`, `entered in error`) is the same pass. The victim's row count and row hash are still compared when `hos_app` can SELECT. A unique or check violation is not a pass.
+
+Grant-level denials:
 
 - `sessions`: no `hos_app` grants. Reached only through `SECURITY DEFINER` functions. The victim cannot `SELECT` its own session rows, so the "unchanged" check is the rejection itself.
 - `audit_log`: no `UPDATE` or `DELETE`. `hos_app` therefore never reaches `audit_log_reject`; that trigger is what stops the owner. The chain trigger is what `hos_app` does hit, on `INSERT`.
+- `vital_signs` and `clinical_notes`: UPDATE and DELETE raise `42501` from the guard when the row is visible (moving the tenant id). A hidden cross-tenant row is 0 rows, because RLS filters before the trigger.
 - `tenants`: no `DELETE`.
 - `invoice_sequences` and `_migrations`: no grants.
 
 ## Tenants
 
-Both tenants are created by `fixtures.ts` (not by the Sunrise demo seed):
+Both tenants are created by `fixtures/` (not by the Sunrise demo seed):
 
-- **A** — `rls-alpha`, Meera Kulkarni (Sample), `meera.kulkarni.rls@sbx`, mobile `9000011001`
-- **B** — `rls-beta`, Dev Sharma (Sample), `dev.sharma.rls@sbx`, mobile `9000012001`
+- **A** — `rls-alpha`, Meera Kulkarni (Sample), `meera.kulkarni.rls@sbx`, mobile `9000011001`. Patient Anita Deshmukh (Sample), UHID `DEMO-RLSA-00001`, ABHA `00-0000-0000-1101`.
+- **B** — `rls-beta`, Dev Sharma (Sample), `dev.sharma.rls@sbx`, mobile `9000012001`. Patient Rohan Iyer (Sample), UHID `DEMO-RLSB-00001`, ABHA `00-0000-0000-1201`.
 
-Sample names, `@sbx` mail, `90000` mobiles, `sandbox` tenants. Re-running refreshes expiry on OTP, invitations and sessions so the definer checks stay valid.
+Sample names, `@sbx` mail, `90000` mobiles, `DEMO-` UHIDs, `00-` ABHA numbers, `is_sample` on people, `sandbox` tenants. Re-running refreshes expiry on OTP, invitations and sessions. It does not update `vital_signs` or `clinical_notes` (those guards reject UPDATE).
 
-**Adding a tenant table:** if it has no row for either fixture tenant, its test fails and names the table. Add a probe insert in `fixtures.ts`.
+## Fixtures
+
+`tests/db-rls/fixtures/` holds one module per area. Each file exports a seed function. `fixtures/index.ts` registers it. every new tenant table must add a fixture here or the suite fails.
+
+| Module | Tables |
+|---|---|
+| `core.ts` | Phase A tenant tables (locations through audit_log) |
+| `clinical-foundation.ts` | B0: number_series, patients, patient_alerts, encounters, services, tariffs, clinical_orders, clinical_order_items, vital_signs, clinical_notes, charges, cash_ledger |
+| `credit-notes.ts` | Inserts one row per tenant only when `credit_notes` exists. The table is added by `feat/mt-hardening` and is not on this branch, so the seed reads the catalogue and fills required columns. Until the table exists, the seed does nothing. |
+
+A Phase B module adds `fixtures/<module>.ts` and one line in `fixtureModules`. It does not edit another module's file.
 
 ## Security definer functions
 

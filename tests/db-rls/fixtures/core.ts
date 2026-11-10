@@ -1,65 +1,8 @@
-// Two fixture tenants for the RLS suite. Created as the schema owner (hos_migrator), idempotently.
-// All rows are fictional sample data: "(Sample)" names, @sbx emails, 90000 mobiles, sandbox tenants.
-//
-// Tenant A = rls-alpha, tenant B = rls-beta. Each gets one row in every tenant-owned table so a missing
-// fixture fails the suite instead of silently skipping that table. The demo seed (sunrise-care) is not used.
+// Phase A tenant tables. One row per probe tenant. Catalogue rows (plans, modules, system roles,
+// privacy notice) come from the catalogue seed, not from here.
 import type pg from 'pg';
-
-export interface ProbeSpec {
-  slug: string;
-  tag: string;
-  legalName: string;
-  displayName: string;
-  userName: string;
-  email: string;
-  mobile: string;
-  doctorName: string;
-  contactName: string;
-  contactMobile: string;
-  /** Globally unique, at most 16 characters (invoices_number_len_chk). */
-  invoiceNumber: string;
-}
-
-export const TENANT_A: ProbeSpec = {
-  slug: 'rls-alpha',
-  tag: 'alpha',
-  legalName: 'RLS Alpha Clinic (Sample)',
-  displayName: 'RLS Alpha Clinic (Sample)',
-  userName: 'Meera Kulkarni (Sample)',
-  email: 'meera.kulkarni.rls@sbx',
-  mobile: '9000011001',
-  doctorName: 'Dr. Meera Kulkarni (Sample)',
-  contactName: 'Arjun Kulkarni (Sample)',
-  contactMobile: '9000011002',
-  invoiceNumber: 'RLSA/2627/000001',
-};
-
-export const TENANT_B: ProbeSpec = {
-  slug: 'rls-beta',
-  tag: 'beta',
-  legalName: 'RLS Beta Clinic (Sample)',
-  displayName: 'RLS Beta Clinic (Sample)',
-  userName: 'Dev Sharma (Sample)',
-  email: 'dev.sharma.rls@sbx',
-  mobile: '9000012001',
-  doctorName: 'Dr. Dev Sharma (Sample)',
-  contactName: 'Nisha Sharma (Sample)',
-  contactMobile: '9000012002',
-  invoiceNumber: 'RLSB/2627/000001',
-};
-
-export interface TenantFixture {
-  id: string;
-  spec: ProbeSpec;
-  userId: string;
-  locationId: string;
-  otpId: string;
-  inviteToken: string;
-  /** Unexpired, unrevoked session. Refreshed on every run so idle timeout does not rot the row. */
-  sessionToken: string;
-  expiredSessionToken: string;
-  revokedSessionToken: string;
-}
+import { ensureRow } from './sql';
+import type { ProbeSpec } from './types';
 
 type Fixture = {
   table: string;
@@ -69,7 +12,6 @@ type Fixture = {
 
 const idOnly = (id: string): unknown[] => [id];
 
-/** Each statement inserts nothing when this tenant already has a row in that table. */
 const FIXTURES: Fixture[] = [
   {
     table: 'locations',
@@ -238,99 +180,6 @@ const FIXTURES: Fixture[] = [
   },
 ];
 
-export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {
-  const r = await owner.query<{ id: string }>('select id from tenants where slug = $1', [slug]);
-  return r.rows[0]?.id ?? null;
-}
-
-/** Create (or reuse) one probe tenant and top up one row per tenant table. Returns ids the definer tests need. */
-export async function ensureTenant(owner: pg.Client, spec: ProbeSpec): Promise<TenantFixture> {
-  await owner.query('begin');
-  try {
-    await owner.query(
-      `insert into tenants (slug, status, onboarding_step, onboarding_completed_at, facility_type, legal_name,
-                            display_name, sandbox)
-       values ($1, 'active', 'done', now(), 'clinic', $2, $3, true)
-       on conflict (slug) do nothing`,
-      [spec.slug, spec.legalName, spec.displayName],
-    );
-    const id = await tenantIdBySlug(owner, spec.slug);
-    if (!id) throw new Error(`tenant ${spec.slug} was not created`);
-    for (const f of FIXTURES) {
-      try {
-        await owner.query(f.sql, f.params(id, spec));
-      } catch (err) {
-        throw new Error(`probe fixture ${spec.slug}.${f.table} failed: ${(err as Error).message}`, { cause: err });
-      }
-    }
-    // Time-limited rows are refreshed so a later run is not tripped by the idle / expiry windows.
-    await owner.query(
-      `update users set status = 'active' where tenant_id = $1`,
-      [id],
-    );
-    await owner.query(
-      `update otp_challenges set expires_at = now() + interval '1 day', consumed_at = null where tenant_id = $1`,
-      [id],
-    );
-    await owner.query(
-      `update invitations set expires_at = now() + interval '7 days', status = 'pending' where tenant_id = $1`,
-      [id],
-    );
-    await owner.query(
-      `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at)
-       select 'rls-' || $2 || '-live', 'tenant', u.id, $1::uuid, now() + interval '1 day', now() from users u
-       where u.tenant_id = $1
-       on conflict (token_hash) do update
-         set last_seen_at = now(), expires_at = now() + interval '1 day', revoked_at = null`,
-      [id, spec.tag],
-    );
-    await owner.query(
-      `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at)
-       select 'rls-' || $2 || '-expired', 'tenant', u.id, $1::uuid, now() - interval '1 minute', now() from users u
-       where u.tenant_id = $1
-       on conflict (token_hash) do update
-         set expires_at = now() - interval '1 minute', revoked_at = null, last_seen_at = now()`,
-      [id, spec.tag],
-    );
-    await owner.query(
-      `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at, revoked_at)
-       select 'rls-' || $2 || '-revoked', 'tenant', u.id, $1::uuid, now() + interval '1 day', now(), now() from users u
-       where u.tenant_id = $1
-       on conflict (token_hash) do update
-         set revoked_at = now(), expires_at = now() + interval '1 day', last_seen_at = now()`,
-      [id, spec.tag],
-    );
-    const handles = await owner.query<{
-      userId: string;
-      locationId: string;
-      otpId: string;
-      inviteToken: string;
-    }>(
-      `select u.id as "userId", l.id as "locationId", o.id as "otpId", i.token_hash as "inviteToken"
-         from users u
-         join locations l on l.tenant_id = u.tenant_id and l.is_primary
-         join otp_challenges o on o.tenant_id = u.tenant_id
-         join invitations i on i.tenant_id = u.tenant_id
-        where u.tenant_id = $1
-        limit 1`,
-      [id],
-    );
-    const row = handles.rows[0];
-    if (!row) throw new Error(`probe fixture ${spec.slug} did not produce user, location, otp and invitation rows`);
-    await owner.query('commit');
-    return {
-      id,
-      spec,
-      userId: row.userId,
-      locationId: row.locationId,
-      otpId: row.otpId,
-      inviteToken: row.inviteToken,
-      sessionToken: `rls-${spec.tag}-live`,
-      expiredSessionToken: `rls-${spec.tag}-expired`,
-      revokedSessionToken: `rls-${spec.tag}-revoked`,
-    };
-  } catch (err) {
-    await owner.query('rollback');
-    throw err;
-  }
+export async function seedCore(owner: pg.Client, tenantId: string, spec: ProbeSpec): Promise<void> {
+  for (const f of FIXTURES) await ensureRow(owner, f.table, tenantId, f.sql, f.params(tenantId, spec));
 }

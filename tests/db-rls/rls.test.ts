@@ -68,6 +68,18 @@ const KNOWN_TABLES = [
   'idempotency_keys',
   'sessions',
   'audit_log',
+  'number_series',
+  'patients',
+  'patient_alerts',
+  'encounters',
+  'services',
+  'tariffs',
+  'clinical_orders',
+  'clinical_order_items',
+  'vital_signs',
+  'clinical_notes',
+  'charges',
+  'cash_ledger',
 ] as const;
 
 async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {
@@ -228,8 +240,8 @@ async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {
         if (t.kind !== 'r' && t.kind !== 'p') return;
         const beforeA = await fingerprint(owner, t.name, t.key, tenantA.id);
         const beforeB = await fingerprint(owner, t.name, t.key, tenantB.id);
-        expect(beforeA.n, `${t.name} has no fixture row for tenant A (${TENANT_A.slug}). Add one in tests/db-rls/fixtures.ts`).toBeGreaterThan(0);
-        expect(beforeB.n, `${t.name} has no fixture row for tenant B (${TENANT_B.slug}). Add one in tests/db-rls/fixtures.ts`).toBeGreaterThan(0);
+        expect(beforeA.n, `${t.name} has no fixture row for tenant A (${TENANT_A.slug}). Add one under tests/db-rls/fixtures/ and register it from fixtures/index.ts`).toBeGreaterThan(0);
+        expect(beforeB.n, `${t.name} has no fixture row for tenant B (${TENANT_B.slug}). Add one under tests/db-rls/fixtures/ and register it from fixtures/index.ts`).toBeGreaterThan(0);
 
         const T = ident(t.name);
         const K = ident(t.key);
@@ -270,6 +282,9 @@ async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {
             );
             expectDenied(t.name, 'insert', ins);
 
+            // 0 rows when RLS hides the victim. 42501 when UPDATE/DELETE was revoked (table or column).
+            // A trigger rejection (append-only, immutable, P0001) is the same pass. The fingerprint below
+            // still has to match, so a denial that changed the victim's rows fails the test.
             expectNoEffect(t.name, 'update', await attempt(app, `update ${T} set ${updCol} = ${updCol} where ${K} = $1`, [victim.id]), record);
             expectNoEffect(t.name, 'delete', await attempt(app, `delete from ${T} where ${K} = $1`, [victim.id]), record);
 
