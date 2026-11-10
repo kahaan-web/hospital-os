@@ -10,8 +10,9 @@ import {
 } from '@hos/shared';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { orderDto, partyFromSettings, priceBook, quoteFor, settings } from './catalog';
-import { paymentSignature, publicId, safeEqual } from './crypto';
+import { publicId } from './crypto';
 import { ApiError, writeAudit, type Actor } from './http';
+import type { PaymentGateway } from './providers';
 
 const OPEN = ['created', 'attempted'] as const;
 
@@ -21,10 +22,18 @@ export async function createOrder(
   purpose: 'onboarding' | 'change',
   config: SubscriptionConfig | null,
   idempotencyKey: string,
-  keyId: string,
+  gateway: PaymentGateway,
 ): Promise<OrderDto> {
   const [tenant] = await tx.select().from(schema.tenants);
   if (!tenant) throw new ApiError(404, 'not_found', 'Hospital not found');
+  if (purpose === 'onboarding') {
+    if (tenant.status !== 'onboarding') throw new ApiError(409, 'onboarding_closed', 'Setup is already finished');
+    const paid = await tx
+      .select({ id: schema.orders.id })
+      .from(schema.orders)
+      .where(and(eq(schema.orders.purpose, 'onboarding'), eq(schema.orders.status, 'paid')));
+    if (paid.length > 0) throw new ApiError(409, 'already_paid', 'The onboarding order is already paid');
+  }
   const draft = tenant.onboardingDraft;
   const cfg: SubscriptionConfig =
     purpose === 'onboarding'
@@ -54,7 +63,7 @@ export async function createOrder(
     })
     .returning();
   await writeAudit(tx, actor, 'billing.order.create', 'order', order!.publicId, null, { purpose, amountPaise: quote.totals.totalPaise, cancelled: open.map((o) => o.id) });
-  return orderDto(tx, order!.id, keyId);
+  return orderDto(tx, order!.id, gateway.keyId);
 }
 
 async function currentCycle(tx: Tx) {
@@ -68,8 +77,7 @@ export async function payOrder(
   actor: Actor,
   orderPublicId: string,
   input: { method: 'upi' | 'card' | 'netbanking'; outcome: 'success' | 'failure' | 'pending'; details: Record<string, string | undefined> },
-  secret: string,
-  keyId: string,
+  gateway: PaymentGateway,
 ): Promise<PayAttemptResult> {
   const order = await mustOrder(tx, orderPublicId);
   if (!OPEN.includes(order.status as (typeof OPEN)[number])) throw new ApiError(409, 'order_closed', 'This order is already closed');
@@ -101,20 +109,19 @@ export async function payOrder(
     .update(schema.orders)
     .set({ status: nextOrder, paidAt: status === 'captured' ? new Date() : order.paidAt })
     .where(eq(schema.orders.id, order.id));
-  const signature = status === 'captured' ? paymentSignature(secret, order.publicId, payment!.publicId) : null;
+  const signature = status === 'captured' ? gateway.signCapture(order.publicId, payment!.publicId) : null;
   await writeAudit(tx, actor, 'billing.payment.attempt', 'payment', payment!.publicId, null, { outcome: input.outcome, method: input.method, orderId: order.publicId });
-  const dto = await orderDto(tx, order.id, keyId);
+  const dto = await orderDto(tx, order.id, gateway.keyId);
   const paymentDto = dto.payments.find((p) => p.id === payment!.publicId)!;
   return { order: dto, payment: paymentDto, checkout: signature ? { orderId: order.publicId, paymentId: payment!.publicId, signature } : null };
 }
 
 /** Returns null when the signature is wrong. The audit row is written and the caller must commit it (do not throw). */
-export async function verifyPayment(tx: Tx, actor: Actor, body: { orderId: string; paymentId: string; signature: string }, secret: string, keyId: string): Promise<OrderDto | null> {
+export async function verifyPayment(tx: Tx, actor: Actor, body: { orderId: string; paymentId: string; signature: string }, gateway: PaymentGateway): Promise<OrderDto | null> {
   const order = await mustOrder(tx, body.orderId);
   const [payment] = await tx.select().from(schema.payments).where(and(eq(schema.payments.orderId, order.id), eq(schema.payments.publicId, body.paymentId)));
   if (!payment) throw new ApiError(404, 'not_found', 'Payment not found');
-  const expected = paymentSignature(secret, order.publicId, payment.publicId);
-  if (!safeEqual(expected, body.signature)) {
+  if (!gateway.verifySignature(order.publicId, payment.publicId, body.signature)) {
     await writeAudit(tx, actor, 'billing.payment.bad_signature', 'payment', payment.publicId, null, { orderId: order.publicId });
     return null;
   }
@@ -124,10 +131,10 @@ export async function verifyPayment(tx: Tx, actor: Actor, body: { orderId: strin
   }
   if (!order.fulfilledAt) await fulfil(tx, order.id, payment.id);
   await writeAudit(tx, actor, 'billing.payment.verify', 'order', order.publicId, null, { paymentId: payment.publicId });
-  return orderDto(tx, order.id, keyId);
+  return orderDto(tx, order.id, gateway.keyId);
 }
 
-export async function resolvePending(tx: Tx, actor: Actor, paymentPublicId: string, outcome: 'success' | 'failure', secret: string, keyId: string): Promise<PaymentDto> {
+export async function resolvePending(tx: Tx, actor: Actor, paymentPublicId: string, outcome: 'success' | 'failure', gateway: PaymentGateway): Promise<PaymentDto> {
   const [payment] = await tx.select().from(schema.payments).where(eq(schema.payments.publicId, paymentPublicId));
   if (!payment) throw new ApiError(404, 'not_found', 'Payment not found');
   if (payment.status !== 'pending') throw new ApiError(409, 'payment_not_pending', 'That payment is not pending');
@@ -140,14 +147,12 @@ export async function resolvePending(tx: Tx, actor: Actor, paymentPublicId: stri
       .set({ status: 'failed', failureCode: open ? 'simulated_failure' : 'order_closed', failureReason: open ? 'The mock gateway declined this attempt' : 'The order closed before the payment completed' })
       .where(eq(schema.payments.id, payment.id));
   } else {
-    const signature = paymentSignature(secret, order.publicId, payment.publicId);
     await tx.update(schema.payments).set({ status: 'captured', signatureVerified: true, capturedAt: new Date() }).where(eq(schema.payments.id, payment.id));
     await tx.update(schema.orders).set({ status: 'paid', paidAt: new Date() }).where(eq(schema.orders.id, order.id));
     if (!order.fulfilledAt) await fulfil(tx, order.id, payment.id);
-    void signature;
   }
   await writeAudit(tx, actor, 'billing.payment.resolve', 'payment', payment.publicId, { status: 'pending' }, { outcome, orderOpen: open });
-  const dto = await orderDto(tx, order.id, keyId);
+  const dto = await orderDto(tx, order.id, gateway.keyId);
   return dto.payments.find((p) => p.id === payment.publicId)!;
 }
 
@@ -166,11 +171,12 @@ export async function fulfil(tx: Tx, orderId: string, paymentId: string): Promis
   if (!tenant) throw new ApiError(404, 'not_found', 'Hospital not found');
   if (order.purpose === 'onboarding') await ensureSubscription(tx, tenant.id, quote);
   else await applySubscriptionChange(tx, quote);
-  await insertInvoice(tx, tenant.id, order.id, paymentId, quote, order.purpose === 'onboarding' ? 'Hospital OS subscription' : 'Hospital OS subscription change');
-  await tx.update(schema.orders).set({ fulfilledAt: new Date(), status: 'paid', paidAt: order.paidAt ?? new Date() }).where(eq(schema.orders.id, order.id));
   if (order.purpose === 'onboarding' && ['facility', 'locations', 'plan', 'addons', 'payment'].includes(tenant.onboardingStep)) {
     await tx.update(schema.tenants).set({ onboardingStep: 'invoice' }).where(eq(schema.tenants.id, tenant.id));
   }
+  await tx.update(schema.orders).set({ fulfilledAt: new Date(), status: 'paid', paidAt: order.paidAt ?? new Date() }).where(eq(schema.orders.id, order.id));
+  // Invoice number last: hos_next_invoice_number locks the counter row until commit.
+  await insertInvoice(tx, tenant.id, order.id, paymentId, quote, order.purpose === 'onboarding' ? 'Hospital OS subscription' : 'Hospital OS subscription change');
 }
 
 async function ensureSubscription(tx: Tx, tenantId: string, quote: QuoteDto): Promise<void> {

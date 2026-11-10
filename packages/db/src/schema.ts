@@ -267,11 +267,14 @@ export const tenants = pgTable(
     sandbox: boolean('sandbox').notNull().default(true),
     suspendedAt: ts('suspended_at'),
     suspendedReason: text('suspended_reason'),
+    /** Status to restore on reactivate. Null for hospitals that were never suspended. */
+    statusBeforeSuspend: text('status_before_suspend'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   () => [
     check('tenants_status_chk', sql`status in ('onboarding', 'active', 'suspended')`),
+    check('tenants_status_before_chk', sql`status_before_suspend is null or status_before_suspend in ('onboarding', 'active')`),
     check(
       'tenants_step_chk',
       sql`onboarding_step in ('facility', 'locations', 'plan', 'addons', 'payment', 'invoice', 'provisioning', 'done')`,
@@ -792,7 +795,7 @@ export const sessions = pgTable(
     userId: uuid('user_id').references(() => users.id),
     platformAdminId: uuid('platform_admin_id').references(() => platformAdmins.id),
     tenantId: uuid('tenant_id').references(() => tenants.id),
-    locationId: uuid('location_id').references(() => locations.id),
+    locationId: uuid('location_id').references(() => locations.id, { onDelete: 'set null' }),
     ip: text('ip'),
     userAgent: text('user_agent'),
     createdAt: createdAt(),

@@ -61,8 +61,10 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
     await admin.query(`grant connect on database ${env.database} to ${MIGRATOR_ROLE}, ${APP_ROLE}`);
     await admin.query(`grant usage, create on schema public to ${MIGRATOR_ROLE}`);
     await admin.query(`grant usage on schema public to ${APP_ROLE}`);
-    // sha256() is not built into Postgres 16. pgcrypto supplies digest(); 0001_rls.sql wraps it as sha256(bytea).
-    // Only the superuser can create an extension. The migration role is NOSUPERUSER.
+    // 0001_rls.sql (frozen) creates public.sha256(bytea) on top of pgcrypto.digest.
+    // Postgres has had pg_catalog.sha256(bytea) since version 11. The extension exists only so
+    // that frozen migration can apply on a fresh database. 0003 switches the audit trigger to
+    // pg_catalog.sha256 and drops the wrapper; migrate() then drops the extension.
     await admin.query('create extension if not exists pgcrypto');
     await admin.query(`alter role ${APP_ROLE} set statement_timeout = '10s'`);
     await admin.query(`alter role ${APP_ROLE} set idle_in_transaction_session_timeout = '15s'`);
@@ -115,8 +117,22 @@ function closeClient(client: pg.Client): Promise<void> {
   ]);
 }
 
+/** Superuser step. 0003 has already dropped public.sha256, so nothing should still depend on pgcrypto. */
+export async function dropPgcrypto(log: (m: string) => void = () => {}): Promise<void> {
+  const env = dbEnv();
+  const admin = new pg.Client({ connectionString: env.adminUrl });
+  await admin.connect();
+  try {
+    await admin.query('drop extension if exists pgcrypto');
+    log('pgcrypto removed; audit hashes use pg_catalog.sha256');
+  } finally {
+    await closeClient(admin);
+  }
+}
+
 export async function migrate(log: (m: string) => void = () => {}): Promise<void> {
   await bootstrapRoles(log);
   const applied = await runMigrations(log);
   if (applied.length === 0) log('database is up to date');
+  await dropPgcrypto(log);
 }

@@ -267,3 +267,13 @@ NEW.hash := encode(sha256(convert_to(hos_audit_canonical(NEW), 'UTF8')), 'hex');
   concurrent → one order; double verify → one invoice; resolve on closed order → `order_closed`.
 - Invoices: 20 concurrent fulfilments → 000001..000020 with no gaps/duplicates; rolled-back tx uses no number; 31/03 23:59 IST →
   2025-26, 01/04 00:00 IST → 2026-27; all numbers ≤ 16 chars.
+
+## Addenda
+
+### Change quote is read-only (api fix round)
+
+`POST /billing/change-quote` with `changeConfigSchema` only returns a prorated `QuoteDto`. It does not change the subscription, including when `change.noPayment` is true.
+
+`POST /billing/change-apply` with the same body applies the change when `change.noPayment` is true and returns that `QuoteDto`. When a payment is due it returns 422 `payment_required` and does not write the subscription; the client creates an order with `purpose: 'change'` and pays that instead. Both routes require `billing.manage`.
+
+Onboarding write and read routes (`/onboarding` and `/onboarding/*`) require tenant status `onboarding` and `tenant.manage`. Any other tenant status returns 409 `onboarding_closed`. `POST /onboarding/provision` requires an onboarding order with `fulfilled_at` set. `POST /billing/orders` with `purpose: 'onboarding'` returns 409 when the tenant is not `onboarding` or an onboarding order is already `paid`.

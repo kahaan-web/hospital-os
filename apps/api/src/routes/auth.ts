@@ -19,6 +19,9 @@ import { ApiError, cookieOptions, platform, requestMeta, resolveSession, SESSION
 
 const limit = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
 
+/** Verified when no account matches, so a missing email costs the same argon2 check as a wrong password. */
+const DUMMY_PASSWORD_HASH = await hashPassword('not-a-real-account');
+
 export function registerAuth(app: FastifyInstance, deps: Deps): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -69,10 +72,9 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
         })
         .returning();
       challengeId = challenge!.id;
-      await tx.insert(schema.outboxMessages).values({ tenantId, channel: 'sms', recipient: mobile, template: 'signup_otp', body: `Hospital OS code ${code}` });
+      await deps.sms.send(tx, { tenantId, to: mobile, template: 'signup_otp', body: `Hospital OS code ${code}` });
       await writeAudit(tx, { actorType: 'user', actorId: user!.id, actorLabel: email, tenantId, locationId: null, ...meta }, 'auth.user.signup', 'user', user!.id, null, { email });
     });
-    req.log.info(`[otp] signup ${mobile} ${code}`);
     return { challengeId, ...(deps.env.exposeSecrets ? { devCode: code } : {}) };
   });
 
@@ -115,6 +117,12 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
     const challengeId = await tenant(deps.db, tenantId, async (tx) => {
       const [old] = await tx.select().from(schema.otpChallenges).where(eq(schema.otpChallenges.id, req.body.challengeId));
       if (!old || old.consumedAt) throw new ApiError(400, 'otp_expired', 'That code has expired. Start again.');
+      if (old.attempts >= 5) throw new ApiError(401, 'otp_locked', 'Too many attempts. Start again.');
+      const counted = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.otpChallenges)
+        .where(and(eq(schema.otpChallenges.userId, old.userId), sql`${schema.otpChallenges.createdAt} > now() - interval '1 hour'`));
+      if ((counted[0]?.n ?? 0) >= 5) throw new ApiError(429, 'rate_limited', 'Too many codes. Wait an hour and try again.');
       await tx.update(schema.otpChallenges).set({ consumedAt: new Date() }).where(eq(schema.otpChallenges.id, old.id));
       const [created] = await tx
         .insert(schema.otpChallenges)
@@ -125,14 +133,15 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
           channel: old.channel,
           destination: old.destination,
           codeHash: sha256Hex(code),
+          // Keep the spent guesses so a resend does not grant five fresh attempts.
+          attempts: old.attempts,
           expiresAt: new Date(Date.now() + 10 * 60 * 1000),
         })
         .returning();
-      await tx.insert(schema.outboxMessages).values({ tenantId, channel: old.channel, recipient: old.destination, template: 'otp_resend', body: `Hospital OS code ${code}` });
+      await deps.sms.send(tx, { tenantId, to: old.destination, template: 'otp_resend', body: `Hospital OS code ${code}` });
       await writeAudit(tx, { actorType: 'user', actorId: old.userId, actorLabel: old.destination, tenantId, locationId: null, ...meta }, 'auth.otp.resend', 'otp_challenge', created!.id, null, {});
       return created!.id;
     });
-    req.log.info(`[otp] resend ${challengeId} ${code}`);
     return { challengeId, ...(deps.env.exposeSecrets ? { devCode: code } : {}) };
   });
 
@@ -168,6 +177,7 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
     const lookup = await deps.db.execute<{ tenant_id: string; user_id: string }>(sql`select tenant_id, user_id from hos_login_lookup(${email})`);
     const hit = lookup.rows[0];
     if (!hit) {
+      await verifyPassword(DUMMY_PASSWORD_HASH, req.body.password);
       await platform(deps.db, (tx) => writeAudit(tx, { actorType: 'system', actorId: null, actorLabel: email, tenantId: null, locationId: null, ...meta }, 'auth.login.failed', 'user', null, null, {}));
       throw new ApiError(401, 'invalid_credentials', 'Email or password is not right');
     }

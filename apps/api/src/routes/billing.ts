@@ -20,21 +20,21 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
       const key = idempotencyKey(req);
       if (!key) throw new ApiError(400, 'idempotency_key_required', 'Send an Idempotency-Key header (8–128 letters, numbers, _ or -)');
       const config = req.body.purpose === 'change' ? { ...req.body.config, cycle: 'monthly' as const } : null;
-      return createOrder(gate.tx, gate.actor, req.body.purpose, config, key, deps.env.gatewayKeyId);
+      return createOrder(gate.tx, gate.actor, req.body.purpose, config, key, deps.gateway);
     }),
   );
 
   r.post('/api/v1/billing/orders/:orderId/pay', { schema: { params: z.object({ orderId: z.string().min(1) }), body: payAttemptSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       gate.requirePermission('billing.manage');
-      return payOrder(gate.tx, gate.actor, req.params.orderId, req.body, deps.env.gatewaySecret, deps.env.gatewayKeyId);
+      return payOrder(gate.tx, gate.actor, req.params.orderId, req.body, deps.gateway);
     }),
   );
 
   r.post('/api/v1/billing/verify', { schema: { body: verifyPaymentSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       gate.requirePermission('billing.manage');
-      const order = await verifyPayment(gate.tx, gate.actor, req.body, deps.env.gatewaySecret, deps.env.gatewayKeyId);
+      const order = await verifyPayment(gate.tx, gate.actor, req.body, deps.gateway);
       if (!order) {
         reply.status(400);
         return { error: { code: 'signature_invalid', message: 'The payment signature does not match' } };
@@ -46,7 +46,7 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
   r.post('/api/v1/billing/payments/:paymentId/resolve', { schema: { params: z.object({ paymentId: z.string().min(1) }), body: resolvePendingSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       gate.requirePermission('billing.manage');
-      return resolvePending(gate.tx, gate.actor, req.params.paymentId, req.body.outcome, deps.env.gatewaySecret, deps.env.gatewayKeyId);
+      return resolvePending(gate.tx, gate.actor, req.params.paymentId, req.body.outcome, deps.gateway);
     }),
   );
 
@@ -64,11 +64,19 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
       gate.requirePermission('billing.manage');
       const [sub] = await gate.tx.select().from(schema.subscriptions);
       if (!sub) throw new ApiError(422, 'no_subscription', 'There is no subscription to change');
+      return quoteFor(gate.tx, { ...req.body, cycle: sub.billingCycle as 'monthly' | 'annual' }, 'change');
+    }),
+  );
+
+  r.post('/api/v1/billing/change-apply', { schema: { body: changeConfigSchema } }, async (req, reply) =>
+    run(req, reply, async (gate) => {
+      gate.requirePermission('billing.manage');
+      const [sub] = await gate.tx.select().from(schema.subscriptions);
+      if (!sub) throw new ApiError(422, 'no_subscription', 'There is no subscription to change');
       const quote = await quoteFor(gate.tx, { ...req.body, cycle: sub.billingCycle as 'monthly' | 'annual' }, 'change');
-      if (quote.change?.noPayment) {
-        await applySubscriptionChange(gate.tx, quote);
-        await gate.audit('billing.subscription.change', 'subscription', sub.id, null, { planId: req.body.planId, noPayment: true });
-      }
+      if (!quote.change?.noPayment) throw new ApiError(422, 'payment_required', 'This change needs a payment. Create an order instead.');
+      await applySubscriptionChange(gate.tx, quote);
+      await gate.audit('billing.subscription.change', 'subscription', sub.id, null, { planId: req.body.planId, noPayment: true });
       return quote;
     }),
   );

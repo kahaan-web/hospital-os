@@ -16,7 +16,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { entitlementsDto, invoiceListItem, locationDtos, roleDtos, userDtos } from '../catalog';
+import { entitlementsDto, invoiceListItem, loadAssignments, locationDtos, roleDtos, userDtos, type Assignment } from '../catalog';
 import { randomToken, sha256Hex } from '../crypto';
 import { openTenant, verifyChain, type Deps, type TenantGate } from '../guard';
 import { ApiError } from '../http';
@@ -71,13 +71,15 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       const roles = await roleDtos(gate.tx);
       const role = roles.find((item) => item.key === req.body.roleKey);
       if (!role) throw new ApiError(422, 'invalid_role', 'Choose a role from the list');
+      const locationIds = req.body.locationIds;
+      const targets = locationIds === null ? [null] : locationIds;
+      assertMayGrant(gate, role.key, targets);
+      await assertLocationsExist(gate, targets);
       const email = req.body.email.toLowerCase();
       const [user] = await gate.tx
         .insert(schema.users)
         .values({ tenantId: gate.hospital.id, email, name: req.body.name, status: 'pending' })
         .returning();
-      const locationIds = req.body.locationIds;
-      const targets = locationIds === null ? [null] : locationIds;
       await gate.tx.insert(schema.userLocationRoles).values(targets.map((locationId) => ({ tenantId: gate.hospital.id, userId: user!.id, roleId: role.id, locationId })));
       const token = randomToken();
       await gate.tx.insert(schema.invitations).values({
@@ -88,10 +90,9 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       });
       const devInviteUrl = `${deps.env.webOrigin}/login?invite=${token}`;
-      await gate.tx.insert(schema.outboxMessages).values({
+      await deps.email.send(gate.tx, {
         tenantId: gate.hospital.id,
-        channel: 'email',
-        recipient: email,
+        to: email,
         subject: 'You are invited to Hospital OS',
         template: 'user_invite',
         body: `Open ${devInviteUrl} to set a password.`,
@@ -107,6 +108,8 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       gate.requirePermission('users.manage');
       const [user] = await gate.tx.select().from(schema.users).where(eq(schema.users.id, req.params.id));
       if (!user) throw new ApiError(404, 'not_found', 'User not found');
+      const currentAssignments = await loadAssignments(gate.tx, user.id);
+      assertMayEdit(gate, currentAssignments);
       if (req.body.status) await gate.tx.update(schema.users).set({ status: req.body.status }).where(eq(schema.users.id, user.id));
       if (req.body.status === 'disabled') await gate.tx.execute(sql`select hos_session_revoke_user(${user.id}::uuid)`);
       if (req.body.roleKey || req.body.locationIds !== undefined) {
@@ -116,6 +119,8 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
         const role = roles.find((item) => item.key === roleKey);
         if (!role) throw new ApiError(422, 'invalid_role', 'Choose a role from the list');
         const locationIds = req.body.locationIds === undefined ? current?.roles.map((item) => item.locationId) ?? [null] : req.body.locationIds === null ? [null] : req.body.locationIds;
+        assertMayGrant(gate, role.key, locationIds);
+        await assertLocationsExist(gate, locationIds);
         await gate.tx.delete(schema.userLocationRoles).where(eq(schema.userLocationRoles.userId, user.id));
         await gate.tx.insert(schema.userLocationRoles).values(locationIds.map((locationId) => ({ tenantId: gate.hospital.id, userId: user.id, roleId: role.id, locationId })));
       }
@@ -306,4 +311,55 @@ async function dashboard(gate: TenantGate): Promise<DashboardDto> {
     latestInvoice: latest ? invoiceListItem(latest) : null,
     doctors: doctors.slice(0, 30).map((doc) => ({ id: doc.id, name: doc.name, qualification: doc.qualification, speciality: doc.speciality, locationId: doc.locationId, isSample: doc.isSample })),
   };
+}
+
+/** Tenant Admin outranks Location Admin, who outranks every other system role. */
+function roleRank(key: string): number {
+  if (key === 'tenant_admin') return 100;
+  if (key === 'location_admin') return 50;
+  return 10;
+}
+
+function callerRank(assignments: Assignment[]): number {
+  return assignments.reduce((max, item) => Math.max(max, roleRank(item.roleKey)), 0);
+}
+
+function isTenantAdmin(assignments: Assignment[]): boolean {
+  return assignments.some((item) => item.roleKey === 'tenant_admin');
+}
+
+function managedLocationIds(assignments: Assignment[]): Set<string> {
+  return new Set(assignments.map((item) => item.locationId).filter((id): id is string => id !== null));
+}
+
+function assertMayGrant(gate: TenantGate, roleKey: string, locationIds: (string | null)[]): void {
+  if (roleRank(roleKey) > callerRank(gate.assignments)) {
+    throw new ApiError(403, 'forbidden', 'You cannot grant a role above your own');
+  }
+  if (isTenantAdmin(gate.assignments)) return;
+  const mine = managedLocationIds(gate.assignments);
+  for (const id of locationIds) {
+    if (id === null || !mine.has(id)) throw new ApiError(403, 'forbidden', 'You can only assign locations you manage');
+  }
+}
+
+function assertMayEdit(gate: TenantGate, target: Assignment[]): void {
+  if (isTenantAdmin(gate.assignments)) return;
+  if (target.some((item) => item.roleKey === 'tenant_admin')) {
+    throw new ApiError(403, 'forbidden', 'Only a Tenant Admin can change a Tenant Admin');
+  }
+  const mine = managedLocationIds(gate.assignments);
+  for (const item of target) {
+    if (item.locationId === null || !mine.has(item.locationId)) {
+      throw new ApiError(403, 'forbidden', 'You can only change staff at your locations');
+    }
+  }
+}
+
+async function assertLocationsExist(gate: TenantGate, locationIds: (string | null)[]): Promise<void> {
+  const wanted = locationIds.filter((id): id is string => id !== null);
+  if (wanted.length === 0) return;
+  const rows = await gate.tx.select({ id: schema.locations.id }).from(schema.locations);
+  const known = new Set(rows.map((row) => row.id));
+  if (wanted.some((id) => !known.has(id))) throw new ApiError(422, 'invalid_reference', 'That location does not exist');
 }

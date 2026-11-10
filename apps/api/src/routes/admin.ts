@@ -243,8 +243,17 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
     openPlatformTenant(deps, req, req.params.id, async (gate) => {
       const [hospital] = await gate.tx.select().from(schema.tenants).where(eq(schema.tenants.id, req.params.id));
       if (!hospital) throw new ApiError(404, 'not_found', 'Hospital not found');
-      await gate.tx.update(schema.tenants).set({ status: 'suspended', suspendedAt: new Date(), suspendedReason: req.body.reason }).where(eq(schema.tenants.id, hospital.id));
-      await gate.audit('admin.tenant.suspend', 'tenant', hospital.id, { status: hospital.status }, { status: 'suspended', reason: req.body.reason });
+      const previous = hospital.status === 'suspended' ? hospital.statusBeforeSuspend : hospital.status;
+      await gate.tx
+        .update(schema.tenants)
+        .set({
+          status: 'suspended',
+          statusBeforeSuspend: previous === 'onboarding' ? 'onboarding' : 'active',
+          suspendedAt: hospital.suspendedAt ?? new Date(),
+          suspendedReason: req.body.reason,
+        })
+        .where(eq(schema.tenants.id, hospital.id));
+      await gate.audit('admin.tenant.suspend', 'tenant', hospital.id, { status: hospital.status }, { status: 'suspended', reason: req.body.reason, restore: previous });
       return reply.status(204).send();
     }),
   );
@@ -254,8 +263,12 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       const [hospital] = await gate.tx.select().from(schema.tenants).where(eq(schema.tenants.id, req.params.id));
       if (!hospital) throw new ApiError(404, 'not_found', 'Hospital not found');
       if (hospital.status !== 'suspended') throw new ApiError(409, 'not_suspended', 'Only a suspended hospital can be reactivated');
-      await gate.tx.update(schema.tenants).set({ status: 'active', suspendedAt: null, suspendedReason: null }).where(eq(schema.tenants.id, hospital.id));
-      await gate.audit('admin.tenant.reactivate', 'tenant', hospital.id, { status: 'suspended' }, { status: 'active' });
+      const restore = hospital.statusBeforeSuspend === 'onboarding' ? 'onboarding' : 'active';
+      await gate.tx
+        .update(schema.tenants)
+        .set({ status: restore, statusBeforeSuspend: null, suspendedAt: null, suspendedReason: null })
+        .where(eq(schema.tenants.id, hospital.id));
+      await gate.audit('admin.tenant.reactivate', 'tenant', hospital.id, { status: 'suspended' }, { status: restore });
       return reply.status(204).send();
     }),
   );

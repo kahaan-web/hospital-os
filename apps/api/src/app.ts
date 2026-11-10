@@ -7,6 +7,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import { apiEnv } from './env';
 import { installErrorHandler } from './http';
+import { mockEmailSender, mockPaymentGateway, mockSmsSender } from './providers';
 import { registerAdmin } from './routes/admin';
 import { registerAuth } from './routes/auth';
 import { registerBilling } from './routes/billing';
@@ -46,7 +47,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  const deps = { db: handle.db, env };
+  const logLine = (line: string) => app.log.info(line);
+  const deps = {
+    db: handle.db,
+    env,
+    sms: mockSmsSender({ logCodes: !env.production, log: logLine }),
+    email: mockEmailSender(),
+    gateway: mockPaymentGateway(env.gatewayKeyId, env.gatewaySecret),
+  };
   registerPublic(app, deps);
   registerAuth(app, deps);
   registerOnboarding(app, deps);

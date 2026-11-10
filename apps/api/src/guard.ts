@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { assertModule, assertPermission, loadAssignments, type Assignment } from './catalog';
 import { sha256Hex } from './crypto';
 import type { ApiEnv } from './env';
+import type { EmailSender, PaymentGateway, SmsSender } from './providers';
 import {
   ApiError,
   idempotencyKey,
@@ -23,6 +24,9 @@ import {
 export interface Deps {
   db: Db;
   env: ApiEnv;
+  sms: SmsSender;
+  email: EmailSender;
+  gateway: PaymentGateway;
 }
 
 export interface TenantGate {

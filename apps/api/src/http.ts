@@ -54,6 +54,7 @@ export function installErrorHandler(app: { setErrorHandler: Function; setNotFoun
       if (constraint?.includes('email')) return sendError(reply, 409, 'email_taken', 'An account with this email already exists');
       return sendError(reply, 409, 'conflict', 'That record already exists');
     }
+    if (code === '23503') return sendError(reply, 422, 'invalid_reference', 'That refers to a record that does not exist');
     if (code === '42501') return sendError(reply, 403, 'forbidden', 'You cannot do that');
     if (error instanceof Error && error.message.startsWith('Invalid ')) return sendError(reply, 400, 'validation', error.message);
     const status = typeof error === 'object' && error && 'statusCode' in error ? Number((error as { statusCode: number }).statusCode) : 500;

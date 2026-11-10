@@ -13,11 +13,11 @@ Two database roles exist, both `NOSUPERUSER` and `NOBYPASSRLS`:
 
 **Limit.** `hos_app` sets its own GUCs. RLS stops application bugs that forget a `WHERE tenant_id = …`. It does not stop a compromised API process: that process can set `app.tenant_id` to any tenant it knows. Defence in depth is the app role's lack of `BYPASSRLS`, statement timeouts (`statement_timeout` 10s, `idle_in_transaction_session_timeout` 15s), and keeping the API host off the public internet except through TLS.
 
-Postgres 16 has no built-in `sha256(bytea)`. Bootstrap (the superuser, `DATABASE_ADMIN_URL`) creates the `pgcrypto` extension. `public.sha256(bytea)` is a thin wrapper around `digest(data, 'sha256')` so the audit trigger does not depend on a function name that does not exist in this version.
+The audit trigger hashes with `pg_catalog.sha256(bytea)`, built into Postgres since version 11. No `pgcrypto` extension remains after migrate. The frozen file `0001_rls.sql` still creates a `public.sha256` wrapper, so bootstrap creates `pgcrypto` only long enough for that file to apply on a fresh database. `0003_review_fixes.sql` points the trigger at `pg_catalog.sha256`, drops the wrapper, and the migrator then drops the extension.
 
 ## Sessions and CSRF
 
-The cookie `hos_session` is an opaque 32-byte token. The database stores only its SHA-256. Passwords use argon2id (`@node-rs/argon2`). Every state-changing request must send `x-hos-csrf: 1`. Auth routes are rate-limited. Mock OTP, email and SMS are written to the API log and to `outbox_messages`; they are not delivered by a real provider. `MOCK_EXPOSE_SECRETS` may echo a code in the JSON response in development and must be off in production.
+The cookie `hos_session` is an opaque 32-byte token. The database stores only its SHA-256. Passwords use argon2id (`@node-rs/argon2`). A login for an unknown email still runs a verify against a dummy hash. Every state-changing request must send `x-hos-csrf: 1`. Auth routes are rate-limited. OTP resend keeps the attempt count of the previous code and stops after five codes in an hour. Mock SMS and email go through `SmsSender` and `EmailSender`; the mock writes `outbox_messages`. OTP codes are logged only when `NODE_ENV` is not `production`. `MOCK_EXPOSE_SECRETS` may echo a code in the JSON response in development. In production the process refuses to start without `MOCK_GATEWAY_KEY_SECRET`, and secret exposure is forced off.
 
 ## Audit
 
