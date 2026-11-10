@@ -1,5 +1,5 @@
 import { schema, type Tx } from '@hos/db';
-import { paymentSignature, safeEqual } from './crypto';
+import { paymentSignature, safeEqual, webhookSignature } from './crypto';
 
 /** Outbound SMS. The mock records `outbox_messages` inside the request transaction. */
 export interface SmsSender {
@@ -19,6 +19,9 @@ export interface PaymentGateway {
   readonly keyId: string;
   signCapture(orderPublicId: string, paymentPublicId: string): string;
   verifySignature(orderPublicId: string, paymentPublicId: string, signature: string): boolean;
+  /** HMAC of the canonical webhook JSON. The tenant never sees this secret. */
+  signWebhook(body: unknown): string;
+  verifyWebhook(body: unknown, signature: string): boolean;
 }
 
 export function mockSmsSender(opts: { logCodes: boolean; log: (line: string) => void }): SmsSender {
@@ -59,6 +62,12 @@ export function mockPaymentGateway(keyId: string, secret: string): PaymentGatewa
     },
     verifySignature(orderPublicId, paymentPublicId, signature) {
       return safeEqual(paymentSignature(secret, orderPublicId, paymentPublicId), signature);
+    },
+    signWebhook(body) {
+      return webhookSignature(secret, body);
+    },
+    verifyWebhook(body, signature) {
+      return safeEqual(webhookSignature(secret, body), signature);
     },
   };
 }

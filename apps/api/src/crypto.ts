@@ -34,6 +34,11 @@ export function paymentSignature(secret: string, orderPublicId: string, paymentP
   return createHmac('sha256', secret).update(`${orderPublicId}|${paymentPublicId}`).digest('hex');
 }
 
+/** Lowercase hex HMAC-SHA256 of the canonical JSON body. Mock webhook only. */
+export function webhookSignature(secret: string, body: unknown): string {
+  return createHmac('sha256', secret).update(canonicalJson(body)).digest('hex');
+}
+
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
   if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(',')}]`;

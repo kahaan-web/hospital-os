@@ -22,6 +22,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { advanceBillingClock } from '../billing';
 import { invoiceListItem, iso, loadCatalog, locationDtos, methodLabel, moduleStates, subscriptionDto, tenantSummary, userDtos } from '../catalog';
 import { openPlatform, openPlatformTenant, verifyChain, type Deps } from '../guard';
 import { ApiError, rows } from '../http';
@@ -256,6 +257,19 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       await gate.audit('admin.tenant.suspend', 'tenant', hospital.id, { status: hospital.status }, { status: 'suspended', reason: req.body.reason, restore: previous });
       return reply.status(204).send();
     }),
+  );
+
+  r.post(
+    '/api/v1/admin/tenants/:id/dev/advance-clock',
+    { schema: { params: idParam, body: z.object({ days: z.number().int().min(1).max(3660) }) } },
+    async (req) => {
+      if (deps.env.production) throw new ApiError(404, 'not_found', 'Not found');
+      return openPlatformTenant(deps, req, req.params.id, async (gate) => {
+        const result = await advanceBillingClock(gate.tx, gate.actor, req.body.days);
+        await gate.audit('billing.clock.advance', 'subscription', req.params.id, null, { days: req.body.days, renewals: result.renewals.length });
+        return result;
+      });
+    },
   );
 
   r.post('/api/v1/admin/tenants/:id/reactivate', { schema: { params: idParam } }, async (req, reply) =>

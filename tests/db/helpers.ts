@@ -34,6 +34,7 @@ export interface Side {
   paymentId: string;
   invoiceId: string;
   lineId: string;
+  creditNoteId: string;
   overrideId: string;
   consentId: string;
   requestId: string;
@@ -139,6 +140,30 @@ export async function expectSqlState(client: pg.Client, text: string, params: un
   }
   await client.query(`ROLLBACK TO SAVEPOINT ${mark}`);
   throw new Error(`expected SQLSTATE ${code} but the statement succeeded: ${text}`);
+}
+
+/**
+ * Cross-tenant UPDATE/DELETE. RLS hiding the row (0 rows) is a pass.
+ * Permission denied or the immutability trigger (both SQLSTATE 42501) is also a pass.
+ * A write that touches a row is not.
+ */
+export async function expectHiddenWrite(client: pg.Client, text: string, params: unknown[]): Promise<void> {
+  const mark = `sp_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  await client.query(`SAVEPOINT ${mark}`);
+  try {
+    const result = await client.query(text, params);
+    await client.query(`RELEASE SAVEPOINT ${mark}`);
+    if ((result.rowCount ?? 0) !== 0) {
+      throw new Error(`expected 0 rows or SQLSTATE 42501 for [${text}], updated ${result.rowCount}`);
+    }
+  } catch (err) {
+    const actual = (err as { code?: string }).code;
+    if (!actual) throw err;
+    await client.query(`ROLLBACK TO SAVEPOINT ${mark}`);
+    if (actual !== '42501') {
+      throw new Error(`expected 0 rows or SQLSTATE 42501 for [${text}], got ${actual}: ${(err as Error).message}`);
+    }
+  }
 }
 
 export async function insertPair(migrator: pg.Client): Promise<FixturePair> {
@@ -266,6 +291,12 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into invoice_lines (tenant_id, invoice_id, description, unit_paise, amount_paise, gst_rate_bp, cgst_paise, sgst_paise, igst_paise)
      values ($1, $2, 'Sample line', 100, 100, 1800, 9, 9, 0) returning id`,
     [tenant.id, invoice.id],
+  );
+  const creditNote = await one<{ id: string }>(
+    migrator,
+    `insert into credit_notes (tenant_id, invoice_id, number, reason, taxable_paise, cgst_paise, sgst_paise, igst_paise, total_paise)
+     values ($1, $2, $3, 'Sample credit', 100, 9, 9, 0, 118) returning id`,
+    [tenant.id, invoice.id, `C${runId}${mark}`],
   );
   const override = await one<{ id: string }>(
     migrator,
@@ -397,6 +428,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     paymentId: payment.id,
     invoiceId: invoice.id,
     lineId: line.id,
+    creditNoteId: creditNote.id,
     overrideId: override.id,
     consentId: consent.id,
     requestId: request.id,
@@ -423,6 +455,9 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
 export async function deletePair(admin: pg.Client, pair: FixturePair | null): Promise<void> {
   if (!pair) return;
   const ids = [pair.a.id, pair.b.id];
+  // Immutability triggers fire for the superuser too. Disable them only for this
+  // transaction, then turn them back on before commit (DDL rolls back with the tx).
+  const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes'];
   const steps = [
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
@@ -439,6 +474,7 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from patients where tenant_id = any($1::uuid[])`,
     `delete from number_series where tenant_id = any($1::uuid[])`,
     `delete from sessions where tenant_id = any($1::uuid[]) or user_id in (select id from users where tenant_id = any($1::uuid[]))`,
+    `delete from credit_notes where tenant_id = any($1::uuid[])`,
     `delete from invoice_lines where tenant_id = any($1::uuid[])`,
     `delete from invoices where tenant_id = any($1::uuid[])`,
     `delete from payments where tenant_id = any($1::uuid[])`,
@@ -462,12 +498,11 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   ];
   await admin.query('BEGIN');
   try {
-    // Append-only guards block even the superuser. Disable them only for this cleanup transaction.
-    await admin.query('alter table vital_signs disable trigger vital_signs_guard');
-    await admin.query('alter table clinical_notes disable trigger clinical_notes_guard');
+    // Immutability and append-only guards fire for the superuser too. Disable user triggers
+    // (credit notes, invoices, vitals, clinical notes) only for this cleanup transaction.
+    for (const table of guarded) await admin.query(`alter table ${table} disable trigger user`);
     for (const text of steps) await admin.query(text, [ids]);
-    await admin.query('alter table vital_signs enable trigger vital_signs_guard');
-    await admin.query('alter table clinical_notes enable trigger clinical_notes_guard');
+    for (const table of guarded) await admin.query(`alter table ${table} enable trigger user`);
     await admin.query('COMMIT');
   } catch (err) {
     await admin.query('ROLLBACK').catch(() => undefined);

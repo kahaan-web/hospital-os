@@ -134,11 +134,24 @@ it('returns not_entitled for a module the plan does not include', async () => {
 });
 
 it('rejects a tampered payment signature', async () => {
-  const res = await send(wizardCookie, 'POST', '/api/v1/billing/verify', {
+  const missing = await send(wizardCookie, 'POST', '/api/v1/billing/verify', {
     orderId,
     paymentId,
     signature: 'ab'.repeat(32),
   });
+  expect(missing.statusCode).toBe(400);
+  expect(missing.json().error.code).toBe('idempotency_key_required');
+  const res = await send(
+    wizardCookie,
+    'POST',
+    '/api/v1/billing/verify',
+    {
+      orderId,
+      paymentId,
+      signature: 'ab'.repeat(32),
+    },
+    { 'idempotency-key': 'verify-tampered-1' },
+  );
   expect(res.statusCode).toBe(400);
   expect(res.json().error.code).toBe('signature_invalid');
 });

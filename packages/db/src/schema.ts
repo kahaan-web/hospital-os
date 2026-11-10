@@ -67,6 +67,8 @@ export const platformSettings = pgTable(
     defaultSacCode: text('default_sac_code').notNull(),
     defaultGstRateBp: integer('default_gst_rate_bp').notNull().default(1800),
     invoicePrefix: text('invoice_prefix').notNull().default('HOS'),
+    /** When true, and NODE_ENV is not production, pay attempts honour a client outcome. */
+    mockPaymentSimulator: boolean('mock_payment_simulator').notNull().default(false),
     updatedAt: updatedAt(),
   },
   () => [
@@ -644,6 +646,35 @@ export const invoices = pgTable(
     }),
     check('invoices_number_len_chk', sql`char_length(number) <= 16`),
     check('invoices_status_chk', sql`status in ('paid', 'void')`),
+  ],
+);
+
+/** GST credit note for an issued invoice. Model only — downgrades do not issue one. Immutable after insert. */
+export const creditNotes = pgTable(
+  'credit_notes',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    invoiceId: uuid('invoice_id').notNull(),
+    number: text('number').notNull().unique(),
+    reason: text('reason').notNull().default(''),
+    taxablePaise: paise('taxable_paise').notNull(),
+    cgstPaise: paise('cgst_paise').notNull().default(0),
+    sgstPaise: paise('sgst_paise').notNull().default(0),
+    igstPaise: paise('igst_paise').notNull().default(0),
+    totalPaise: paise('total_paise').notNull(),
+    issuedAt: ts('issued_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('credit_notes_tenant_id_uq').on(t.tenantId, t.id),
+    index('credit_notes_tenant_idx').on(t.tenantId),
+    foreignKey({
+      columns: [t.tenantId, t.invoiceId],
+      foreignColumns: [invoices.tenantId, invoices.id],
+      name: 'credit_notes_invoice_fk',
+    }),
+    check('credit_notes_number_len_chk', sql`char_length(number) <= 16`),
+    check('credit_notes_total_chk', sql`total_paise >= 0`),
   ],
 );
 
