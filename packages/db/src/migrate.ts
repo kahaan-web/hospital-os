@@ -52,7 +52,7 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
       await maint.query(found.rowCount === 0 ? `create role ${role} ${attrs}` : `alter role ${role} ${attrs}`);
     }
   } finally {
-    await maint.end();
+    await closeClient(maint);
   }
 
   const admin = new pg.Client({ connectionString: env.adminUrl });
@@ -61,8 +61,13 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
     await admin.query(`grant connect on database ${env.database} to ${MIGRATOR_ROLE}, ${APP_ROLE}`);
     await admin.query(`grant usage, create on schema public to ${MIGRATOR_ROLE}`);
     await admin.query(`grant usage on schema public to ${APP_ROLE}`);
+    // sha256() is not built into Postgres 16. pgcrypto supplies digest(); 0001_rls.sql wraps it as sha256(bytea).
+    // Only the superuser can create an extension. The migration role is NOSUPERUSER.
+    await admin.query('create extension if not exists pgcrypto');
+    await admin.query(`alter role ${APP_ROLE} set statement_timeout = '10s'`);
+    await admin.query(`alter role ${APP_ROLE} set idle_in_transaction_session_timeout = '15s'`);
   } finally {
-    await admin.end();
+    await closeClient(admin);
   }
   log(`roles ready: ${MIGRATOR_ROLE} (migrations), ${APP_ROLE} (application, RLS enforced)`);
 }
@@ -97,9 +102,17 @@ export async function runMigrations(log: (m: string) => void = () => {}): Promis
       log(`applied ${file}`);
     }
   } finally {
-    await client.end();
+    await closeClient(client);
   }
   return applied;
+}
+
+/** node-pg `end()` can hang on Windows after a large multi-statement script. Don't block the CLI on it. */
+function closeClient(client: pg.Client): Promise<void> {
+  return Promise.race([
+    client.end().then(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+  ]);
 }
 
 export async function migrate(log: (m: string) => void = () => {}): Promise<void> {
