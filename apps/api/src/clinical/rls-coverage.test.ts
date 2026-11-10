@@ -1,11 +1,15 @@
 import { dbEnv } from '@hos/db';
 import pg from 'pg';
-import { beforeAll, expect, it } from 'vitest';
-import { clinicalFixture } from './testkit';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { clinicalFixture, closeClinicalPools } from './testkit';
 
 beforeAll(async () => {
   await clinicalFixture();
 }, 180_000);
+
+afterAll(async () => {
+  await closeClinicalPools();
+});
 
 it('forces RLS, a tenant policy, and unique (tenant_id, id) on tenant tables', async () => {
   const client = new pg.Client({ connectionString: dbEnv().migrationUrl });

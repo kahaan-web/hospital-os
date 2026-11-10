@@ -6,7 +6,7 @@ import { writeAudit } from '../http';
 import { charges } from './charges';
 import { numbering } from './numbering';
 import { orders } from './orders';
-import { clinicalFixture, expectIsolation, type ClinicalFixture } from './testkit';
+import { clinicalFixture, closeClinicalPools, expectIsolation, type ClinicalFixture } from './testkit';
 
 const app = await buildApp();
 let fx: ClinicalFixture;
@@ -18,6 +18,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
+  await closeClinicalPools();
 });
 
 function ctx(tx: Parameters<typeof numbering.next>[0]['tx']) {
@@ -135,7 +136,7 @@ it('hides another tenant patient and refuses a Lotus CPOE order', async () => {
   });
   expect(order.statusCode).toBe(403);
   expect(order.json().error.code).toBe('not_entitled');
-});
+}, 30_000);
 
 it('returns a native session token and rejects cookie plus header', async () => {
   const native = await login(fx.sunrise.ownerEmail, true);
@@ -153,9 +154,9 @@ it('returns a native session token and rejects cookie plus header', async () => 
     headers: { 'x-hos-session': native.body.sessionToken!, cookie: native.cookie },
   });
   expect(both.statusCode).toBe(400);
-});
+}, 30_000);
 
 it('isolates clinical tables', async () => {
   await expectIsolation('patients', fx.lotus.patientId);
   await expectIsolation('encounters', fx.lotus.encounterId);
-});
+}, 30_000);

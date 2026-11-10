@@ -20,7 +20,7 @@ export interface ClinicalFixture {
 }
 
 let pending: Promise<ClinicalFixture> | null = null;
-let appDb: Db | null = null;
+let appHandle: { db: Db; close: () => Promise<void> } | null = null;
 
 export function clinicalFixture(): Promise<ClinicalFixture> {
   if (!pending) pending = loadFixture();
@@ -68,8 +68,16 @@ async function loadFixture(): Promise<ClinicalFixture> {
 }
 
 function app(): Db {
-  if (!appDb) appDb = createDb(dbEnv().appUrl, { max: 8 }).db;
-  return appDb;
+  if (!appHandle) appHandle = createDb(dbEnv().appUrl, { max: 8 });
+  return appHandle.db;
+}
+
+/** Closes the hos_app pool opened by expectIsolation so the test process can exit. */
+export async function closeClinicalPools(): Promise<void> {
+  if (!appHandle) return;
+  const handle = appHandle;
+  appHandle = null;
+  await Promise.race([handle.close(), new Promise((resolve) => setTimeout(resolve, 2000))]);
 }
 
 function errorCode(error: unknown): string | undefined {
