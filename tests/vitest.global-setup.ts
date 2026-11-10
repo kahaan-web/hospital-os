@@ -1,7 +1,8 @@
 import { seed, seedDemo } from '../packages/db/src/seed';
 import { migrate } from '../packages/db/src/migrate';
 
-const TEST_DB = 'hos_test';
+// Override per worktree with HOS_TEST_DB (e.g. hos_b1) so parallel workers never share a test database.
+const TEST_DB = process.env.HOS_TEST_DB ?? 'hos_test';
 
 /**
  * Isolated Postgres database for the full vitest run (migrate + seed + seed:demo).

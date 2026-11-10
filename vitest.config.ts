@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     globalSetup: ['./tests/vitest.global-setup.ts'],
     env: {
-      HOS_DB_NAME: 'hos_test',
+      HOS_DB_NAME: process.env.HOS_TEST_DB ?? 'hos_test',
       MOCK_EXPOSE_SECRETS: 'true',
       MOCK_GATEWAY_KEY_SECRET: 'mock_secret_change_me_dev_only',
     },
