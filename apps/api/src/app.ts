@@ -12,6 +12,7 @@ import { registerAdmin } from './routes/admin';
 import { registerAuth } from './routes/auth';
 import { registerBilling } from './routes/billing';
 import { registerOnboarding } from './routes/onboarding';
+import { registerPatients } from './routes/patients';
 import { registerPublic } from './routes/public';
 import { registerTenant } from './routes/tenant';
 
@@ -60,6 +61,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerOnboarding(app, deps);
   registerBilling(app, deps);
   registerTenant(app, deps);
+  registerPatients(app, deps);
   registerAdmin(app, deps);
 
   app.get('/api/docs/json', async () => app.swagger());
