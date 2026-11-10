@@ -8,6 +8,7 @@ import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTyp
 import { apiEnv } from './env';
 import { installErrorHandler } from './http';
 import { mockEmailSender, mockPaymentGateway, mockSmsSender } from './providers';
+import { registerClinical } from './clinical';
 import { registerAdmin } from './routes/admin';
 import { registerAuth } from './routes/auth';
 import { registerBilling } from './routes/billing';
@@ -60,6 +61,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerOnboarding(app, deps);
   registerBilling(app, deps);
   registerTenant(app, deps);
+  registerClinical(app, deps);
   registerAdmin(app, deps);
 
   app.get('/api/docs/json', async () => app.swagger());

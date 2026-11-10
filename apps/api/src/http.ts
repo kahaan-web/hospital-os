@@ -125,6 +125,15 @@ export function requestMeta(req: FastifyRequest): { ip: string | null; userAgent
 
 export const SESSION_COOKIE = 'hos_session';
 
+/** Cookie or `x-hos-session`. Both at once is a 400 — native apps send the header, browsers send the cookie. */
+export function readSessionToken(req: FastifyRequest): string | undefined {
+  const header = req.headers['x-hos-session'];
+  const headerToken = typeof header === 'string' && header.length > 0 ? header : undefined;
+  const cookieToken = req.cookies[SESSION_COOKIE];
+  if (headerToken && cookieToken) throw new ApiError(400, 'validation', 'Send the session cookie or the x-hos-session header, not both');
+  return headerToken ?? (cookieToken || undefined);
+}
+
 export function cookieOptions(env: ApiEnv, maxAgeSeconds: number) {
   return { httpOnly: true, sameSite: 'lax' as const, secure: env.production, path: '/', maxAge: maxAgeSeconds };
 }
@@ -232,7 +241,10 @@ export function routeTemplate(req: FastifyRequest): string {
 
 export function idempotencyRequired(req: FastifyRequest): boolean {
   const url = req.routeOptions.url ?? req.url;
-  return req.method === 'POST' && (url.endsWith('/billing/orders') || url.endsWith('/billing/orders/:orderId/pay'));
+  return (
+    req.method === 'POST' &&
+    (url.endsWith('/billing/orders') || url.endsWith('/billing/orders/:orderId/pay') || url.endsWith('/clinical/encounters/:id/orders'))
+  );
 }
 
 /** Platform scope sees no tenant rows. */
