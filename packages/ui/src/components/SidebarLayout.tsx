@@ -1,4 +1,8 @@
-import type { ReactNode } from 'react';
+'use client';
+
+import { Lock, Menu, X } from 'lucide-react';
+import type { MouseEvent, ReactNode } from 'react';
+import { useState } from 'react';
 import { cn } from '../lib/cn';
 
 export interface ShellNavItem {
@@ -11,6 +15,14 @@ export interface ShellNavItem {
   onClick?: () => void;
 }
 
+export type ShellNavLinkRenderer = (props: {
+  href: string;
+  className: string;
+  children: ReactNode;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  'aria-current'?: 'page';
+}) => ReactNode;
+
 export interface SidebarLayoutProps {
   brand?: ReactNode;
   navItems: ShellNavItem[];
@@ -20,42 +32,69 @@ export interface SidebarLayoutProps {
   userMenu?: ReactNode;
   children: ReactNode;
   className?: string;
+  renderNavLink?: ShellNavLinkRenderer;
 }
 
-function NavItem({ item }: { item: ShellNavItem }) {
+function NavItem({
+  item,
+  renderNavLink,
+  onNavigate,
+}: {
+  item: ShellNavItem;
+  renderNavLink?: ShellNavLinkRenderer;
+  onNavigate?: () => void;
+}) {
   const className = cn(
     'hos-shell__nav-item hos-focus-visible',
     item.active && 'hos-shell__nav-item--active',
     item.locked && 'hos-shell__nav-item--locked',
   );
 
+  const onActivate = (event?: MouseEvent<HTMLAnchorElement>) => {
+    if (item.onClick) {
+      event?.preventDefault();
+      item.onClick();
+    }
+    onNavigate?.();
+  };
+
+  const lockedHint = item.locked ? (
+    <>
+      <Lock size={14} aria-hidden strokeWidth={1.5} />
+      <span className="hos-sr-only">Locked; upgrade available</span>
+    </>
+  ) : null;
+
   if (item.href) {
-    return (
-      <a
-        href={item.href}
-        className={className}
-        onClick={item.onClick}
-        aria-current={item.active ? 'page' : undefined}
-        aria-disabled={item.locked || undefined}
-      >
+    const linkProps = {
+      href: item.href,
+      className,
+      onClick: (event: MouseEvent<HTMLAnchorElement>) => onActivate(event),
+      'aria-current': item.active ? ('page' as const) : undefined,
+    };
+    const body = (
+      <>
         {item.icon}
         <span style={{ flex: 1 }}>{item.label}</span>
-        {item.locked ? <span style={{ fontSize: 'var(--hos-text-xs)' }} aria-hidden>🔒</span> : null}
-      </a>
+        {lockedHint}
+      </>
     );
+    if (renderNavLink) {
+      return renderNavLink({ ...linkProps, children: body });
+    }
+    return <a {...linkProps}>{body}</a>;
   }
 
   return (
     <button
       type="button"
       className={className}
-      onClick={item.onClick}
+      onClick={() => onActivate()}
       aria-current={item.active ? 'page' : undefined}
-      disabled={item.locked}
     >
       {item.icon}
       <span style={{ flex: 1 }}>{item.label}</span>
-      {item.locked ? <span style={{ fontSize: 'var(--hos-text-xs)' }} aria-hidden>🔒</span> : null}
+      {lockedHint}
     </button>
   );
 }
@@ -69,16 +108,38 @@ export function SidebarLayout({
   userMenu,
   children,
   className,
+  renderNavLink,
 }: SidebarLayoutProps) {
+  const [navOpen, setNavOpen] = useState(false);
+
+  const closeNav = () => setNavOpen(false);
+
   return (
-    <div className={cn('hos-shell', className)}>
+    <div className={cn('hos-shell', navOpen && 'hos-shell--nav-open', className)}>
+      {navOpen ? (
+        <button
+          type="button"
+          className="hos-shell__sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={closeNav}
+        />
+      ) : null}
       <aside className="hos-shell__sidebar" aria-label="Main navigation">
         {brand ? <div className="hos-shell__brand">{brand}</div> : null}
-        <nav className="hos-shell__nav">
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-1)' }}>
+        <nav className="hos-shell__nav" id="hos-main-nav">
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--hos-space-1)',
+            }}
+          >
             {navItems.map((item) => (
               <li key={item.id}>
-                <NavItem item={item} />
+                <NavItem item={item} renderNavLink={renderNavLink} onNavigate={closeNav} />
               </li>
             ))}
           </ul>
@@ -87,6 +148,16 @@ export function SidebarLayout({
       <div className="hos-shell__main">
         <header className="hos-shell__topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--hos-space-4)' }}>
+            <button
+              type="button"
+              className="hos-shell__nav-toggle hos-icon-btn hos-icon-btn--md hos-focus-visible"
+              aria-expanded={navOpen}
+              aria-controls="hos-main-nav"
+              onClick={() => setNavOpen((v) => !v)}
+            >
+              {navOpen ? <X size={20} strokeWidth={1.5} /> : <Menu size={20} strokeWidth={1.5} />}
+              <span className="hos-sr-only">{navOpen ? 'Close menu' : 'Open menu'}</span>
+            </button>
             {topbarStart}
             {locationSwitcher}
           </div>
@@ -95,7 +166,9 @@ export function SidebarLayout({
             {userMenu}
           </div>
         </header>
-        <main className="hos-shell__content">{children}</main>
+        <main className="hos-shell__content" id="hos-main-content">
+          {children}
+        </main>
       </div>
     </div>
   );

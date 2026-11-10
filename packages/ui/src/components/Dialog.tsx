@@ -31,7 +31,10 @@ export function Dialog({
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="hos-overlay" />
-        <DialogPrimitive.Content className="hos-dialog">
+        <DialogPrimitive.Content
+          className="hos-dialog"
+          {...(description ? {} : { 'aria-describedby': undefined })}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--hos-space-4)', alignItems: 'flex-start' }}>
             <div>
               <DialogPrimitive.Title className="hos-dialog__title">{title}</DialogPrimitive.Title>

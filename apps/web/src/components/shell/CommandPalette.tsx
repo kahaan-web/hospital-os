@@ -55,7 +55,7 @@ export function CommandPalette({ items, open, onOpenChange }: CommandPaletteProp
       description="Jump to a page or action. Press Ctrl+K to open."
     >
       <div style={{ display: 'flex', gap: 'var(--hos-space-2)', alignItems: 'center' }}>
-        <Search size={18} aria-hidden style={{ color: 'var(--hos-fg-muted)' }} />
+        <Search size={18} aria-hidden strokeWidth={1.5} style={{ color: 'var(--hos-fg-muted)' }} />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -65,14 +65,15 @@ export function CommandPalette({ items, open, onOpenChange }: CommandPaletteProp
         />
       </div>
       <ul
-        role="listbox"
+        role="menu"
         aria-label="Commands"
         style={{ listStyle: 'none', margin: 'var(--hos-space-4) 0 0', padding: 0 }}
       >
         {filtered.map((item) => (
-          <li key={item.id}>
+          <li key={item.id} role="none">
             <button
               type="button"
+              role="menuitem"
               className="hos-dropdown__item"
               style={{ width: '100%' }}
               onClick={() => {
@@ -86,7 +87,7 @@ export function CommandPalette({ items, open, onOpenChange }: CommandPaletteProp
           </li>
         ))}
         {filtered.length === 0 ? (
-          <li style={{ padding: 'var(--hos-space-3)', color: 'var(--hos-fg-muted)', fontSize: 'var(--hos-text-sm)' }}>
+          <li role="none" style={{ padding: 'var(--hos-space-3)', color: 'var(--hos-fg-muted)', fontSize: 'var(--hos-text-sm)' }}>
             No matching commands.
           </li>
         ) : null}

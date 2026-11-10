@@ -25,6 +25,10 @@ export interface DataTableProps<T> {
 
 type SortDir = 'asc' | 'desc';
 
+function compareValues(av: string | number, bv: string | number): number {
+  return String(av).localeCompare(String(bv), 'en-IN', { numeric: true, sensitivity: 'base' });
+}
+
 export function DataTable<T>({
   data,
   columns,
@@ -50,9 +54,7 @@ export function DataTable<T>({
       const col = columns.find((c) => c.id === sortCol);
       if (col) {
         rows = [...rows].sort((a, b) => {
-          const av = col.accessor(a);
-          const bv = col.accessor(b);
-          const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+          const cmp = compareValues(col.accessor(a), col.accessor(b));
           return sortDir === 'asc' ? cmp : -cmp;
         });
       }
@@ -72,6 +74,11 @@ export function DataTable<T>({
     } else {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     }
+  };
+
+  const sortAria = (colId: string): 'ascending' | 'descending' | 'none' | undefined => {
+    if (sortCol !== colId) return 'none';
+    return sortDir === 'asc' ? 'ascending' : 'descending';
   };
 
   return (
@@ -96,18 +103,18 @@ export function DataTable<T>({
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.id} scope="col">
+                <th key={col.id} scope="col" aria-sort={col.sortable ? sortAria(col.id) : undefined}>
                   {col.sortable ? (
                     <button type="button" onClick={() => toggleSort(col)} aria-label={`Sort by ${col.header}`}>
                       {col.header}
                       {sortCol === col.id ? (
                         sortDir === 'asc' ? (
-                          <ArrowUp size={14} />
+                          <ArrowUp size={14} strokeWidth={1.5} />
                         ) : (
-                          <ArrowDown size={14} />
+                          <ArrowDown size={14} strokeWidth={1.5} />
                         )
                       ) : (
-                        <ArrowUpDown size={14} style={{ opacity: 0.4 }} />
+                        <ArrowUpDown size={14} strokeWidth={1.5} style={{ opacity: 0.4 }} />
                       )}
                     </button>
                   ) : (

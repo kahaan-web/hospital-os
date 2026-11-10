@@ -12,6 +12,13 @@ export interface FieldProps {
   children: ReactNode;
 }
 
+function mergeDescribedBy(existing: string | undefined, next: string | undefined): string | undefined {
+  if (!next) return existing;
+  if (!existing) return next;
+  const parts = new Set([...existing.split(/\s+/).filter(Boolean), ...next.split(/\s+/).filter(Boolean)]);
+  return [...parts].join(' ');
+}
+
 export function Field({ label, hint, error, required, htmlFor, className, children }: FieldProps) {
   const autoId = useId();
   const controlId = htmlFor ?? autoId;
@@ -21,12 +28,15 @@ export function Field({ label, hint, error, required, htmlFor, className, childr
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
 
   const child =
-    isValidElement(children) && !htmlFor
+    isValidElement(children)
       ? cloneElement(children as ReactElement<Record<string, unknown>>, {
           id: (children.props as { id?: string }).id ?? controlId,
-          'aria-describedby': describedBy,
-          'aria-invalid': error ? true : undefined,
-          invalid: error ? true : undefined,
+          'aria-describedby': mergeDescribedBy(
+            (children.props as { 'aria-describedby'?: string })['aria-describedby'],
+            describedBy,
+          ),
+          'aria-invalid': error ? true : (children.props as { 'aria-invalid'?: boolean })['aria-invalid'],
+          invalid: error ? true : (children.props as { invalid?: boolean }).invalid,
         } as Record<string, unknown>)
       : children;
 

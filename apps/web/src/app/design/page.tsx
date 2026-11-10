@@ -12,8 +12,10 @@ import {
   DatePicker,
   Dialog,
   Drawer,
+  DropdownMenu,
   EmptyState,
   Field,
+  IconButton,
   Input,
   ModuleTile,
   MoneyInput,
@@ -31,9 +33,10 @@ import {
   Switch,
   Tabs,
   Textarea,
+  Tooltip,
   useToast,
 } from '@hos/ui';
-import { Inbox } from 'lucide-react';
+import { Bell, Inbox, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { DensityToggle } from '@/components/shell/DensityToggle';
 import { ThemeToggle } from '@/components/shell/ThemeToggle';
@@ -113,12 +116,29 @@ export default function DesignPage() {
 
         <Card>
           <CardHeader title="Actions & forms" description="Buttons, fields, and India-specific inputs." />
-          <CardBody style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hos-space-3)' }}>
+          <CardBody style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hos-space-3)', alignItems: 'center' }}>
             <Button>Primary</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="danger">Danger</Button>
             <Button loading>Loading</Button>
+            <Tooltip content="Front-desk alerts">
+              <IconButton label="Notifications">
+                <Bell size={18} strokeWidth={1.5} />
+              </IconButton>
+            </Tooltip>
+            <DropdownMenu
+              label="Quick settings"
+              trigger={
+                <Button variant="secondary" size="sm">
+                  <Settings size={16} strokeWidth={1.5} aria-hidden /> Menu
+                </Button>
+              }
+              items={[
+                { id: 'density', label: 'Toggle density', onSelect: () => undefined },
+                { id: 'theme', label: 'Toggle theme', onSelect: () => undefined },
+              ]}
+            />
           </CardBody>
         </Card>
 
@@ -186,8 +206,22 @@ export default function DesignPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Onboarding stepper" description="8-step wizard uses horizontal mode; vertical for review panels." />
-            <CardBody>
+            <CardHeader title="Onboarding stepper" description="Vertical stepper for the 8-step wizard; horizontal for compact review headers." />
+            <CardBody style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--hos-space-6)' }}>
+              <Stepper
+                orientation="vertical"
+                currentStepId="plan"
+                steps={[
+                  { id: 'signup', label: 'Sign up' },
+                  { id: 'facility', label: 'Facility' },
+                  { id: 'locations', label: 'Locations' },
+                  { id: 'plan', label: 'Plan' },
+                  { id: 'addons', label: 'Add-ons' },
+                  { id: 'checkout', label: 'Review & pay' },
+                  { id: 'invoice', label: 'Tax invoice' },
+                  { id: 'provisioning', label: 'Set up' },
+                ]}
+              />
               <Stepper
                 orientation="horizontal"
                 currentStepId="plan"
@@ -196,10 +230,6 @@ export default function DesignPage() {
                   { id: 'facility', label: 'Facility' },
                   { id: 'locations', label: 'Locations' },
                   { id: 'plan', label: 'Plan' },
-                  { id: 'addons', label: 'Add-ons' },
-                  { id: 'checkout', label: 'Checkout' },
-                  { id: 'invoice', label: 'Invoice' },
-                  { id: 'provisioning', label: 'Go live' },
                 ]}
               />
             </CardBody>
@@ -224,9 +254,9 @@ export default function DesignPage() {
               label: 'Modules',
               content: (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--hos-space-4)' }}>
-                  <ModuleTile title="Patient Registration" state="enabled" description="OPD intake and UHID." featureCount={24} />
+                  <ModuleTile title="Patient Registration" state="enabled" description="OPD intake and UHID." featureCount={24} onOpen={() => undefined} />
                   <ModuleTile title="Lab Information System" state="locked" onCta={() => undefined} featureCount={18} />
-                  <ModuleTile title="CPOE" state="coming-soon" description="Clinical ordering (sheet-only today)." />
+                  <ModuleTile title="CPOE" state="coming_soon" description="Clinical ordering (sheet-only today)." />
                 </div>
               ),
             },

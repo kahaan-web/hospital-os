@@ -20,9 +20,9 @@ export default function HomePage() {
           description="Calm, modern HMIS for Indian nursing homes and clinics. Phase A scaffolding is live."
         />
         <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-3)' }}>
-          <Link href="/design" style={{ textDecoration: 'none' }}>
-            <Button style={{ width: '100%' }}>View design system</Button>
-          </Link>
+          <Button asChild style={{ width: '100%' }}>
+            <Link href="/design">View design system</Link>
+          </Button>
           <p style={{ margin: 0, fontSize: 'var(--hos-text-sm)', color: 'var(--hos-fg-muted)', textAlign: 'center' }}>
             Setup wizard and tenant app are wired by the admin-wizard worker.
           </p>

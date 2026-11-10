@@ -1,7 +1,10 @@
+import { createTranslator } from '@hos/shared';
 import type { ReactNode } from 'react';
 import { cn } from '../lib/cn';
 import { Badge } from './Badge';
 import { PriceDisplay } from './PriceDisplay';
+
+const t = createTranslator('en');
 
 export interface PlanCardProps {
   name: ReactNode;
@@ -46,7 +49,10 @@ export function PlanCard({
       {monthlyPaise !== undefined ? (
         <p style={{ margin: 'var(--hos-space-4) 0 0' }}>
           <PriceDisplay paise={monthlyPaise} />
-          <span style={{ color: 'var(--hos-fg-muted)', fontSize: 'var(--hos-text-sm)' }}> / location / month</span>
+          <span style={{ color: 'var(--hos-fg-muted)', fontSize: 'var(--hos-text-sm)' }}>
+            {' '}
+            {t('common.perLocationMonth')}
+          </span>
         </p>
       ) : null}
       {annualPaise !== undefined ? (

@@ -4,7 +4,9 @@ import { cn } from '../lib/cn';
 
 export interface StepperStep {
   id: string;
-  label: ReactNode;
+  label: string;
+  /** Overrides the default spoken step name (label is still shown visually). */
+  ariaLabel?: string;
   description?: ReactNode;
 }
 
@@ -14,6 +16,12 @@ export interface StepperProps {
   orientation?: 'horizontal' | 'vertical';
   className?: string;
   onStepClick?: (stepId: string, index: number) => void;
+}
+
+function stepStatus(index: number, currentIndex: number): 'complete' | 'current' | 'upcoming' {
+  if (index < currentIndex) return 'complete';
+  if (index === currentIndex) return 'current';
+  return 'upcoming';
 }
 
 export function Stepper({
@@ -42,15 +50,18 @@ export function Stepper({
         }}
       >
         {steps.map((step, index) => {
-          const isComplete = index < currentIndex;
-          const isCurrent = step.id === currentStepId;
-          const state = isComplete ? 'complete' : isCurrent ? 'current' : 'upcoming';
+          const status = stepStatus(index, currentIndex);
+          const isComplete = status === 'complete';
+          const isCurrent = status === 'current';
           const clickable = onStepClick && (isComplete || isCurrent);
+          const spoken =
+            step.ariaLabel ??
+            `${step.label}, step ${index + 1} of ${steps.length}, ${status === 'complete' ? 'completed' : status === 'current' ? 'current' : 'upcoming'}`;
 
           return (
             <li
               key={step.id}
-              className={cn('hos-stepper__item', `hos-stepper__item--${state}`)}
+              className={cn('hos-stepper__item', `hos-stepper__item--${status}`)}
               style={{
                 display: 'flex',
                 flex: orientation === 'horizontal' ? 1 : undefined,
@@ -74,9 +85,9 @@ export function Stepper({
                 className="hos-stepper__indicator hos-stepper__indicator-btn hos-focus-visible"
                 disabled={!clickable}
                 onClick={() => onStepClick?.(step.id, index)}
-                aria-label={`${step.label as string}, step ${index + 1} of ${steps.length}`}
+                aria-label={spoken}
               >
-                {isComplete ? <Check size={14} aria-hidden /> : index + 1}
+                {isComplete ? <Check size={14} aria-hidden strokeWidth={1.5} /> : index + 1}
               </button>
               <div style={{ minWidth: 0 }}>
                 <p className="hos-stepper__label">{step.label}</p>

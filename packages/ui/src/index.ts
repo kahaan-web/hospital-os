@@ -26,7 +26,12 @@ export { MoneyInput, type MoneyInputProps } from './components/MoneyInput';
 export { PriceDisplay, type PriceDisplayProps } from './components/PriceDisplay';
 export { PlanCard, type PlanCardProps } from './components/PlanCard';
 export { ModuleTile, type ModuleTileProps, type ModuleTileState } from './components/ModuleTile';
-export { SidebarLayout, type ShellNavItem, type SidebarLayoutProps } from './components/SidebarLayout';
+export {
+  SidebarLayout,
+  type ShellNavItem,
+  type ShellNavLinkRenderer,
+  type SidebarLayoutProps,
+} from './components/SidebarLayout';
 export { PageHeader, type PageHeaderProps } from './components/PageHeader';
 export { StatCard, type StatCardProps } from './components/StatCard';
 export { PrintLayout, type PrintLayoutProps } from './components/PrintLayout';

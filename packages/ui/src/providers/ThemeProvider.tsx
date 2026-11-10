@@ -19,6 +19,10 @@ function systemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
+  return mode === 'system' ? systemTheme() : mode;
+}
+
 function applyTheme(resolved: 'light' | 'dark') {
   document.documentElement.dataset.theme = resolved;
 }
@@ -31,15 +35,19 @@ export function ThemeProvider({
   defaultTheme?: ThemeMode;
 }) {
   const [theme, setThemeState] = useState<ThemeMode>(defaultTheme);
-  const [resolved, setResolved] = useState<'light' | 'dark'>('light');
+  const [resolved, setResolved] = useState<'light' | 'dark'>(() =>
+    typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+  );
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    if (stored) setThemeState(stored);
+    if (stored === 'light' || stored === 'dark' || stored === 'system') {
+      setThemeState(stored);
+    }
   }, []);
 
   useEffect(() => {
-    const next = theme === 'system' ? systemTheme() : theme;
+    const next = resolveTheme(theme);
     setResolved(next);
     applyTheme(next);
   }, [theme]);

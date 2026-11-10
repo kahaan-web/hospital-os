@@ -1,18 +1,24 @@
+import type { ModuleAccess } from '@hos/shared';
+import { createTranslator } from '@hos/shared';
 import type { ReactNode } from 'react';
-import { Lock, Sparkles } from 'lucide-react';
+import { Clock, Lock } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { Badge } from './Badge';
 import { Button } from './Button';
 
-export type ModuleTileState = 'enabled' | 'locked' | 'coming-soon';
+const t = createTranslator('en');
+
+/** @deprecated Use `ModuleAccess` from `@hos/shared` */
+export type ModuleTileState = ModuleAccess;
 
 export interface ModuleTileProps {
   title: ReactNode;
   description?: ReactNode;
-  state: ModuleTileState;
+  state: ModuleAccess;
   icon?: ReactNode;
   ctaLabel?: string;
   onCta?: () => void;
+  onOpen?: () => void;
   featureCount?: number;
 }
 
@@ -23,14 +29,17 @@ export function ModuleTile({
   icon,
   ctaLabel,
   onCta,
+  onOpen,
   featureCount,
 }: ModuleTileProps) {
+  const showCta = state === 'locked' || state === 'enabled' || state === 'coming_soon';
+
   return (
     <article
       className={cn(
         'hos-module-tile',
         state === 'locked' && 'hos-module-tile--locked',
-        state === 'coming-soon' && 'hos-module-tile--soon',
+        state === 'coming_soon' && 'hos-module-tile--soon',
       )}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--hos-space-2)' }}>
@@ -47,30 +56,37 @@ export function ModuleTile({
         </div>
         {state === 'locked' ? (
           <Badge tone="warning">
-            <Lock size={12} aria-hidden /> Locked
+            <Lock size={12} aria-hidden strokeWidth={1.5} /> {t('access.locked')}
           </Badge>
-        ) : state === 'coming-soon' ? (
+        ) : state === 'coming_soon' ? (
           <Badge tone="neutral">
-            <Sparkles size={12} aria-hidden /> Coming soon
+            <Clock size={12} aria-hidden strokeWidth={1.5} /> {t('access.coming_soon')}
           </Badge>
-        ) : (
-          <Badge tone="success">Included</Badge>
-        )}
+        ) : state === 'enabled' ? (
+          <Badge tone="success">{t('access.enabled')}</Badge>
+        ) : null}
       </div>
       {featureCount !== undefined ? (
         <p style={{ margin: 0, fontSize: 'var(--hos-text-xs)', color: 'var(--hos-fg-muted)' }}>
           {featureCount} features in catalogue
         </p>
       ) : null}
-      {state === 'locked' && onCta ? (
-        <Button variant="secondary" size="sm" onClick={onCta}>
-          {ctaLabel ?? 'Upgrade to unlock'}
-        </Button>
-      ) : null}
-      {state === 'coming-soon' ? (
-        <p style={{ margin: 0, fontSize: 'var(--hos-text-sm)', color: 'var(--hos-fg-muted)' }}>
-          Configurable when released by App Admin.
-        </p>
+      {showCta ? (
+        <div style={{ display: 'flex', gap: 'var(--hos-space-2)', flexWrap: 'wrap' }}>
+          {state === 'enabled' ? (
+            <Button variant="primary" size="sm" onClick={onOpen ?? onCta}>
+              {ctaLabel ?? 'Open module'}
+            </Button>
+          ) : state === 'locked' ? (
+            <Button variant="secondary" size="sm" onClick={onCta}>
+              {ctaLabel ?? t('common.upgrade')}
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" disabled>
+              {ctaLabel ?? t('access.coming_soon')}
+            </Button>
+          )}
+        </div>
       ) : null}
     </article>
   );

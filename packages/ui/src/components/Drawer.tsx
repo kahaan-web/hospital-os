@@ -36,6 +36,7 @@ export function Drawer({
         <DialogPrimitive.Overlay className="hos-overlay" />
         <DialogPrimitive.Content
           className="hos-drawer"
+          aria-describedby={undefined}
           style={{
             ...(side === 'left' ? { left: 0, right: 'auto', borderLeft: 'none', borderRight: '1px solid var(--hos-border-default)' } : sideStyle),
           }}

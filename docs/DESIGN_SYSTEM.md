@@ -1,66 +1,65 @@
 # Hospital OS design system (`@hos/ui`)
 
-Calm teal–slate healthcare UI for nursing-home owners and all-day front-desk use. Tokens are CSS variables; components are React + Radix primitives with WCAG 2.2 AA focus rings and contrast targets.
+Calm **OPD-desk** UI: clinical teal `#0E6B66`, tinted neutrals, hairline borders, IBM Plex Sans with Noto Sans Devanagari fallback. Follow `docs/DESIGN_GUIDE.md` for product-wide rules.
 
 ## Principles
 
-- **Trust first:** generous whitespace, soft elevation, no aggressive reds except clinical errors.
-- **India-native:** rupee/paise (`formatINR`, `MoneyInput`), `en-IN` grouping, `DD/MM/YYYY` date entry (`DatePicker` + shared `parseDDMMYYYY`).
-- **Two densities:** `data-density="comfortable"` (default) and `compact` for busy counters — toggled via `DensityProvider` / `DensityToggle`.
-- **Two themes:** `data-theme="light"` | `dark"` on `<html>`, with optional `system` in `ThemeProvider`.
+- **Dense and scannable:** 4/8px spacing, 6–8px radius, Lucide line icons (no emoji).
+- **India-native:** rupee/paise (`formatINR`, `MoneyInput`), `en-IN` grouping, `DD/MM/YYYY` (`DatePicker` + shared parsers), IST “today” in calendars.
+- **Two densities:** `data-density="comfortable"` | `compact` via `DensityProvider`.
+- **Two themes:** `data-theme="light"` | `dark"` on `<html>`; inline boot script in `apps/web` layout prevents flash; `ThemeProvider` persists `hos-theme`.
 
 ## Tokens (`packages/ui/src/styles.css`)
 
 | Layer | Notes |
 | --- | --- |
-| Colour | Brand teal scale; neutrals; **clinical status** tokens (`success`, `warning`, `error`, `info`, `critical`) with paired bg/fg/border for badges and alerts |
-| Type | Plus Jakarta Sans + Inter (variable, loaded in `apps/web` layout); scale `--hos-text-xs` → `3xl` |
-| Space / radius / shadow | Density-aware spacing and control heights |
-| Motion | `--hos-motion-fast/base/slow`, ease curve for hover/focus |
+| Colour | Guide palette mapped to `--hos-brand-*`, tinted neutrals, clinical status (`success`, `warning`, `error`, `info`) |
+| Type | IBM Plex Sans + Noto Sans Devanagari (`@fontsource/*` in `apps/web` layout); scale per DESIGN_GUIDE |
+| Depth | Cards/tables use borders only; overlay shadow allowed on menus/dialogs |
+| Focus | 2px teal outline (high-contrast safe); `prefers-reduced-motion` respected |
 
-Import once in the app: `@import '@hos/ui/styles.css'` in `globals.css`.
+Import once: `@import '@hos/ui/styles.css'` in `globals.css`.
 
-## Providers (wrap in `apps/web/src/app/providers.tsx`)
+## Providers
 
-- `ThemeProvider` — persists theme in `localStorage` (`hos-theme`)
-- `DensityProvider` — persists density (`hos-density`)
-- `ToastProvider` + `useToast`
+- `ThemeProvider` — `light` | `dark` | `system`, validated storage
+- `DensityProvider` — `comfortable` | `compact`
+- `ToastProvider` + `useToast` — single live region, assertive errors, pause on hover/focus
 - `TooltipProvider` — required for tooltips
 
 ## Component map
 
-All exports live in `packages/ui/src/index.ts`. One file per component under `packages/ui/src/components/`.
+All exports in `packages/ui/src/index.ts`.
 
 | Area | Components |
 | --- | --- |
-| Forms | `Button`, `IconButton`, `Input`, `Textarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup`, `DatePicker`, `Field`, `MoneyInput` |
+| Forms | `Button` (`asChild`), `IconButton`, `Input`, `Textarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup`, `DatePicker`, `Field`, `MoneyInput` |
 | Display | `Card`, `Badge`, `PriceDisplay`, `PlanCard`, `ModuleTile`, `StatCard`, `PageHeader`, `EmptyState`, `Skeleton`, `Spinner` |
 | Overlays | `Dialog`, `Drawer`, `Tooltip`, `DropdownMenu`, `Toast` |
-| Navigation / layout | `Tabs`, `Stepper`, `SidebarLayout`, `PrintLayout`, `DataTable` |
+| Navigation / layout | `Tabs`, `Stepper`, `SidebarLayout` (+ `renderNavLink`, mobile drawer), `PrintLayout`, `DataTable` |
 
-**Module tile states:** `enabled` | `locked` | `coming-soon` (maps to entitlement `enabled` / `locked` / `coming_soon` in shells).
+**Module tile:** uses shared `ModuleAccess` (`enabled` | `locked` | `coming_soon`).
 
-**Stepper:** horizontal for the 8-step onboarding wizard; vertical variant for side panels.
+**Stepper:** **vertical** for the 8-step wizard; horizontal for compact headers. Step `label` is a string; `ariaLabel` optional.
 
 ## App shell (`apps/web/src/components/shell`)
 
-Props-only shells for other workers:
-
-- `TenantShell` — sidebar from `ModuleStateDto[]`; locked modules keep nav but route to upsell (`onModuleUpgrade`)
-- `AdminShell` — routes from `docs/CONTRACTS.md` web map (`/admin/*`)
-- `LocationSwitcher`, `UserMenu`, `ThemeToggle`, `DensityToggle`, `CommandPalette` (Ctrl+K)
+- `TenantShell` — entitlements, `/app/modules/[key]`, hidden modules filtered, settings includes audit, prefix-aware active state
+- `AdminShell` — `/admin/*` map, `Package` icon for module catalogue
+- `LocationSwitcher`, `UserMenu` (shows email), `ThemeToggle`, `DensityToggle`, `CommandPalette` (Ctrl+K)
 
 ## Showcase
 
-`/design` renders every component in light/dark and both densities.
+`/design` renders every component (including `Tooltip`, `DropdownMenu`, `IconButton`, vertical stepper) in light/dark and both densities.
 
 ## Accessibility checklist
 
-- Visible `:focus-visible` rings (`--hos-focus-ring`) on interactive controls
-- `Field` wires `aria-describedby`, `aria-invalid`, required markers
-- Tables use `<th scope="col">`; stepper uses `aria-current="step"`
-- Toasts use `aria-live="polite"`
+- Teal `:focus-visible` outline on interactive controls
+- `Field` always wires `id`, `aria-describedby`, `aria-invalid` into child controls
+- Sortable tables expose `aria-sort`; combobox uses `listbox` + arrow keys
+- Sidebar locked nav: Lucide lock + screen-reader “upgrade available”; no misleading `aria-disabled`
+- Responsive shell: collapsible drawer below 768px
 
 ## Dependencies
 
-Radix packages are declared only in `packages/ui/package.json`. Do not add UI deps at the app layer except fonts and Next.js.
+Radix in `packages/ui` only. App loads fonts via `@fontsource/ibm-plex-sans` and `@fontsource/noto-sans-devanagari`.
