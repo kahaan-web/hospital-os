@@ -326,7 +326,11 @@ export async function registerReport(tx: Tx, q: RegisterReportQuery): Promise<Re
 
 export function registerReportCsv(rows: RegisterReportRow[]): string {
   const header = ['UHID', 'Name', 'Gender', 'Age', 'Mobile', 'City', 'State', 'Registered at'];
-  const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
+  // Prefix cells that a spreadsheet would read as a formula (CSV injection), then quote.
+  const esc = (v: string) => {
+    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+    return `"${safe.replaceAll('"', '""')}"`;
+  };
   const lines = [header.join(',')].concat(
     rows.map((r) => [r.uhid, r.fullName, r.gender, r.ageLabel, r.mobile, r.city, r.stateCode, r.registeredAt].map(esc).join(',')),
   );
