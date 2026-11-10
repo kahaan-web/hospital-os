@@ -5,6 +5,7 @@ export const en = {
     shellTitle: 'Setup wizard',
     back: 'Back',
     samplePrice: 'Sample price',
+    priceNotSet: 'Price not set',
     steps: {
       signup: 'Sign up',
       facility: 'Facility',
@@ -16,14 +17,55 @@ export const en = {
       provisioning: 'Go live',
     },
   },
+  common: {
+    saveFailed: 'Could not save. Check the fields below and try again.',
+    downloadPdf: 'Download PDF',
+    print: 'Print',
+    remove: 'Remove',
+    retry: 'Try again',
+    addAnother: 'Add another location',
+    signIn: 'Sign in',
+  },
   signup: {
     title: 'Create your account',
+    description: 'Owner or manager sign-up with mock OTP and privacy consent.',
     otpTitle: 'Verify mobile (mock OTP)',
+    yourName: 'Your name',
+    email: 'Email',
+    mobile: 'Mobile (+91)',
+    password: 'Password',
+    role: 'Role',
+    roleOwner: 'Owner',
+    roleManager: 'Manager',
+    acceptTerms: 'I accept the terms of service',
+    acceptPrivacy: 'I consent to the privacy notice for account and billing',
+    productUpdates: 'Send product updates (optional)',
+    sendOtp: 'Send OTP',
+    otpLabel: '6-digit OTP',
+    verifyContinue: 'Verify and continue',
+    otpSent: 'OTP sent (mock)',
+    otpSentDesc: 'Check server logs in dev.',
+    signupFailed: 'Sign-up failed. Check your details and try again.',
+    otpFailed: 'OTP verification failed. Check the code and try again.',
+    alreadyAccount: 'Already have an account?',
   },
   facility: {
     title: 'Facility profile',
     description: 'Legal identity, GSTIN and bed capacity for your tier.',
+    facilityType: 'Facility type',
+    legalName: 'Legal name',
+    displayName: 'Display name',
     gstinHint: 'Optional — leave blank if not registered',
+    gstinChecksumWarn: 'Format looks fine, but the check digit does not match — double-check before invoicing.',
+    registrationNo: 'Registration / licence no.',
+    bedCount: 'Bed count',
+    bedCountHint: 'Whole number; leave blank for clinics without beds, or enter 0',
+    bedCountInvalid: 'Enter the number of beds, or 0 if none',
+    specialities: 'Specialities',
+    specialitiesHint: 'Pick all that apply',
+    logo: 'Logo',
+    logoHint: 'PNG/JPG/SVG up to 1 MB (optional)',
+    logoUploadFailed: 'Logo upload failed. Try a smaller PNG or JPG.',
     saveContinue: 'Continue to locations',
     saved: 'Facility saved',
   },
@@ -33,13 +75,28 @@ export const en = {
     useDemo: 'Prefill Mumbai, Indore, Jaipur',
     saveContinue: 'Continue to plan',
     saved: 'Locations saved',
+    locationN: 'Location {n}',
+    locationName: 'Location name',
+    address1: 'Address line 1',
+    address2: 'Address line 2',
+    city: 'City',
+    state: 'State',
+    pincode: 'PIN code',
+    phone: 'Phone',
+    departments: 'Departments',
+    departmentsHint: 'Comma-separated list',
   },
   plan: {
     title: 'Choose plan',
-    description: 'Live comparison from App Admin. Toggle monthly or annual billing.',
+    description: 'Compare tiers and pick monthly or annual billing. Prices shown are samples from your catalogue.',
     saveContinue: 'Continue to add-ons',
     saved: 'Plan selected',
     samplePriceBadge: 'Sample price',
+    annualBilling: 'Annual billing (2 months free)',
+    billableLocations: 'Billable locations',
+    billableLocationsHint: 'Usually matches branches you added',
+    featureSummary: '{count} features included',
+    livePriceSummary: 'Estimated total',
   },
   addons: {
     title: 'Add-on modules',
@@ -47,9 +104,12 @@ export const en = {
     empty: 'No purchasable add-ons for this plan.',
     add: 'Add to order',
     remove: 'Remove from order',
+    added: 'Added',
+    notAdded: 'Not added',
     pricePerLocation: '{price}/location/month · Sample price',
     saveContinue: 'Review and pay',
     saved: 'Add-ons saved',
+    livePriceSummary: 'Estimated total',
   },
   checkout: {
     title: 'Review and pay',
@@ -59,22 +119,34 @@ export const en = {
   },
   invoice: {
     title: 'GST tax invoice',
-    description: 'Download PDF or print this HTML invoice. Supplier details use platform placeholders.',
+    description: 'Download PDF or print the full invoice. Seller details use demo placeholders until you go live.',
     notReady: 'Complete payment first.',
     backCheckout: 'Back to checkout',
     continueProvisioning: 'Continue to provisioning',
     notReadyToast: 'Invoice not ready yet',
+    downloadPdf: 'Download PDF',
+    print: 'Print',
   },
   provisioning: {
     title: 'Setting up your hospital',
+    description: 'Creating tenant, locations, roles and sample masters.',
+    loading: 'Setting up your hospital workspace…',
+    provisioned: 'Tenant provisioned',
+    failed: 'Provisioning failed. Try again or contact support if this keeps happening.',
+  },
+  quote: {
+    taxable: 'Taxable',
+    igst: 'IGST',
+    cgst: 'CGST',
+    sgst: 'SGST',
+    sampleFootnote: 'Sample price — final amount comes from the server quote at checkout.',
   },
 } as const;
 
 export type WebDictionary = typeof en;
-export type WebMessageKey = {
-  [K in keyof WebDictionary]: WebDictionary[K] extends string
-    ? K
-    : WebDictionary[K] extends object
-      ? `${K & string}.${keyof WebDictionary[K] & string}`
-      : never;
-}[keyof WebDictionary];
+
+type Leaves<T, P extends string = ''> = {
+  [K in keyof T & string]: T[K] extends string ? `${P}${K}` : Leaves<T[K], `${P}${K}.`>;
+}[keyof T & string];
+
+export type WebMessageKey = Leaves<WebDictionary>;

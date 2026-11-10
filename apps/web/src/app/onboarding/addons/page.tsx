@@ -2,7 +2,7 @@
 
 import type { Catalog, OnboardingState } from '@hos/shared';
 import { addonSelectionSchema, fieldErrors } from '@hos/shared';
-import { Button, ModuleTile, PageHeader, useToast } from '@hos/ui';
+import { Badge, Button, ModuleTile, PageHeader, useToast } from '@hos/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
@@ -80,7 +80,7 @@ function AddonsForm({
       showToast({ tone: 'success', title: wt('addons.saved') });
       onSaved();
     } catch (e) {
-      setErrors({ form: e instanceof ApiError ? e.message : 'Save failed' });
+      setErrors({ form: e instanceof ApiError ? e.message : wt('common.saveFailed') });
     } finally {
       setBusy(false);
     }
@@ -95,7 +95,7 @@ function AddonsForm({
           const priceLine =
             mod.addonMonthlyPaise != null
               ? wt('addons.pricePerLocation', { price: formatINR(mod.addonMonthlyPaise) })
-              : wt('wizard.samplePrice');
+              : wt('wizard.priceNotSet');
           const toggle = () => setSelected((ids) => (on ? ids.filter((x) => x !== mod.id) : [...ids, mod.id]));
           return (
             <ModuleTile
@@ -107,10 +107,11 @@ function AddonsForm({
                   <span style={{ display: 'block', marginTop: 'var(--hos-space-1)', color: 'var(--hos-fg-muted)' }}>{priceLine}</span>
                 </>
               }
-              state={on ? 'enabled' : 'locked'}
+              state="locked"
+              selected={on}
+              statusBadge={<Badge tone={on ? 'success' : 'neutral'}>{on ? wt('addons.added') : wt('addons.notAdded')}</Badge>}
               ctaLabel={on ? wt('addons.remove') : wt('addons.add')}
               onCta={toggle}
-              onOpen={toggle}
             />
           );
         })}
@@ -118,7 +119,7 @@ function AddonsForm({
       {addons.length === 0 ? <p style={{ color: 'var(--hos-fg-muted)' }}>{wt('addons.empty')}</p> : null}
       {preview ? (
         <div style={{ marginTop: 'var(--hos-space-6)', maxWidth: '20rem' }}>
-          <QuoteSummary totals={preview.totals} label="Live price summary" />
+          <QuoteSummary totals={preview.totals} label={wt('addons.livePriceSummary')} />
         </div>
       ) : null}
       {errors.form ? <p style={{ color: 'var(--hos-fg-danger)' }}>{errors.form}</p> : null}

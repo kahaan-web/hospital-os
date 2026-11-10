@@ -9,6 +9,7 @@ import { useCallback, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
 import { ApiError, apiPut, apiRequest } from '@/lib/api';
+import { withoutField } from '@/lib/form-errors';
 
 export default function FacilityPage() {
   const router = useRouter();
@@ -43,32 +44,38 @@ function FacilityForm({
   });
   const [bedCountInput, setBedCountInput] = useState(t.bedCount != null ? String(t.bedCount) : '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [gstinWarn, setGstinWarn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const normaliseGstinOnBlur = useCallback(() => {
     const n = form.gstin.replace(/\s+/g, '').toUpperCase();
     setForm((f) => ({ ...f, gstin: n }));
     if (!n) {
-      setErrors((e) => {
-        const { gstin: _, ...rest } = e;
-        return rest;
-      });
+      setErrors((e) => withoutField(e, 'gstin'));
+      setGstinWarn(null);
       return;
     }
     const check = checkGstin(n);
     if (!check.valid) {
+      setGstinWarn(null);
       setErrors((e) => ({ ...e, gstin: check.error ?? 'GSTIN must be 15 characters, like 27ABCDE1234F1Z5' }));
     } else {
-      setErrors((e) => {
-        const { gstin: _, ...rest } = e;
-        return rest;
-      });
+      setErrors((e) => withoutField(e, 'gstin'));
+      setGstinWarn(check.checksumValid ? null : wt('facility.gstinChecksumWarn'));
     }
   }, [form.gstin]);
 
   const save = useCallback(async () => {
     const bedRaw = bedCountInput.trim();
-    const bedCount = bedRaw === '' ? Number.NaN : Number(bedRaw);
+    let bedCount: number | null = null;
+    if (bedRaw !== '') {
+      const n = Number(bedRaw);
+      if (!Number.isInteger(n) || n < 0) {
+        setErrors((e) => ({ ...e, bedCount: wt('facility.bedCountInvalid') }));
+        return;
+      }
+      bedCount = n;
+    }
     const payload = { ...form, bedCount };
     const parsed = facilitySchema.safeParse(payload);
     if (!parsed.success) {
@@ -81,18 +88,24 @@ function FacilityForm({
       showToast({ tone: 'success', title: wt('facility.saved') });
       onSaved();
     } catch (e) {
-      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: 'Save failed' });
+      setErrors(
+        e instanceof ApiError
+          ? { ...(e.fields ?? {}), form: e.message }
+          : { form: wt('common.saveFailed') },
+      );
     } finally {
       setBusy(false);
     }
   }, [form, bedCountInput, onSaved, showToast]);
+
+  const gstinHint = [wt('facility.gstinHint'), gstinWarn].filter(Boolean).join(' ');
 
   return (
     <>
       <PageHeader title={wt('facility.title')} description={wt('facility.description')} />
       <Card style={{ maxWidth: '40rem' }}>
         <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-4)' }}>
-          <Field label="Facility type" error={errors.facilityType}>
+          <Field label={wt('facility.facilityType')} error={errors.facilityType}>
             <Select
               value={form.facilityType}
               onChange={(e) => setForm((f) => ({ ...f, facilityType: e.target.value as typeof form.facilityType }))}
@@ -104,13 +117,13 @@ function FacilityForm({
               ))}
             </Select>
           </Field>
-          <Field label="Legal name" error={errors.legalName}>
+          <Field label={wt('facility.legalName')} error={errors.legalName}>
             <Input value={form.legalName} onChange={(e) => setForm((f) => ({ ...f, legalName: e.target.value }))} />
           </Field>
-          <Field label="Display name" error={errors.displayName}>
+          <Field label={wt('facility.displayName')} error={errors.displayName}>
             <Input value={form.displayName} onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))} />
           </Field>
-          <Field label="GSTIN" error={errors.gstin} hint={wt('facility.gstinHint')}>
+          <Field label="GSTIN" error={errors.gstin} hint={gstinHint}>
             <Input
               value={form.gstin}
               onChange={(e) => setForm((f) => ({ ...f, gstin: e.target.value }))}
@@ -119,10 +132,10 @@ function FacilityForm({
               spellCheck={false}
             />
           </Field>
-          <Field label="Registration / licence no." error={errors.registrationNo}>
+          <Field label={wt('facility.registrationNo')} error={errors.registrationNo}>
             <Input value={form.registrationNo} onChange={(e) => setForm((f) => ({ ...f, registrationNo: e.target.value }))} />
           </Field>
-          <Field label="Bed count" error={errors.bedCount} hint="Whole number; leave blank if not applicable">
+          <Field label={wt('facility.bedCount')} error={errors.bedCount} hint={wt('facility.bedCountHint')}>
             <Input
               type="number"
               inputMode="numeric"
@@ -131,7 +144,7 @@ function FacilityForm({
               onChange={(e) => setBedCountInput(e.target.value)}
             />
           </Field>
-          <Field label="Specialities" hint="Pick all that apply">
+          <Field label={wt('facility.specialities')} hint={wt('facility.specialitiesHint')}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-2)', maxHeight: '12rem', overflow: 'auto' }}>
               {SPECIALITIES.map((s) => (
                 <Checkbox
@@ -148,7 +161,7 @@ function FacilityForm({
               ))}
             </div>
           </Field>
-          <Field label="Logo" hint="PNG/JPG/SVG up to 1 MB (optional)">
+          <Field label={wt('facility.logo')} hint={wt('facility.logoHint')}>
             <Input
               type="file"
               accept="image/png,image/jpeg,image/svg+xml"
@@ -160,7 +173,7 @@ function FacilityForm({
                 try {
                   await apiRequest('/onboarding/logo', { method: 'POST', formData: fd });
                 } catch {
-                  showToast({ tone: 'error', title: 'Logo upload failed' });
+                  showToast({ tone: 'error', title: wt('facility.logoUploadFailed') });
                 }
               }}
             />

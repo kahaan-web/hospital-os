@@ -29,6 +29,25 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
   const id = state.invoiceId;
   const toastErrorRef = useRef(false);
 
+  const printHtmlInvoice = useCallback(() => {
+    if (!id) return;
+    const url = `${API_BASE}/billing/invoices/${id}/html`;
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      showToast({ tone: 'error', title: wt('invoice.notReadyToast') });
+      return;
+    }
+    const trigger = () => {
+      win.focus();
+      win.print();
+    };
+    if (win.document.readyState === 'complete') {
+      trigger();
+    } else {
+      win.addEventListener('load', trigger, { once: true });
+    }
+  }, [id, showToast]);
+
   const load = useCallback(
     async (invoiceId: string) => {
       try {
@@ -62,11 +81,11 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
           <div className="hos-invoice-actions no-print" style={{ display: 'flex', gap: 'var(--hos-space-3)', flexWrap: 'wrap' }}>
             <Button asChild>
               <a href={`${API_BASE}/billing/invoices/${invoice.id}/pdf`} download>
-                Download PDF
+                {wt('invoice.downloadPdf')}
               </a>
             </Button>
-            <Button variant="secondary" type="button" onClick={() => window.print()}>
-              Print
+            <Button variant="secondary" type="button" onClick={printHtmlInvoice}>
+              {wt('invoice.print')}
             </Button>
             <Button type="button" onClick={() => router.push('/onboarding/provisioning')}>
               {wt('invoice.continueProvisioning')}

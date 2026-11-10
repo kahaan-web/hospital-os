@@ -111,7 +111,7 @@ function LocationsForm({
       showToast({ tone: 'success', title: wt('locations.saved') });
       onSaved();
     } catch (e) {
-      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: 'Save failed' });
+      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: wt('common.saveFailed') });
     } finally {
       setBusy(false);
     }
@@ -137,34 +137,36 @@ function LocationsForm({
           <Card key={idx}>
             <CardBody style={{ display: 'grid', gap: 'var(--hos-space-3)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--hos-space-2)' }}>
-                <span style={{ fontWeight: 600, fontSize: 'var(--hos-text-sm)' }}>Location {idx + 1}</span>
+                <span style={{ fontWeight: 600, fontSize: 'var(--hos-text-sm)' }}>
+                  {wt('locations.locationN', { n: idx + 1 })}
+                </span>
                 {locations.length > 1 ? (
                   <Button type="button" variant="ghost" size="sm" onClick={() => setLocations((list) => list.filter((_, i) => i !== idx))}>
-                    Remove
+                    {wt('common.remove')}
                   </Button>
                 ) : null}
               </div>
-              <Field label="Location name" error={errors[`locations.${idx}.name`]}>
+              <Field label={wt('locations.locationName')} error={errors[`locations.${idx}.name`]}>
                 <Input value={loc.name} onChange={(e) => updateLocation(idx, { name: e.target.value })} invalid={!!errors[`locations.${idx}.name`]} />
               </Field>
-              <Field label="Address line 1" error={errors[`locations.${idx}.addressLine1`]}>
+              <Field label={wt('locations.address1')} error={errors[`locations.${idx}.addressLine1`]}>
                 <Input
                   value={loc.addressLine1}
                   onChange={(e) => updateLocation(idx, { addressLine1: e.target.value })}
                   invalid={!!errors[`locations.${idx}.addressLine1`]}
                 />
               </Field>
-              <Field label="Address line 2" error={errors[`locations.${idx}.addressLine2`]}>
+              <Field label={wt('locations.address2')} error={errors[`locations.${idx}.addressLine2`]}>
                 <Input value={loc.addressLine2 ?? ''} onChange={(e) => updateLocation(idx, { addressLine2: e.target.value })} />
               </Field>
-              <Field label="City" error={errors[`locations.${idx}.city`]}>
+              <Field label={wt('locations.city')} error={errors[`locations.${idx}.city`]}>
                 <Input
                   value={loc.city}
                   onChange={(e) => updateLocation(idx, { city: e.target.value })}
                   invalid={!!errors[`locations.${idx}.city`]}
                 />
               </Field>
-              <Field label="State" error={errors[`locations.${idx}.stateCode`]}>
+              <Field label={wt('locations.state')} error={errors[`locations.${idx}.stateCode`]}>
                 <Select
                   value={loc.stateCode}
                   onChange={(e) => updateLocation(idx, { stateCode: e.target.value })}
@@ -177,19 +179,19 @@ function LocationsForm({
                   ))}
                 </Select>
               </Field>
-              <Field label="PIN code" error={errors[`locations.${idx}.pincode`]}>
+              <Field label={wt('locations.pincode')} error={errors[`locations.${idx}.pincode`]}>
                 <Input
                   value={loc.pincode}
                   onChange={(e) => updateLocation(idx, { pincode: e.target.value })}
                   invalid={!!errors[`locations.${idx}.pincode`]}
                 />
               </Field>
-              <Field label="Phone" error={errors[`locations.${idx}.phone`]}>
+              <Field label={wt('locations.phone')} error={errors[`locations.${idx}.phone`]}>
                 <Input value={loc.phone ?? ''} onChange={(e) => updateLocation(idx, { phone: e.target.value })} />
               </Field>
               <Field
-                label="Departments"
-                hint="Comma-separated list"
+                label={wt('locations.departments')}
+                hint={wt('locations.departmentsHint')}
                 error={errors[`locations.${idx}.departments`]}
               >
                 <Input
@@ -208,7 +210,7 @@ function LocationsForm({
           </Card>
         ))}
         <Button type="button" variant="secondary" onClick={() => setLocations((l) => [...l, emptyLocation()])}>
-          Add another location
+          {wt('common.addAnother')}
         </Button>
         {errors.form ? (
           <p role="alert" style={{ color: 'var(--hos-fg-danger)' }}>

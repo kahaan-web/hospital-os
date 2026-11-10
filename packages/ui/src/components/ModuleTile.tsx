@@ -20,6 +20,10 @@ export interface ModuleTileProps {
   onCta?: () => void;
   onOpen?: () => void;
   featureCount?: number;
+  /** Replaces the default locked/enabled badge (e.g. add-on order picker). */
+  statusBadge?: ReactNode;
+  /** With `statusBadge`, renders a toggle CTA with `aria-pressed` instead of open/upgrade buttons. */
+  selected?: boolean;
 }
 
 export function ModuleTile({
@@ -31,8 +35,11 @@ export function ModuleTile({
   onCta,
   onOpen,
   featureCount,
+  statusBadge,
+  selected,
 }: ModuleTileProps) {
-  const showCta = state === 'locked' || state === 'enabled' || state === 'coming_soon';
+  const selectionPicker = statusBadge !== undefined || selected !== undefined;
+  const showCta = selectionPicker ? !!onCta : state === 'locked' || state === 'enabled' || state === 'coming_soon';
 
   return (
     <article
@@ -54,7 +61,9 @@ export function ModuleTile({
             ) : null}
           </div>
         </div>
-        {state === 'locked' ? (
+        {statusBadge !== undefined ? (
+          statusBadge
+        ) : state === 'locked' ? (
           <Badge tone="warning">
             <Lock size={12} aria-hidden strokeWidth={1.5} /> {t('access.locked')}
           </Badge>
@@ -73,7 +82,16 @@ export function ModuleTile({
       ) : null}
       {showCta ? (
         <div style={{ display: 'flex', gap: 'var(--hos-space-2)', flexWrap: 'wrap' }}>
-          {state === 'enabled' ? (
+          {selectionPicker ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onCta}
+              aria-pressed={selected === true}
+            >
+              {ctaLabel ?? t('common.add')}
+            </Button>
+          ) : state === 'enabled' ? (
             <Button variant="primary" size="sm" onClick={onOpen ?? onCta}>
               {ctaLabel ?? 'Open module'}
             </Button>

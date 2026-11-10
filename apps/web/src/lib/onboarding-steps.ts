@@ -1,17 +1,21 @@
 import type { OnboardingStep } from '@hos/shared';
-import { wt } from '@/i18n';
+import { wt, type WebMessageKey } from '@/i18n';
 
-/** Wizard UI routes (step 1 is signup; API step starts at facility after OTP). */
-export const WIZARD_ROUTES = [
-  { key: 'signup', label: wt('wizard.steps.signup'), href: '/onboarding/signup' },
-  { key: 'facility', label: wt('wizard.steps.facility'), href: '/onboarding/facility' },
-  { key: 'locations', label: wt('wizard.steps.locations'), href: '/onboarding/locations' },
-  { key: 'plan', label: wt('wizard.steps.plan'), href: '/onboarding/plan' },
-  { key: 'addons', label: wt('wizard.steps.addons'), href: '/onboarding/addons' },
-  { key: 'checkout', label: wt('wizard.steps.checkout'), href: '/onboarding/checkout' },
-  { key: 'invoice', label: wt('wizard.steps.invoice'), href: '/onboarding/invoice' },
-  { key: 'provisioning', label: wt('wizard.steps.provisioning'), href: '/onboarding/provisioning' },
+const WIZARD_ROUTE_DEFS = [
+  { key: 'signup', labelKey: 'wizard.steps.signup' as WebMessageKey, href: '/onboarding/signup' },
+  { key: 'facility', labelKey: 'wizard.steps.facility' as WebMessageKey, href: '/onboarding/facility' },
+  { key: 'locations', labelKey: 'wizard.steps.locations' as WebMessageKey, href: '/onboarding/locations' },
+  { key: 'plan', labelKey: 'wizard.steps.plan' as WebMessageKey, href: '/onboarding/plan' },
+  { key: 'addons', labelKey: 'wizard.steps.addons' as WebMessageKey, href: '/onboarding/addons' },
+  { key: 'checkout', labelKey: 'wizard.steps.checkout' as WebMessageKey, href: '/onboarding/checkout' },
+  { key: 'invoice', labelKey: 'wizard.steps.invoice' as WebMessageKey, href: '/onboarding/invoice' },
+  { key: 'provisioning', labelKey: 'wizard.steps.provisioning' as WebMessageKey, href: '/onboarding/provisioning' },
 ] as const;
+
+/** Wizard UI routes (labels resolved at render time for future locales). */
+export function getWizardRoutes() {
+  return WIZARD_ROUTE_DEFS.map((s) => ({ ...s, label: wt(s.labelKey) }));
+}
 
 const STEP_ORDER: OnboardingStep[] = [
   'facility',
@@ -48,14 +52,14 @@ export function wizardStepFromApi(step: OnboardingStep, paid: boolean): number {
 }
 
 export function wizardHrefIndex(href: string): number {
-  const i = WIZARD_ROUTES.findIndex((s) => s.href === href);
+  const i = WIZARD_ROUTE_DEFS.findIndex((s) => s.href === href);
   return i < 0 ? Number.MAX_SAFE_INTEGER : i;
 }
 
 export function wizardBackHref(currentHref: string): string | null {
   const idx = wizardHrefIndex(currentHref);
   if (idx <= 0) return null;
-  return WIZARD_ROUTES[idx - 1]?.href ?? null;
+  return WIZARD_ROUTE_DEFS[idx - 1]?.href ?? null;
 }
 
 export function routeForApiStep(step: OnboardingStep, paid: boolean): string {

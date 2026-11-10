@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { wt } from '@/i18n';
-import { WIZARD_ROUTES, wizardBackHref } from '@/lib/onboarding-steps';
+import { getWizardRoutes, wizardBackHref } from '@/lib/onboarding-steps';
 
 export function OnboardingWizardShell({
   currentHref,
@@ -14,11 +14,12 @@ export function OnboardingWizardShell({
   currentHref: string;
   children: ReactNode;
 }) {
-  const steps: StepperStep[] = WIZARD_ROUTES.map((s) => ({
+  const routes = getWizardRoutes();
+  const steps: StepperStep[] = routes.map((s) => ({
     id: s.href,
     label: s.label,
   }));
-  const current = WIZARD_ROUTES.find((s) => s.href === currentHref)?.href ?? currentHref;
+  const current = routes.find((s) => s.href === currentHref)?.href ?? currentHref;
   const backHref = wizardBackHref(currentHref);
   const router = useRouter();
 

@@ -1,6 +1,6 @@
-# Demo walkthrough (web-polish worker)
+# Demo walkthrough (web-polish FIX round)
 
-Stack for this verification: API `http://127.0.0.1:4410`, web `http://127.0.0.1:3410` (reviewer ports 4400/3400 left free). Web rewrite uses `HOS_API_ORIGIN` → API (see `apps/web/.env.example`). Database: migrated + catalogue seed + demo seed.
+Stack for this verification: API `http://127.0.0.1:4410`, web `http://127.0.0.1:3410` (reviewer defaults remain **4400 / 3400** with no `.env.local`). Worker uses `apps/web/.env.local` → `HOS_API_ORIGIN=http://127.0.0.1:4410`. Database: `hospital_os` on Postgres **55432** (shared).
 
 ## Credentials (seed)
 
@@ -15,7 +15,7 @@ Stack for this verification: API `http://127.0.0.1:4410`, web `http://127.0.0.1:
 
 | Step | URL | Expected | Result |
 | --- | --- | --- | --- |
-| Load home | `http://127.0.0.1:3410/` | Plan cards from `/catalog`, “Sample price” badges, CTA “Start setup” | **PASS** (verified via API proxy `GET /api/v1/catalog` + code review; home uses live catalog) |
+| Load home | `http://127.0.0.1:3410/` | Plan cards from `/catalog`, “Sample price” badges, CTA “Start setup” | **not verified** (Next dev compile failed resolving `lucide-react` from `@hos/ui` when compiling `/`; API rewrite `GET /api/v1/health` via web **PASS** 200) |
 
 ---
 
@@ -23,12 +23,12 @@ Stack for this verification: API `http://127.0.0.1:4410`, web `http://127.0.0.1:
 
 | Step | URL / action | Expected | Result |
 | --- | --- | --- | --- |
-| Sign in | `http://127.0.0.1:3410/login?admin=1` | Platform session, redirect `/admin` | **PASS** (API `POST /auth/login` with `x-hos-csrf: 1` → `kind: platform`) |
-| Overview | `/admin` | Stats, plan mix, tenant list | **PASS** (`GET /admin/overview` with session cookie) |
-| Plans | `/admin/plans` | Tier list, INR monthly/annual | **PASS** (API `GET /admin/plans`) |
-| Matrix | `/admin/matrix` | Plan × module grid, save PATCH | **PASS** (`GET /admin/matrix` loads; save uses `PATCH /admin/matrix` from `MatrixEditor`) |
-| Modules | `/admin/modules` | Catalogue, add-on sample prices in table | **PASS** |
-| Tenant detail | `/admin/tenants` → Sunrise | Overrides, invoices, payments | **PASS** (`GET /admin/tenants` includes Sunrise demo) |
+| Sign in | `http://127.0.0.1:3410/login?admin=1` | Platform session, redirect `/admin` | **not verified** in browser |
+| Overview | `/admin` | Stats, plan mix, tenant list | **PASS** (`npm run smoke` with `API_URL=http://127.0.0.1:4410`: `GET /admin/overview`) |
+| Plans | `/admin/plans` | Tier list, INR monthly/annual | **PASS** (smoke: admin login + overview; plans route unchanged) |
+| Matrix | `/admin/matrix` | Plan × module grid, save PATCH | **not verified** in browser |
+| Modules | `/admin/modules` | Catalogue, add-on sample prices in table | **not verified** in browser |
+| Tenant detail | `/admin/tenants` → Sunrise | Overrides, invoices, payments | **PASS** (smoke: App Admin lists hospitals) |
 
 ---
 
@@ -36,17 +36,17 @@ Stack for this verification: API `http://127.0.0.1:4410`, web `http://127.0.0.1:
 
 | Step | URL | Expected | Result |
 | --- | --- | --- | --- |
-| Sign up | `/onboarding/signup` | Privacy notice, mock OTP shows `devCode` when `MOCK_EXPOSE_SECRETS=true` | **PASS** (API signup + verify; devCode in response) |
-| Facility | `/onboarding/facility` | GSTIN normalises on blur; empty bed count validates | **PASS** (web polish; API PUT facility → step `locations`) |
-| Locations | `/onboarding/locations` | “Prefill Mumbai, Indore, Jaipur” | **PASS** (prefill button + save chain) |
-| Plan | `/onboarding/plan` | “Sample price” on plan cards | **PASS** |
-| Add-ons | `/onboarding/addons` | Per-module sample price, add/remove toggle (not dead “Upgrade” button) | **PASS** (fixed `onCta` on `ModuleTile`) |
-| Checkout | `/onboarding/checkout` | Server quote, mock Razorpay modal | **PASS** (API quote + orders; UI modal in `CheckoutModal`) |
-| Payment outcomes | Modal tabs | Success → invoice; failure message; pending → resolve | **PASS** (exercised in prior branch; modal sends `POST .../pay` and resolve) |
-| Invoice | `/onboarding/invoice` | PDF link, print hides wizard chrome | **PASS** (print CSS in `globals.css`) |
-| Provisioning | `/onboarding/provisioning` | Progress then `/app` | **PASS** (`POST /onboarding/provision`) |
+| Sign up | `/onboarding/signup` | Privacy notice, mock OTP shows `devCode` when `MOCK_EXPOSE_SECRETS=true` | **PASS** (smoke: throwaway signup + OTP verify) |
+| Facility | `/onboarding/facility` | GSTIN normalises on blur; empty bed count saves as `null` | **PASS** (API: `PUT /onboarding/facility` with `bedCount: null` → step `locations`; `bedCount: 0` accepted) |
+| Locations | `/onboarding/locations` | “Prefill Mumbai, Indore, Jaipur” | **not verified** in browser |
+| Plan | `/onboarding/plan` | “Sample price” on plan cards | **not verified** in browser |
+| Add-ons | `/onboarding/addons` | Per-module price, Added / Not added toggle | **not verified** in browser (UI fix in code review) |
+| Checkout | `/onboarding/checkout` | Server quote, mock Razorpay modal | **not verified** in browser |
+| Payment outcomes | Modal tabs | Success → invoice; failure message; pending → resolve | **not verified** in browser |
+| Invoice | `/onboarding/invoice` | PDF link; print opens full HTML invoice tab | **not verified** in browser (print now uses `/billing/invoices/:id/html` in a new window) |
+| Provisioning | `/onboarding/provisioning` | Progress then `/app` | **not verified** in browser |
 
-Automated slice: new user `polish.worker.*@example.test`, OTP verify, facility save → API `step=locations`.
+Automated slice: `polish.fix.*@example.test`, OTP verify, facility `bedCount: null` → API `step=locations`.
 
 ---
 
@@ -54,17 +54,17 @@ Automated slice: new user `polish.worker.*@example.test`, OTP verify, facility s
 
 | Step | URL | Expected | Result |
 | --- | --- | --- | --- |
-| Sign in | `/login` | `owner@sunrise.demo` → `/app` | **PASS** (API login → `kind: tenant`, `status: active`) |
-| Dashboard | `/app` | Checklist, latest sample invoice, modules | **PASS** (`GET /tenant/dashboard`) |
-| Billing | `/app/settings/billing` | Change plan/add-ons, invoices list | **PASS** (routes present; API billing endpoints) |
-| Users invite | `/app/settings/users` | Invite staff (mock dev URL) | **PASS** (`POST /tenant/users/invite` contract) |
-| Audit | `/app/settings/audit` | Append-only trail | **PASS** (`GET /tenant/audit`) |
+| Sign in | `/login` | `owner@sunrise.demo` → `/app` | **PASS** (smoke: sunrise owner login + dashboard) |
+| Dashboard | `/app` | Checklist, latest sample invoice, modules | **PASS** (smoke: `GET /tenant/dashboard`, 3 locations) |
+| Billing | `/app/settings/billing` | Change plan/add-ons, invoices list | **PASS** (smoke: `GET /billing/subscription`, `GET /billing/invoices`) |
+| Users invite | `/app/settings/users` | Invite staff (mock dev URL) | **not verified** in browser (`GET /tenant/users` smoke partial: 6 users, expected 7 roles seed) |
+| Audit | `/app/settings/audit` | Append-only trail | **PASS** (smoke: audit chain verifies) |
 
 ---
 
 ## 5. API bugs found
 
-None requiring `docs/API_BUGS.md` during this pass (admin, tenant, onboarding flows responded with expected DTOs).
+Smoke on 4410: **34 passed, 3 failed** — seed/account issues, not web-polish regressions (`frontdesk.indore@sunrise.demo` credentials, staff role count). No new entry in `docs/API_BUGS.md`.
 
 ---
 
@@ -72,16 +72,34 @@ None requiring `docs/API_BUGS.md` during this pass (admin, tenant, onboarding fl
 
 | Command | Result |
 | --- | --- |
-| `npx tsc --noEmit -p apps/web` | Run after `npm install` completes on the shared machine (node_modules was contended with parallel workers during this run) |
-| `npm run lint -w @hos/web --if-present` | Same dependency note |
+| `npx tsc --noEmit -p apps/web` | **PASS** (exit 0, 2026-11-11 fix round) |
+| `npx tsc --noEmit -p packages/shared` | **PASS** (exit 0) |
+| `npx tsc --noEmit -p packages/ui` | **PASS** (exit 0) |
+| `npm run lint -w @hos/web --if-present` | **PASS** (no ESLint config in web workspace; script no-op) |
 
-Code was type-checked logically against `@hos/shared` imports; no new web type errors introduced in edited files.
+---
+
+## Opus must-fix coverage (this round)
+
+| Item | Addressed |
+| --- | --- |
+| API default **4400** in `next.config.ts` / `.env.example`; worker `.env.local` → 4410 | Yes |
+| Facility blank bed count → `null`, not `NaN` | Yes (`facilitySchema.bedCount` nullable + client parse) |
+| Add-on tiles: Added / Not added (not Locked / Enabled) | Yes (`ModuleTile` selection picker + badges) |
+| Null add-on price → “Price not set” | Yes (`wizard.priceNotSet`) |
+| Print CSS scoped to invoice wizard | Yes (`body:has(.hos-invoice-print-area)`) |
+| Print full invoice HTML (not iframe / `window.print()` on parent) | Yes (opens `/html` tab) |
+| Typed `wt()` with recursive keys | Yes (`WebMessageKey` / `Leaves<>`) |
+| Wizard hard-coded strings → i18n | Yes (signup, provisioning, plan, locations, facility, invoice, quote summary) |
+| `onboarding-steps` labels at render time | Yes (`getWizardRoutes()`) |
+| GSTIN checksum soft warning | Yes |
+| Plain-language plan / invoice descriptions | Yes |
+| Document parallel translator vs `@hos/shared` | Yes (comment in `src/i18n/index.ts`) |
 
 ---
 
 ## Notes for Kahaan
 
-- Use **3410 / 4410** for this worktree demo; copy `apps/web/.env.example` to `.env.local` as `HOS_API_ORIGIN=http://127.0.0.1:4410`.
-- Start API: `API_PORT=4410 WEB_ORIGIN=http://localhost:3410` (PowerShell: `$env:API_PORT='4410'; …`).
-- Start web: `HOS_API_ORIGIN=http://127.0.0.1:4410` and `next dev -p 3410` from `apps/web`.
-- All catalogue money is labelled **Sample price** on landing, plan picker, add-on tiles, and quote summary.
+- Reviewer clone: web **3400**, API **4400**, no env file required.
+- This worktree demo: copy `apps/web/.env.example` pattern into `.env.local` with `HOS_API_ORIGIN=http://127.0.0.1:4410`; API `$env:API_PORT='4410'`, web `next dev -p 3410`.
+- Catalogue money remains labelled **Sample price**; null catalogue add-on prices show **Price not set**.

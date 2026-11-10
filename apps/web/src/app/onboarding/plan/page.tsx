@@ -76,7 +76,7 @@ function PlanForm({
       showToast({ tone: 'success', title: wt('plan.saved') });
       onSaved();
     } catch (e) {
-      setErrors(e instanceof ApiError ? { form: e.message } : { form: 'Save failed' });
+      setErrors(e instanceof ApiError ? { form: e.message } : { form: wt('common.saveFailed') });
     } finally {
       setBusy(false);
     }
@@ -88,9 +88,9 @@ function PlanForm({
     <>
       <PageHeader title={wt('plan.title')} description={wt('plan.description')} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--hos-space-3)', marginBottom: 'var(--hos-space-4)' }}>
-        <Switch checked={cycle === 'annual'} onCheckedChange={(v) => setCycle(v ? 'annual' : 'monthly')} label="Annual billing (2 months free)" />
+        <Switch checked={cycle === 'annual'} onCheckedChange={(v) => setCycle(v ? 'annual' : 'monthly')} label={wt('plan.annualBilling')} />
       </div>
-      <Field label="Billable locations" error={errors.locationCount} hint="Usually matches branches you added">
+      <Field label={wt('plan.billableLocations')} error={errors.locationCount} hint={wt('plan.billableLocationsHint')}>
         <Input
           type="number"
           min={1}
@@ -111,13 +111,15 @@ function PlanForm({
             badge={plan.pricePlaceholder ? wt('plan.samplePriceBadge') : plan.badge}
             highlight={plan.highlight}
             onSelect={() => setPlanId(plan.id)}
-            featureSummary={`${catalog?.matrix[plan.id]?.length ?? plan.featureCount} entitlements`}
+            featureSummary={wt('plan.featureSummary', {
+              count: catalog?.matrix[plan.id]?.length ?? plan.featureCount,
+            })}
           />
         ))}
       </div>
       {preview ? (
         <div style={{ marginTop: 'var(--hos-space-6)', maxWidth: '20rem' }}>
-          <QuoteSummary totals={preview.totals} />
+          <QuoteSummary totals={preview.totals} label={wt('plan.livePriceSummary')} />
         </div>
       ) : null}
       {errors.form ? <p style={{ color: 'var(--hos-fg-danger)' }}>{errors.form}</p> : null}
