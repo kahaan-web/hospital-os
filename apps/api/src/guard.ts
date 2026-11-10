@@ -2,7 +2,7 @@ import { schema, type Db, type Tx } from '@hos/db';
 import type { AuditVerifyDto } from '@hos/shared';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { assertModule, assertPermission, loadAssignments, type Assignment } from './catalog';
+import { assertPermission, loadAssignments, moduleStates, subscriptionDto, type Assignment } from './catalog';
 import { sha256Hex } from './crypto';
 import type { ApiEnv } from './env';
 import type { EmailSender, PaymentGateway, SmsSender } from './providers';
@@ -12,9 +12,9 @@ import {
   idempotencyRequired,
   requestHash,
   requestMeta,
+  readSessionToken,
   resolveSession,
   routeTemplate,
-  SESSION_COOKIE,
   tenant,
   withIdempotency,
   writeAudit,
@@ -39,11 +39,14 @@ export interface TenantGate {
   tokenHash: string;
   audit: (action: string, entityType: string, entityId: string | null, before: unknown, after: unknown) => Promise<void>;
   requirePermission: (key: string) => void;
+  requireAnyPermission: (keys: string[]) => void;
   requireModule: (key: string) => Promise<void>;
+  requireAnyModule: (keys: string[]) => Promise<void>;
+  requireFeature: (key: string) => Promise<void>;
 }
 
 export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: FastifyReply, fn: (gate: TenantGate) => Promise<T>): Promise<T> {
-  const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+  const resolved = await resolveSession(deps.db, readSessionToken(req));
   if (!resolved || resolved.session.kind !== 'tenant' || !resolved.session.tenantId || !resolved.session.userId) {
     throw new ApiError(401, 'unauthenticated', 'Sign in to continue');
   }
@@ -82,6 +85,17 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       ip: meta.ip,
       userAgent: meta.userAgent,
     };
+    let access: ReturnType<typeof moduleStates> | null = null;
+    const loadAccess = () => {
+      if (!access) {
+        access = (async () => {
+          const subscription = await subscriptionDto(tx);
+          return moduleStates(tx, subscription?.planId ?? null, subscription?.addons.map((a) => a.moduleId) ?? []);
+        })();
+      }
+      return access;
+    };
+    const notEntitled = (moduleKey: string) => new ApiError(403, 'not_entitled', 'This module is not included in your plan', undefined, { moduleKey });
     const gate: TenantGate = {
       tx,
       actor,
@@ -92,7 +106,31 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       tokenHash: resolved.hash,
       audit: (action, entityType, entityId, before, after) => writeAudit(tx, actor, action, entityType, entityId, before, after),
       requirePermission: (key) => assertPermission(assignments, locationId, key),
-      requireModule: (key) => assertModule(tx, key),
+      requireAnyPermission: (keys) => {
+        if (!keys.some((key) => {
+          try {
+            assertPermission(assignments, locationId, key);
+            return true;
+          } catch {
+            return false;
+          }
+        })) {
+          throw new ApiError(403, 'forbidden', 'You do not have permission to do that', undefined, { permission: keys[0] });
+        }
+      },
+      requireModule: async (key) => {
+        const states = await loadAccess();
+        const mod = states.states.find((m) => m.key === key);
+        if (!mod || mod.access !== 'enabled') throw notEntitled(key);
+      },
+      requireAnyModule: async (keys) => {
+        const states = await loadAccess();
+        if (!keys.some((key) => states.states.find((m) => m.key === key)?.access === 'enabled')) throw notEntitled(keys[0] ?? '');
+      },
+      requireFeature: async (key) => {
+        const states = await loadAccess();
+        if (!states.features.includes(key)) throw new ApiError(403, 'not_entitled', 'This feature is not included in your plan', undefined, { featureKey: key });
+      },
     };
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return fn(gate);
     return withIdempotency(tx, reply, tenantId, routeTemplate(req), idempotencyKey(req), idempotencyRequired(req), requestHash(req), () => fn(gate));
@@ -107,7 +145,7 @@ export interface PlatformGate {
 }
 
 async function requirePlatformSession(deps: Deps, req: FastifyRequest) {
-  const resolved = await resolveSession(deps.db, req.cookies[SESSION_COOKIE]);
+  const resolved = await resolveSession(deps.db, readSessionToken(req));
   if (!resolved || resolved.session.kind !== 'platform' || !resolved.session.platformAdminId) {
     throw new ApiError(resolved?.session.kind === 'tenant' ? 403 : 401, resolved ? 'forbidden' : 'unauthenticated', resolved ? 'App Admin access only' : 'Sign in to continue');
   }

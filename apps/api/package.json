@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.5",
     "@fastify/cookie": "^11.0.2",
     "@fastify/multipart": "^9.2.1",
     "@fastify/rate-limit": "^10.3.0",

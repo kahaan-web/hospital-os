@@ -302,6 +302,8 @@ export const locations = pgTable(
     stateCode: text('state_code').notNull(),
     pincode: text('pincode').notNull().default(''),
     phone: text('phone').notNull().default(''),
+    /** 2–3 character prefix on clinical document numbers, for example MUM. Filled from code when omitted. */
+    docPrefix: text('doc_prefix').notNull().default(''),
     isPrimary: boolean('is_primary').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: createdAt(),
@@ -311,6 +313,7 @@ export const locations = pgTable(
     unique('locations_tenant_id_uq').on(t.tenantId, t.id),
     uniqueIndex('locations_one_primary_uq').on(t.tenantId).where(sql`${t.isPrimary} = true`),
     index('locations_tenant_idx').on(t.tenantId),
+    check('locations_doc_prefix_chk', sql`doc_prefix ~ '^[A-Z0-9]{2,3}$'`),
   ],
 );
 
@@ -325,6 +328,7 @@ export const departments = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    unique('departments_tenant_id_uq').on(t.tenantId, t.id),
     index('departments_tenant_idx').on(t.tenantId, t.locationId),
     foreignKey({
       columns: [t.tenantId, t.locationId],
@@ -345,15 +349,25 @@ export const doctors = pgTable(
     speciality: text('speciality').notNull().default(''),
     /** Seeded sample master — obviously fictional, removable at go-live. */
     isSample: boolean('is_sample').notNull().default(false),
+    userId: uuid('user_id'),
+    departmentId: uuid('department_id'),
+    registrationNo: text('registration_no').notNull().default(''),
+    active: boolean('active').notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [
+    unique('doctors_tenant_id_uq').on(t.tenantId, t.id),
     index('doctors_tenant_idx').on(t.tenantId, t.locationId),
     foreignKey({
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: 'doctors_location_fk',
     }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.tenantId, t.departmentId],
+      foreignColumns: [departments.tenantId, departments.id],
+      name: 'doctors_department_fk',
+    }),
   ],
 );
 
@@ -433,6 +447,12 @@ export const invitations = pgTable(
       foreignColumns: [users.tenantId, users.id],
       name: 'invitations_user_fk',
     }).onDelete('cascade'),
+    // 0024: ON DELETE SET NULL (invited_by) on Postgres 15+. Drizzle cannot name that column.
+    foreignKey({
+      columns: [t.tenantId, t.invitedBy],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'invitations_invited_by_fk',
+    }).onDelete('set null'),
     check('invitations_status_chk', sql`status in ('pending', 'accepted', 'revoked')`),
   ],
 );
@@ -727,6 +747,12 @@ export const dataPrincipalRequests = pgTable(
   },
   (t) => [
     index('dpr_tenant_idx').on(t.tenantId),
+    // 0024: ON DELETE SET NULL (created_by) on Postgres 15+. Drizzle cannot name that column.
+    foreignKey({
+      columns: [t.tenantId, t.createdBy],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'data_principal_requests_created_by_fk',
+    }).onDelete('set null'),
     check('dpr_type_chk', sql`type in ('access', 'correction', 'erasure', 'grievance')`),
     check('dpr_status_chk', sql`status in ('open', 'in_progress', 'completed', 'rejected')`),
   ],
@@ -740,7 +766,15 @@ export const checklistItems = pgTable(
     doneAt: ts('done_at'),
     doneBy: uuid('done_by'),
   },
-  (t) => [primaryKey({ columns: [t.tenantId, t.key] })],
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.key] }),
+    // 0024: ON DELETE SET NULL (done_by) on Postgres 15+. Drizzle cannot name that column.
+    foreignKey({
+      columns: [t.tenantId, t.doneBy],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'checklist_items_done_by_fk',
+    }).onDelete('set null'),
+  ],
 );
 
 /** Mock notification outbox (SMS / email are never really sent in Phase A). */
@@ -792,10 +826,10 @@ export const sessions = pgTable(
     id: id(),
     tokenHash: text('token_hash').notNull().unique(),
     kind: text('kind').notNull(),
-    userId: uuid('user_id').references(() => users.id),
+    userId: uuid('user_id'),
     platformAdminId: uuid('platform_admin_id').references(() => platformAdmins.id),
     tenantId: uuid('tenant_id').references(() => tenants.id),
-    locationId: uuid('location_id').references(() => locations.id, { onDelete: 'set null' }),
+    locationId: uuid('location_id'),
     ip: text('ip'),
     userAgent: text('user_agent'),
     createdAt: createdAt(),
@@ -806,6 +840,18 @@ export const sessions = pgTable(
   (t) => [
     index('sessions_user_idx').on(t.userId),
     index('sessions_expires_idx').on(t.expiresAt),
+    // MATCH SIMPLE (Postgres default): NULL tenant_id or NULL location_id skips the check.
+    // 0024 nulls only location_id when a location is deleted (Postgres 15+).
+    foreignKey({
+      columns: [t.tenantId, t.userId],
+      foreignColumns: [users.tenantId, users.id],
+      name: 'sessions_user_fk',
+    }),
+    foreignKey({
+      columns: [t.tenantId, t.locationId],
+      foreignColumns: [locations.tenantId, locations.id],
+      name: 'sessions_location_fk',
+    }).onDelete('set null'),
     check(
       'sessions_kind_chk',
       sql`(kind = 'tenant' and user_id is not null and tenant_id is not null and platform_admin_id is null) or (kind = 'platform' and platform_admin_id is not null and user_id is null and tenant_id is null)`,
@@ -845,3 +891,5 @@ export const auditLog = pgTable(
     check('audit_actor_chk', sql`actor_type in ('user', 'platform_admin', 'system')`),
   ],
 );
+
+export * from './clinical';

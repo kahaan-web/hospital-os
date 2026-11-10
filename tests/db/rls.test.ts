@@ -45,6 +45,18 @@ const TABLES = [
   'checklist_items',
   'outbox_messages',
   'idempotency_keys',
+  'number_series',
+  'patients',
+  'patient_alerts',
+  'encounters',
+  'services',
+  'tariffs',
+  'clinical_orders',
+  'clinical_order_items',
+  'vital_signs',
+  'clinical_notes',
+  'charges',
+  'cash_ledger',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -64,6 +76,13 @@ interface IsoSpec {
   denyDelete: boolean;
   /** T-ro overrides: tenant scope can read but not write. */
   writes: 'own' | 'none';
+  /** Append-only trigger rejects UPDATE of a visible row (clinical_notes). */
+  updateGuard?: boolean;
+  /**
+   * Mass DELETE. `forbidden` when a trigger rejects it (vitals, notes).
+   * `skip` when an append-only child makes a plain DELETE impossible (patients, encounters).
+   */
+  massDelete?: 'one' | 'forbidden' | 'skip';
   /** Child deletes, rolled back with the mass delete, so a parent delete is not blocked by A's own invoice. */
   beforeMassDelete: string[];
 }
@@ -215,8 +234,14 @@ describe.sequential('row level security', () => {
       );
       expect(Number(hidden.rows[0]?.n)).toBe(0);
 
-      const updated = await app().query(`update ${spec.table} set ${spec.setSql}`);
-      expect(updated.rowCount).toBe(spec.writes === 'none' ? 0 : 1);
+      const updated = spec.updateGuard
+        ? null
+        : await app().query(`update ${spec.table} set ${spec.setSql}`);
+      if (spec.updateGuard) {
+        await expectSqlState(app(), `update ${spec.table} set ${spec.setSql}`, [], '42501');
+      } else {
+        expect(updated?.rowCount).toBe(spec.writes === 'none' ? 0 : 1);
+      }
       const updatedB = await app().query(`update ${spec.table} set ${spec.setSql} where ${spec.hidden}`, [spec.bParam]);
       expect(updatedB.rowCount).toBe(0);
       if (spec.denyDelete) {
@@ -241,10 +266,12 @@ describe.sequential('row level security', () => {
     const check = await admin().query<{ touched: boolean }>(spec.untouched, [spec.bParam]);
     expect(check.rows[0]?.touched).toBe(false);
 
+    if (spec.massDelete === 'skip') return;
+
     await app().query('BEGIN');
     try {
       await scopeTenant(app(), pair!.a.id);
-      if (spec.denyDelete) {
+      if (spec.denyDelete || spec.massDelete === 'forbidden') {
         await expectSqlState(app(), `delete from ${spec.table}`, [], '42501');
       } else if (spec.writes === 'none') {
         const deleted = await app().query(`delete from ${spec.table}`);
@@ -523,8 +550,12 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         denyDelete: true,
       };
     case 'locations':
-      return row(common, 'id = $1', b.locationId, `city = 'Touched by A'`, 'city', 
-        `insert into locations (tenant_id, name, code, state_code) values ($1, 'Nope', 'ZZNO', '27')`);
+      return {
+        ...row(common, 'id = $1', b.locationId, `city = 'Touched by A'`, 'city',
+          `insert into locations (tenant_id, name, code, state_code) values ($1, 'Nope', 'ZZNO', '27')`),
+        // Encounters and vitals reference this location. Vitals are append-only, so hos_app cannot clear them first.
+        massDelete: 'skip',
+      };
     case 'departments':
       return row(common, 'id = $1', b.departmentId, `name = 'Touched by A'`, 'name',
         `insert into departments (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
@@ -680,6 +711,93 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into idempotency_keys (tenant_id, scope, key, request_hash, expires_at) values ($1, 'POST /test', 'zz${pair.runId}nopekey', 'nope', now() + interval '1 day')`,
         retargetSql: `update idempotency_keys set tenant_id = $1`,
       };
+    case 'number_series':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.seriesId,
+        setSql: `last_no = 9`,
+        untouched: `select coalesce(last_no = 9, false) as touched from number_series where id = $1`,
+        insertSql: `insert into number_series (tenant_id, series_key, period, last_no) values ($1, 'nope', '', 1)`,
+        retargetSql: `update number_series set tenant_id = $1, series_key = 'moved'`,
+      };
+    case 'patients':
+      return {
+        ...row(common, 'id = $1', b.patientId, `city = 'Touched by A'`, 'city',
+          `insert into patients (tenant_id, uhid, first_name, gender) values ($1, 'DEMO-nope-${pair.runId}', 'Nope', 'other')`),
+        // Vitals and notes are append-only and reference this patient, so hos_app cannot clear them first.
+        massDelete: 'skip',
+      };
+    case 'patient_alerts':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.alertId,
+        setSql: `"text" = 'Touched by A'`,
+        untouched: `select coalesce("text" = 'Touched by A', false) as touched from patient_alerts where id = $1`,
+        insertSql: `insert into patient_alerts (tenant_id, patient_id, kind, text) values ($1, '${b.patientId}', 'alert', 'Nope')`,
+        retargetSql: `update patient_alerts set tenant_id = $1`,
+      };
+    case 'encounters':
+      return {
+        ...row(common, 'id = $1', b.encounterId, `referred_by = 'Touched by A'`, 'referred_by',
+          `insert into encounters (tenant_id, location_id, patient_id, kind, number) values ($1, '${b.locationId}', '${b.patientId}', 'opd', 'ZNOPE${pair.runId}')`),
+        massDelete: 'skip',
+      };
+    case 'services':
+      return {
+        ...row(common, 'id = $1', b.serviceId, `name = 'Touched by A'`, 'name',
+          `insert into services (tenant_id, code, name, category) values ($1, 'NO${pair.runId}', 'Nope', 'misc')`),
+        beforeMassDelete: ['delete from charges', 'delete from tariffs'],
+      };
+    case 'tariffs':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.tariffId,
+        setSql: `price_paise = 9`,
+        untouched: `select coalesce(price_paise = 9, false) as touched from tariffs where id = $1`,
+        insertSql: `insert into tariffs (tenant_id, service_id, price_paise, effective_from) values ($1, '${b.serviceId}', 50, current_date)`,
+        retargetSql: `update tariffs set tenant_id = $1`,
+      };
+    case 'clinical_orders':
+      return {
+        ...row(common, 'id = $1', b.clinicalOrderId, `notes = 'Touched by A'`, 'notes',
+          `insert into clinical_orders (tenant_id, location_id, encounter_id, patient_id, kind, number, source) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'lab', 'ZNOPE${pair.runId}', 'opd')`),
+        beforeMassDelete: ['delete from clinical_order_items'],
+      };
+    case 'clinical_order_items':
+      return row(common, 'id = $1', b.orderItemId, `drug_name = 'Touched by A'`, 'drug_name',
+        `insert into clinical_order_items (tenant_id, order_id, line_no) values ($1, '${b.clinicalOrderId}', 2)`);
+    case 'vital_signs':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.vitalId,
+        setSql: `entered_in_error_at = timestamptz '2020-01-01+00', error_reason = 'Touched by A'`,
+        untouched: `select coalesce(error_reason = 'Touched by A', false) as touched from vital_signs where id = $1`,
+        insertSql: `insert into vital_signs (tenant_id, location_id, encounter_id, patient_id) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}')`,
+        retargetSql: `update vital_signs set tenant_id = $1`,
+        massDelete: 'forbidden',
+      };
+    case 'clinical_notes':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.noteId,
+        setSql: `body = 'Touched by A'`,
+        untouched: `select coalesce(body = 'Touched by A', false) as touched from clinical_notes where id = $1`,
+        insertSql: `insert into clinical_notes (tenant_id, encounter_id, patient_id, kind, body) values ($1, '${b.encounterId}', '${b.patientId}', 'plan', 'Nope')`,
+        retargetSql: `update clinical_notes set tenant_id = $1`,
+        updateGuard: true,
+        massDelete: 'forbidden',
+      };
+    case 'charges':
+      return row(common, 'id = $1', b.chargeId, `description = 'Touched by A'`, 'description',
+        `insert into charges (tenant_id, location_id, encounter_id, patient_id, description, qty, unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id, source_line) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'Nope', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', '${b.encounterId}', 'nope')`);
+    case 'cash_ledger':
+      return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
+        `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
     default:
       return assertNever(table);
   }

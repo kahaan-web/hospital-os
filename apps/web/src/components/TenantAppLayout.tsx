@@ -79,6 +79,7 @@ export function TenantAppLayout({ children }: { children: ReactNode }) {
       onLocationChange={onLocationChange}
       userName={me.user.name}
       userEmail={me.user.email}
+      permissions={me.permissions}
       tenantDisplayName={me.tenant.displayName || me.tenant.legalName || 'Hospital OS'}
       activePath={pathname}
       onNavigate={onNavigate}
