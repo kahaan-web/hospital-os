@@ -15,6 +15,8 @@ import { dbEnv } from '../../packages/db/src/env';
 
 export interface DbRoles {
   app: pg.Client;
+  /** Login that may hold platform scope. Successful platform writes use this client. */
+  platform: pg.Client;
   migrator: pg.Client;
   admin: pg.Client;
 }
@@ -93,24 +95,23 @@ export async function connectRoles(): Promise<DbRoles> {
 
 async function openRoles(env: ReturnType<typeof dbEnv>): Promise<DbRoles> {
   const app = new pg.Client({ connectionString: env.appUrl, connectionTimeoutMillis: CONNECT_MS });
+  const platform = new pg.Client({ connectionString: env.platformUrl, connectionTimeoutMillis: CONNECT_MS });
   const migrator = new pg.Client({ connectionString: env.migrationUrl, connectionTimeoutMillis: CONNECT_MS });
   const admin = new pg.Client({ connectionString: env.adminUrl, connectionTimeoutMillis: CONNECT_MS });
-  await app.connect();
+  const clients = [app, platform, migrator, admin];
   try {
-    await migrator.connect();
-    await admin.connect();
+    for (const client of clients) await client.connect();
   } catch (err) {
-    await app.end().catch(() => undefined);
-    await migrator.end().catch(() => undefined);
-    await admin.end().catch(() => undefined);
+    await Promise.all(clients.map((client) => client.end().catch(() => undefined)));
     throw err;
   }
-  return { app, migrator, admin };
+  return { app, platform, migrator, admin };
 }
 
 export async function disconnectRoles(roles: DbRoles | null): Promise<void> {
   if (!roles) return;
   await roles.app.end().catch(() => undefined);
+  await roles.platform.end().catch(() => undefined);
   await roles.migrator.end().catch(() => undefined);
   await roles.admin.end().catch(() => undefined);
 }

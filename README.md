@@ -33,7 +33,7 @@ npm run demo
 `npm run demo` does, in order:
 
 1. `db:up` - starts the `hospital-os-postgres` container (compose project `hospital-os`, 512 MB memory cap) on 127.0.0.1:55432.
-2. `db:migrate` - creates the database and the two least-privilege roles (`hos_migrator`, `hos_app`), then applies `packages/db/migrations/*.sql`.
+2. `db:migrate` - creates the database and the least-privilege roles (`hos_migrator`, `hos_app`, `hos_platform`), then applies `packages/db/migrations/*.sql`.
 3. `db:seed` - module catalogue, plans with placeholder prices, roles and permissions, privacy notice, App Admin.
 4. `db:seed:demo` - the Sunrise Care demo hospital, staff for every role at every location, sample doctors and patients (idempotent; safe to re-run).
 5. Starts the API on http://127.0.0.1:4400 and the web app on http://localhost:3400. Ctrl+C stops both.

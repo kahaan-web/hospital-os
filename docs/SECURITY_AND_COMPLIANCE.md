@@ -40,10 +40,11 @@ Status: **Built** (in code and tested), **Partial** (some of it is in code), **D
 
 Every tenant-owned table has row-level security **enabled and forced** (Phase B tables, `patients` included, follow the same template, and a planned `rls-coverage` test fails any tenant table without it). Policies compare `tenant_id` with `nullif(current_setting('app.tenant_id', true), '')::uuid` (wrapped as `hos_tenant_id()`). The API sets `app.tenant_id` and `app.scope` with `set_config(..., true)` at the start of each request transaction, so the setting dies with the transaction and a pooled connection cannot carry one hospital into the next request. With no tenant set, every tenant table reads as empty.
 
-Two database roles, both `NOSUPERUSER` and `NOBYPASSRLS`:
+Three database roles, all `NOSUPERUSER` and `NOBYPASSRLS`:
 
 - `hos_migrator` owns the schema and runs migrations and seeds. Because RLS is forced, even the owner goes through an explicit policy.
-- `hos_app` is what the API connects as. Explicit grants only. It cannot read `sessions` or `invoice_sequences`; those go through `SECURITY DEFINER` functions with `search_path` pinned and `EXECUTE` revoked from `PUBLIC`. It cannot `UPDATE` or `DELETE` `audit_log`.
+- `hos_app` is what the API connects as for tenant traffic. Explicit grants only. It cannot read `sessions` or `invoice_sequences`; those go through `SECURITY DEFINER` functions with `search_path` pinned and `EXECUTE` revoked from `PUBLIC`. It cannot `UPDATE` or `DELETE` `audit_log`. It cannot claim platform scope.
+- `hos_platform` is a separate login (its own password and a pool of 2) and a member of `hos_app`, so it inherits those grants. `hos_scope()` returns `platform` only when `session_user` is `hos_platform` or `hos_migrator`. `hos_app` is not a member of `hos_platform` and `SET ROLE hos_platform` fails.
 
 Children reference parents by `(tenant_id, id)` composite foreign keys, so a row cannot point at another tenant's location, user or order even by mistake.
 
@@ -52,7 +53,7 @@ How it is checked:
 - `apps/api/src/security.test.ts` (vitest; runs against the env database, `HOS_DB_NAME`, default `hospital_os`, and needs the seeded demo; not a throwaway database) checks that another tenant's invoice and user come back as 404, plus idempotency replay, entitlement and payment-signature checks.
 - `scripts/smoke.mjs` signs in as Sunrise Care and as a second hospital (the Lotus demo tenant once Phase B seeds it, otherwise a throwaway signup) and asserts that the second hospital gets 404 on Sunrise's invoices and invoice PDF, never lists them, and cannot switch into a Sunrise location; with Lotus it also checks locations, staff and (once built) patients. With `--db` it connects as `hos_app` and checks that with no tenant set every tenant table reads empty, that another tenant sees 0 Sunrise rows, cannot update them and cannot insert into Sunrise (42501).
 
-**Limit.** `hos_app` sets its own GUCs. RLS protects against application bugs (a query that forgets `WHERE tenant_id = …`). It does not protect against a fully compromised API process, which could set `app.tenant_id` to any tenant id it learns. Mitigations: no `BYPASSRLS`, statement timeout 10s and idle-in-transaction timeout 15s on `hos_app`, the API never exposed except behind TLS, and the audit chain plus proxy logs for forensics.
+**Limit.** `hos_app` still sets `app.tenant_id` itself. RLS protects against application bugs (a query that forgets `WHERE tenant_id = …`). It does not protect against a fully compromised API process, which could set `app.tenant_id` to any tenant id it learns. Platform scope is no longer one of those GUCs: a `hos_app` session that sets `app.scope` to `platform` is treated as having no scope. A compromised process that also holds `DATABASE_PLATFORM_URL` can still open the platform pool; splitting admin routes into their own service is the later step. Mitigations: no `BYPASSRLS`, statement timeout 10s and idle-in-transaction timeout 15s on `hos_app` and `hos_platform`, the API never exposed except behind TLS, and the audit chain plus proxy logs for forensics. App Admin reads of a hospital (detail, directory, overview, audit view) write a `platform.read.*` audit row with the admin id, the target tenant when there is one, and the route, and without names or clinical fields in the payload.
 
 ## Access control
 
