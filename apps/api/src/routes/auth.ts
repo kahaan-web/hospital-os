@@ -14,7 +14,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { tenantMe } from '../catalog';
 import { generateTotpSecret, otpauthUrl, otpCode, randomToken, safeEqual, sha256Hex, verifyTotp } from '../crypto';
-import { openPlatform, openTenant, type Deps } from '../guard';
+import { openTenant, type Deps } from '../guard';
 import { ApiError, cookieOptions, platform, readSessionToken, requestMeta, resolveSession, SESSION_COOKIE, tenant, writeAudit } from '../http';
 
 const limit = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };

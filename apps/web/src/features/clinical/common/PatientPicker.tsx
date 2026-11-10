@@ -46,6 +46,7 @@ export function PatientPicker({
             <button
               type="button"
               role="option"
+              aria-selected={false}
               onClick={() => {
                 onValueChange(patient);
                 setQ(patient.fullName);

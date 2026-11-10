@@ -1,28 +1,18 @@
 // Fictional Sunrise clinical masters and the Lotus Demo Clinic (Basic) used for isolation tests.
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+// Patients come from seedDemoPeople (DEMO- UHIDs). This file does not insert people.
+import { and, asc, eq, inArray, isNull, like, sql } from 'drizzle-orm';
 import { fyCode, type GstTreatment } from '@hos/shared';
+import type { Db, Tx } from '../client';
 import { hashPassword } from '../password';
 import * as schema from '../schema';
-import type { Db } from '../client';
+import { demoMobile, seedDemoPeople } from '../seed-demo-people';
 
 const DEMO_PASSWORD = 'Demo@12345';
 const SUNRISE = 'sunrise-care';
 const LOTUS = 'lotus-demo';
-
-const PATIENTS = [
-  ['Aarav', 'Sample', 'male', '1992-01-15', 'Mumbai', '27', '400001', '9810000001'],
-  ['Meera', 'Demo', 'female', '1988-04-02', 'Mumbai', '27', '400011', '9810000002'],
-  ['Kabir', 'Fictional', 'male', '2018-03-01', 'Mumbai', '27', '400012', '9810000003'],
-  ['Lata', 'Sample', 'female', '1955-11-20', 'Mumbai', '27', '400013', '9810000004'],
-  ['Vikram', 'Demo', 'male', '1979-07-07', 'Indore', '23', '452001', '9810000005'],
-  ['Ananya', 'Fictional', 'female', '2010-09-12', 'Jaipur', '08', '302001', '9810000006'],
-  ['Rohan', 'Sample', 'male', '2000-02-29', 'Mumbai', '27', '400014', '9810000007'],
-  ['Diya', 'Demo', 'female', '2026-05-20', 'Mumbai', '27', '400015', '9810000008'],
-  ['Ishaan', 'Fictional', 'male', '1995-12-01', 'Mumbai', '27', '400016', '9810000009'],
-  ['Sana', 'Sample', 'female', '1983-06-18', 'Mumbai', '27', '400017', '9810000010'],
-  ['Neel', 'Demo', 'male', '1970-01-30', 'Mumbai', '27', '400018', '9810000011'],
-  ['Tara', 'Fictional', 'female', '1999-08-08', 'Mumbai', '27', '400019', '9810000012'],
-] as const;
+const LOTUS_OWNER_EMAIL = 'owner@lotus.demo';
+/** Clear of Lotus patient mobiles (2001–2005) and their emergency numbers (2501–2505). */
+const LOTUS_OWNER_MOBILE = demoMobile(2999);
 
 type Svc = { code: string; name: string; category: string; gst: GstTreatment; rate: number; price: number };
 
@@ -59,7 +49,7 @@ const SERVICES: Svc[] = [
   { code: 'MISC-COSM', name: 'Cosmetic procedure (sample)', category: 'misc', gst: 'taxable', rate: 1800, price: 200000 },
 ];
 
-async function ensureSeries(tx: Db, tenantId: string, locationId: string | null, key: string, period: string, lastNo: number) {
+async function ensureSeries(tx: Db | Tx, tenantId: string, locationId: string | null, key: string, period: string, lastNo: number) {
   await tx.execute(sql`
     insert into number_series (tenant_id, location_id, series_key, period, last_no)
     values (${tenantId}::uuid, ${locationId}::uuid, ${key}, ${period}, ${lastNo})
@@ -79,7 +69,11 @@ export async function seedClinicalFoundation(db: Db, log: (m: string) => void): 
     await seedSunriseClinical(db, sunrise.id, log);
     await grantSunriseModules(db, sunrise.id, log);
   }
-  await seedLotus(db, log);
+  await ensureLotusTenant(db, log);
+  // The first seedDemoPeople call (from seedDemo) runs before Lotus exists. Call it again so Lotus's
+  // five DEMO- patients load in this same run, then attach the isolation encounter to one of them.
+  if (sunrise) await seedDemoPeople(db, log);
+  await seedLotusClinical(db, log);
 }
 
 async function grantSunriseModules(db: Db, tenantId: string, log: (m: string) => void) {
@@ -120,78 +114,74 @@ async function seedSunriseClinical(db: Db, tenantId: string, log: (m: string) =>
     log('linked doctor@sunrise.demo to Dr. Asha Fictional');
   }
 
-  const already = await db.select({ id: schema.patients.id }).from(schema.patients).where(and(eq(schema.patients.tenantId, tenantId), eq(schema.patients.uhid, 'UH000000001')));
-  if (already.length > 0) {
+  const [marker] = await db
+    .select({ id: schema.services.id })
+    .from(schema.services)
+    .where(and(eq(schema.services.tenantId, tenantId), eq(schema.services.code, 'CON-NEW')));
+  if (marker) {
     log('sunrise clinical sample already present');
+    return;
+  }
+
+  const samplePatients = await db
+    .select({ id: schema.patients.id })
+    .from(schema.patients)
+    .where(
+      and(
+        eq(schema.patients.tenantId, tenantId),
+        eq(schema.patients.registeredLocationId, mumbai.id),
+        eq(schema.patients.isSample, true),
+        like(schema.patients.uhid, 'DEMO-%'),
+      ),
+    )
+    .orderBy(asc(schema.patients.uhid))
+    .limit(4);
+  if (samplePatients.length < 4) {
+    log('sunrise sample patients missing; clinical encounters skipped until seedDemoPeople has loaded them');
     return;
   }
 
   const fy = fyCode(new Date());
   const today = new Date().toISOString().slice(0, 10);
-  const patientIds: string[] = [];
-  for (const [i, row] of PATIENTS.entries()) {
-    const [first, last, gender, dob, city, state, pin, mobile] = row;
-    const [created] = await db
-      .insert(schema.patients)
-      .values({
-        tenantId,
-        uhid: `UH${String(i + 1).padStart(9, '0')}`,
-        registeredLocationId: mumbai.id,
-        firstName: first,
-        lastName: last,
-        gender,
-        dob,
-        mobile,
-        city,
-        stateCode: state,
-        pincode: pin,
-        addressLine1: `${i + 1} Fictional Lane`,
-        isSample: true,
-        createdBy: doctorUser?.id ?? null,
-      })
-      .returning({ id: schema.patients.id });
-    patientIds.push(created!.id);
-  }
-  await db.insert(schema.patientAlerts).values({
-    tenantId,
-    patientId: patientIds[0]!,
-    kind: 'allergy',
-    text: 'Penicillin — sample alert',
-    severity: 'high',
-    recordedBy: doctorUser?.id ?? null,
-  });
+  const patientIds = samplePatients.map((p) => p.id);
 
-  const serviceIds = new Map<string, string>();
-  for (const svc of SERVICES) {
-    const [row] = await db
-      .insert(schema.services)
-      .values({
-        tenantId,
-        code: svc.code,
-        name: svc.name,
-        category: svc.category,
-        hsnSac: svc.gst === 'taxable' ? '999799' : '9993',
-        gstTreatment: svc.gst,
-        gstRateBp: svc.rate,
-        active: true,
-      })
-      .returning({ id: schema.services.id });
-    serviceIds.set(svc.code, row!.id);
-    await db.insert(schema.tariffs).values({
+  await db.transaction(async (tx) => {
+    await tx.insert(schema.patientAlerts).values({
       tenantId,
-      serviceId: row!.id,
-      locationId: mumbai.id,
-      payerClass: 'general',
-      pricePaise: svc.price,
-      effectiveFrom: '2026-04-01',
+      patientId: patientIds[0]!,
+      kind: 'allergy',
+      text: 'Penicillin — sample alert',
+      severity: 'high',
+      recordedBy: doctorUser?.id ?? null,
     });
-  }
 
-  const open = async (kind: 'opd' | 'ipd', n: number, patientIndex: number, extra: Partial<typeof schema.encounters.$inferInsert> = {}) => {
-    const code = kind === 'opd' ? 'OV' : 'IP';
-    const [row] = await db
-      .insert(schema.encounters)
-      .values({
+    for (const svc of SERVICES) {
+      const [row] = await tx
+        .insert(schema.services)
+        .values({
+          tenantId,
+          code: svc.code,
+          name: svc.name,
+          category: svc.category,
+          hsnSac: svc.gst === 'taxable' ? '999799' : '9993',
+          gstTreatment: svc.gst,
+          gstRateBp: svc.rate,
+          active: true,
+        })
+        .returning({ id: schema.services.id });
+      await tx.insert(schema.tariffs).values({
+        tenantId,
+        serviceId: row!.id,
+        locationId: mumbai.id,
+        payerClass: 'general',
+        pricePaise: svc.price,
+        effectiveFrom: '2026-04-01',
+      });
+    }
+
+    const open = async (kind: 'opd' | 'ipd', n: number, patientIndex: number, extra: Partial<typeof schema.encounters.$inferInsert> = {}) => {
+      const code = kind === 'opd' ? 'OV' : 'IP';
+      await tx.insert(schema.encounters).values({
         tenantId,
         locationId: mumbai.id,
         patientId: patientIds[patientIndex]!,
@@ -205,22 +195,21 @@ async function seedSunriseClinical(db: Db, tenantId: string, log: (m: string) =>
         startedAt: new Date(),
         createdBy: doctorUser?.id ?? null,
         ...extra,
-      })
-      .returning({ id: schema.encounters.id });
-    return row!.id;
-  };
-  await open('opd', 1, 0);
-  await open('opd', 2, 1);
-  await open('opd', 3, 2);
-  await open('ipd', 1, 3, { currentWardCode: 'GW', currentBedLabel: 'GW-1', visitType: null });
+      });
+    };
+    await open('opd', 1, 0);
+    await open('opd', 2, 1);
+    await open('opd', 3, 2);
+    await open('ipd', 1, 3, { currentWardCode: 'GW', currentBedLabel: 'GW-1', visitType: null });
 
-  await ensureSeries(db, tenantId, null, 'uhid', '', PATIENTS.length);
-  await ensureSeries(db, tenantId, mumbai.id, 'opd_visit', fy, 3);
-  await ensureSeries(db, tenantId, mumbai.id, 'ip_admission', fy, 1);
-  log(`sunrise clinical sample: ${PATIENTS.length} patients, ${SERVICES.length} services, 4 encounters (${today})`);
+    // Sample UHIDs are DEMO-… and are not drawn from the UH series, so last_no stays 0.
+    await ensureSeries(tx, tenantId, mumbai.id, 'opd_visit', fy, 3);
+    await ensureSeries(tx, tenantId, mumbai.id, 'ip_admission', fy, 1);
+  });
+  log(`sunrise clinical sample: linked 4 existing DEMO patients, ${SERVICES.length} services, 4 encounters (${today})`);
 }
 
-async function seedLotus(db: Db, log: (m: string) => void) {
+async function ensureLotusTenant(db: Db, log: (m: string) => void): Promise<void> {
   const existing = (await db.select().from(schema.tenants).where(eq(schema.tenants.slug, LOTUS)))[0];
   if (existing) {
     log('lotus tenant already present');
@@ -278,12 +267,13 @@ async function seedLotus(db: Db, log: (m: string) => void) {
       })
       .returning();
     await tx.insert(schema.departments).values({ tenantId, locationId: loc!.id, name: 'OPD', sortOrder: 0 });
+    // Login stays owner@lotus.demo (PHASE_B_PLAN decision 10 and the isolation tests). Mobile is in the 90000 block.
     const [owner] = await tx
       .insert(schema.users)
       .values({
         tenantId,
-        email: 'owner@lotus.demo',
-        mobile: '9890000001',
+        email: LOTUS_OWNER_EMAIL,
+        mobile: LOTUS_OWNER_MOBILE,
         name: 'Omkar Demo Owner',
         passwordHash,
         status: 'active',
@@ -314,61 +304,80 @@ async function seedLotus(db: Db, log: (m: string) => void) {
       quantity: 1,
       status: 'active',
     });
-    const [patient] = await tx
-      .insert(schema.patients)
-      .values({
-        tenantId,
-        uhid: 'UH000000001',
-        registeredLocationId: loc!.id,
-        firstName: 'Omkar',
-        lastName: 'Sample',
-        gender: 'male',
-        dob: '1980-02-02',
-        mobile: '9890000002',
-        city: 'Pune',
-        stateCode: '27',
-        pincode: '411001',
-        isSample: true,
-        createdBy: owner!.id,
-      })
-      .returning();
+    log(`lotus tenant ${tenantId} ${LOTUS_OWNER_EMAIL}`);
+  });
+}
+
+async function seedLotusClinical(db: Db, log: (m: string) => void): Promise<void> {
+  const tenant = (await db.select().from(schema.tenants).where(eq(schema.tenants.slug, LOTUS)))[0];
+  if (!tenant) {
+    log('lotus tenant missing; clinical sample skipped');
+    return;
+  }
+  const [marker] = await db
+    .select({ id: schema.services.id })
+    .from(schema.services)
+    .where(and(eq(schema.services.tenantId, tenant.id), eq(schema.services.code, 'CON-NEW')));
+  if (marker) {
+    log('lotus clinical sample already present');
+    return;
+  }
+  const [loc] = await db
+    .select()
+    .from(schema.locations)
+    .where(and(eq(schema.locations.tenantId, tenant.id), eq(schema.locations.isPrimary, true)));
+  const [owner] = await db.select().from(schema.users).where(eq(schema.users.email, LOTUS_OWNER_EMAIL));
+  const [patient] = await db
+    .select({ id: schema.patients.id })
+    .from(schema.patients)
+    .where(and(eq(schema.patients.tenantId, tenant.id), eq(schema.patients.isSample, true), like(schema.patients.uhid, 'DEMO-%')))
+    .orderBy(asc(schema.patients.uhid))
+    .limit(1);
+  if (!loc || !owner || !patient) {
+    log('lotus sample patient missing; clinical encounter skipped');
+    return;
+  }
+
+  const start = new Date();
+  const fy = fyCode(start);
+  await db.transaction(async (tx) => {
     const [svc] = await tx
       .insert(schema.services)
-      .values({ tenantId, code: 'CON-NEW', name: 'General consultation, new', category: 'consultation', gstTreatment: 'exempt_healthcare', gstRateBp: 0 })
+      .values({ tenantId: tenant.id, code: 'CON-NEW', name: 'General consultation, new', category: 'consultation', gstTreatment: 'exempt_healthcare', gstRateBp: 0 })
       .returning();
-    await tx.insert(schema.tariffs).values({ tenantId, serviceId: svc!.id, locationId: loc!.id, payerClass: 'general', pricePaise: 40000, effectiveFrom: '2026-04-01' });
+    await tx.insert(schema.tariffs).values({ tenantId: tenant.id, serviceId: svc!.id, locationId: loc.id, payerClass: 'general', pricePaise: 40000, effectiveFrom: '2026-04-01' });
     const [enc] = await tx
       .insert(schema.encounters)
       .values({
-        tenantId,
-        locationId: loc!.id,
-        patientId: patient!.id,
+        tenantId: tenant.id,
+        locationId: loc.id,
+        patientId: patient.id,
         kind: 'opd',
-        number: `PUNOV/${fyCode(start)}/00001`,
+        number: `PUNOV/${fy}/00001`,
         status: 'open',
         visitType: 'new',
         payerType: 'self',
-        createdBy: owner!.id,
+        createdBy: owner.id,
       })
       .returning();
-    await tx.insert(schema.patientAlerts).values({ tenantId, patientId: patient!.id, kind: 'alert', text: 'Sample alert for isolation', severity: 'low', recordedBy: owner!.id });
+    await tx.insert(schema.patientAlerts).values({ tenantId: tenant.id, patientId: patient.id, kind: 'alert', text: 'Sample alert for isolation', severity: 'low', recordedBy: owner.id });
     const [order] = await tx
       .insert(schema.clinicalOrders)
       .values({
-        tenantId,
-        locationId: loc!.id,
+        tenantId: tenant.id,
+        locationId: loc.id,
         encounterId: enc!.id,
-        patientId: patient!.id,
+        patientId: patient.id,
         kind: 'medicine',
-        number: `PUNOR/${fyCode(start)}/00001`,
+        number: `PUNOR/${fy}/00001`,
         source: 'opd',
         priority: 'routine',
         status: 'placed',
-        orderedByUserId: owner!.id,
+        orderedByUserId: owner.id,
       })
       .returning();
     await tx.insert(schema.clinicalOrderItems).values({
-      tenantId,
+      tenantId: tenant.id,
       orderId: order!.id,
       lineNo: 1,
       drugName: 'Paracetamol',
@@ -376,13 +385,13 @@ async function seedLotus(db: Db, log: (m: string) => void) {
       frequencyCode: 'TDS',
       status: 'pending',
     });
-    await tx.insert(schema.vitalSigns).values({ tenantId, locationId: loc!.id, encounterId: enc!.id, patientId: patient!.id, recordedBy: owner!.id, pulse: 76, spo2: 98 });
-    await tx.insert(schema.clinicalNotes).values({ tenantId, encounterId: enc!.id, patientId: patient!.id, kind: 'chief_complaint', body: 'Sample headache. Fictional.', authorUserId: owner!.id });
+    await tx.insert(schema.vitalSigns).values({ tenantId: tenant.id, locationId: loc.id, encounterId: enc!.id, patientId: patient.id, recordedBy: owner.id, pulse: 76, spo2: 98 });
+    await tx.insert(schema.clinicalNotes).values({ tenantId: tenant.id, encounterId: enc!.id, patientId: patient.id, kind: 'chief_complaint', body: 'Sample headache. Fictional.', authorUserId: owner.id });
     await tx.insert(schema.charges).values({
-      tenantId,
-      locationId: loc!.id,
+      tenantId: tenant.id,
+      locationId: loc.id,
       encounterId: enc!.id,
-      patientId: patient!.id,
+      patientId: patient.id,
       serviceId: svc!.id,
       description: 'General consultation, new',
       qty: 1,
@@ -395,23 +404,25 @@ async function seedLotus(db: Db, log: (m: string) => void) {
       sourceType: 'seed',
       sourceId: enc!.id,
       sourceLine: '1',
-      postedBy: owner!.id,
+      postedBy: owner.id,
     });
     await tx.insert(schema.cashLedger).values({
-      tenantId,
-      locationId: loc!.id,
+      tenantId: tenant.id,
+      locationId: loc.id,
       entryType: 'receipt',
       direction: 'in',
       mode: 'cash',
       amountPaise: 40000,
-      number: `PUNRC/${fyCode(start)}/00001`,
-      patientId: patient!.id,
+      number: `PUNRC/${fy}/00001`,
+      patientId: patient.id,
       encounterId: enc!.id,
       refType: 'bill',
       refId: enc!.id,
-      receivedBy: owner!.id,
+      receivedBy: owner.id,
     });
-    await ensureSeries(tx as unknown as Db, tenantId, null, 'uhid', '', 1);
-    log(`lotus tenant ${tenantId} owner@lotus.demo`);
+    await ensureSeries(tx, tenant.id, loc.id, 'opd_visit', fy, 1);
+    await ensureSeries(tx, tenant.id, loc.id, 'clinical_order', fy, 1);
+    await ensureSeries(tx, tenant.id, loc.id, 'receipt', fy, 1);
   });
+  log('lotus clinical sample linked to an existing DEMO patient');
 }

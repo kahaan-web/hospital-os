@@ -1,5 +1,5 @@
 import { schema, type Tx } from '@hos/db';
-import type { ClinicalCtx, EncounterDto, EncounterService, PatientSummaryDto, PayerType, VisitType } from '@hos/shared';
+import type { EncounterDto, EncounterService, PatientSummaryDto, PayerType, VisitType } from '@hos/shared';
 import { ageLabel, maskMobile } from '@hos/shared';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../http';
