@@ -9,7 +9,7 @@ import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
 import { wt } from '@/i18n';
 import { formatDate, formatINR } from '@/lib/format';
-import { API_BASE, apiGet, apiText } from '@/lib/api';
+import { API_BASE, apiGet } from '@/lib/api';
 
 export default function InvoicePage() {
   return (
@@ -25,7 +25,6 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
   const router = useRouter();
   const { toast: showToast } = useToast();
   const [invoice, setInvoice] = useState<InvoiceDto | null>(null);
-  const [html, setHtml] = useState<string | null>(null);
   const id = state.invoiceId;
   const toastErrorRef = useRef(false);
 
@@ -53,8 +52,6 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
       try {
         const inv = await apiGet<InvoiceDto>(`/billing/invoices/${invoiceId}`);
         setInvoice(inv);
-        const printable = await apiText(`/billing/invoices/${invoiceId}/html`);
-        setHtml(printable);
         toastErrorRef.current = false;
       } catch {
         if (!toastErrorRef.current) {
@@ -91,20 +88,18 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
               {wt('invoice.continueProvisioning')}
             </Button>
           </div>
-          {html ? (
-            <iframe
-              className="hos-invoice-iframe"
-              title={`Invoice ${invoice.number}`}
-              srcDoc={html}
-              sandbox=""
-              style={{
-                width: '100%',
-                minHeight: '28rem',
-                border: '1px solid var(--hos-border)',
-                background: '#fff',
-              }}
-            />
-          ) : null}
+          <iframe
+            className="hos-invoice-iframe"
+            title={`Invoice ${invoice.number}`}
+            src={`${API_BASE}/billing/invoices/${invoice.id}/html`}
+            sandbox=""
+            style={{
+              width: '100%',
+              minHeight: '28rem',
+              border: '1px solid var(--hos-border)',
+              background: '#fff',
+            }}
+          />
         </div>
       ) : (
         <p>
