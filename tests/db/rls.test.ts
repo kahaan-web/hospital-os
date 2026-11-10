@@ -48,6 +48,7 @@ const TABLES = [
   'number_series',
   'patients',
   'patient_alerts',
+  'patient_documents',
   'encounters',
   'services',
   'tariffs',
@@ -57,6 +58,7 @@ const TABLES = [
   'clinical_notes',
   'charges',
   'cash_ledger',
+  'mlc_cases',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -738,6 +740,16 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into patient_alerts (tenant_id, patient_id, kind, text) values ($1, '${b.patientId}', 'alert', 'Nope')`,
         retargetSql: `update patient_alerts set tenant_id = $1`,
       };
+    case 'patient_documents':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.documentId,
+        setSql: `kind = 'Touched by A'`,
+        untouched: `select coalesce(kind = 'Touched by A', false) as touched from patient_documents where id = $1`,
+        insertSql: `insert into patient_documents (tenant_id, patient_id, kind, file_path, mime, size) values ($1, '${b.patientId}', 'nope', 'nope.pdf', 'application/pdf', 1)`,
+        retargetSql: `update patient_documents set tenant_id = $1`,
+      };
     case 'encounters':
       return {
         ...row(common, 'id = $1', b.encounterId, `referred_by = 'Touched by A'`, 'referred_by',
@@ -798,6 +810,16 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'cash_ledger':
       return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
         `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
+    case 'mlc_cases':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.mlcId,
+        setSql: `injury_summary = 'Touched by A'`,
+        untouched: `select coalesce(injury_summary = 'Touched by A', false) as touched from mlc_cases where id = $1`,
+        insertSql: `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary) values ($1, '${b.patientId}', '${b.encounterId}', 'ZML${pair.runId}', 'Nope')`,
+        retargetSql: `update mlc_cases set tenant_id = $1`,
+      };
     default:
       return assertNever(table);
   }

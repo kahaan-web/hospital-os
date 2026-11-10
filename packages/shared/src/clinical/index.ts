@@ -36,6 +36,7 @@ export {
   type WardType,
 } from './codes';
 export * from './patient';
+export * from './registration';
 export * from './encounter';
 export {
   ORDER_ITEM_STATUSES,
