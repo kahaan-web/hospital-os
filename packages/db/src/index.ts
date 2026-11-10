@@ -4,4 +4,5 @@ export * from './client';
 export * from './env';
 export * from './migrate';
 export * from './seed';
+export * from './seed-demo-people';
 export * from './password';

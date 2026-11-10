@@ -31,11 +31,24 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ) {
-  const Comp = asChild ? Slot : 'button';
+  if (asChild) {
+    // Radix Slot needs exactly one child element; icons/spinner are not rendered in asChild mode.
+    return (
+      <Slot
+        ref={ref}
+        className={cn('hos-btn hos-focus-visible', `hos-btn--${size}`, `hos-btn--${variant}`, className)}
+        aria-disabled={disabled || loading || undefined}
+        {...props}
+      >
+        {children}
+      </Slot>
+    );
+  }
+  const Comp = 'button';
   return (
     <Comp
       ref={ref}
-      type={asChild ? undefined : type}
+      type={type}
       className={cn(
         'hos-btn hos-focus-visible',
         `hos-btn--${size}`,
