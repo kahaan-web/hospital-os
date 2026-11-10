@@ -2,7 +2,6 @@ import { schema, type Tx } from '@hos/db';
 import {
   addCycle,
   applyGst,
-  paymentStatusForOutcome,
   priceSubscription,
   type OrderDto,
   type PayAttemptResult,
@@ -19,6 +18,49 @@ import { ApiError, writeAudit, type Actor } from './http';
 import type { PaymentGateway } from './providers';
 
 const OPEN = ['created', 'attempted'] as const;
+
+type SqlQuery = ReturnType<typeof sql>;
+
+function errorText(error: unknown): string {
+  if (!error || typeof error !== 'object') return '';
+  const record = error as { message?: unknown; cause?: unknown };
+  const own = typeof record.message === 'string' ? record.message : '';
+  return `${own} ${errorText(record.cause)}`;
+}
+
+async function exec(tx: Tx, query: SqlQuery) {
+  try {
+    return await tx.execute(query);
+  } catch (error) {
+    const code = /hos:([a-z0-9_]+)/.exec(errorText(error))?.[1];
+    if (code === 'order_closed') throw new ApiError(409, 'order_closed', 'This order is already closed');
+    if (code === 'payment_not_pending') throw new ApiError(409, 'payment_not_pending', 'That payment is not pending');
+    if (code === 'bad_transition') throw new ApiError(409, 'conflict', 'That status change is not allowed');
+    if (code === 'order_not_paid') throw new ApiError(409, 'order_closed', 'Only a paid order can be fulfilled');
+    if (code === 'payment_not_verified') throw new ApiError(409, 'payment_not_captured', 'Only a verified captured payment can be fulfilled');
+    if (code === 'order_not_found') throw new ApiError(404, 'not_found', 'Order not found');
+    if (code === 'payment_not_found') throw new ApiError(404, 'not_found', 'Payment not found');
+    if (code === 'no_subscription') throw new ApiError(422, 'no_subscription', 'There is no subscription to change');
+    if (code === 'forbidden') throw new ApiError(403, 'forbidden', 'You cannot do that');
+    throw error;
+  }
+}
+
+async function simulatorEnabled(tx: Tx, production: boolean): Promise<boolean> {
+  if (production) return false;
+  const rows = await tx.execute<{ enabled: boolean }>(sql`select mock_payment_simulator as enabled from platform_settings where id = 1`);
+  return rows.rows[0]?.enabled === true;
+}
+
+/** The server captures unless the dev simulator is on and the client named an outcome. */
+export async function decideOutcome(
+  tx: Tx,
+  production: boolean,
+  requested: 'success' | 'failure' | 'pending' | undefined,
+): Promise<'success' | 'failure' | 'pending'> {
+  if ((await simulatorEnabled(tx, production)) && requested) return requested;
+  return 'success';
+}
 
 export async function createOrder(
   tx: Tx,
@@ -51,7 +93,7 @@ export async function createOrder(
     .from(schema.orders)
     .where(and(eq(schema.orders.purpose, purpose), inArray(schema.orders.status, [...OPEN])));
   if (open.length > 0) {
-    await tx.update(schema.orders).set({ status: 'cancelled' }).where(inArray(schema.orders.id, open.map((o) => o.id)));
+    for (const row of open) await exec(tx, sql`select hos_order_transition(${row.id}::uuid, 'cancelled')`);
   }
   const [order] = await tx
     .insert(schema.orders)
@@ -80,84 +122,101 @@ export async function payOrder(
   tx: Tx,
   actor: Actor,
   orderPublicId: string,
-  input: { method: 'upi' | 'card' | 'netbanking'; outcome: 'success' | 'failure' | 'pending'; details: Record<string, string | undefined> },
+  input: { method: 'upi' | 'card' | 'netbanking'; outcome?: 'success' | 'failure' | 'pending'; details: Record<string, string | undefined> },
   gateway: PaymentGateway,
+  production: boolean,
 ): Promise<PayAttemptResult> {
   const order = await mustOrder(tx, orderPublicId);
-  if (!OPEN.includes(order.status as (typeof OPEN)[number])) throw new ApiError(409, 'order_closed', 'This order is already closed');
+  await tx.execute(sql`select id from orders where id = ${order.id} for update`);
+  const locked = await mustOrder(tx, orderPublicId);
+  if (!OPEN.includes(locked.status as (typeof OPEN)[number])) throw new ApiError(409, 'order_closed', 'This order is already closed');
   const pending = await tx
     .select({ id: schema.payments.id })
     .from(schema.payments)
-    .where(and(eq(schema.payments.orderId, order.id), eq(schema.payments.status, 'pending')));
+    .where(and(eq(schema.payments.orderId, locked.id), eq(schema.payments.status, 'pending')));
   if (pending.length > 0) throw new ApiError(409, 'payment_pending', 'A payment is still pending on this order');
-  const status = paymentStatusForOutcome(input.outcome);
+  const outcome = await decideOutcome(tx, production, input.outcome);
   const details: Record<string, string> = {};
   for (const [k, v] of Object.entries(input.details)) if (v) details[k] = v;
   const [payment] = await tx
     .insert(schema.payments)
     .values({
-      tenantId: order.tenantId,
-      orderId: order.id,
+      tenantId: locked.tenantId,
+      orderId: locked.id,
       publicId: publicId('pay'),
       method: input.method,
       methodDetails: details,
-      status,
-      amountPaise: order.amountPaise,
-      failureCode: input.outcome === 'failure' ? 'simulated_failure' : null,
-      failureReason: input.outcome === 'failure' ? 'The mock gateway declined this attempt' : null,
-      capturedAt: status === 'captured' ? new Date() : null,
+      status: 'created',
+      amountPaise: locked.amountPaise,
     })
     .returning();
-  const nextOrder = status === 'captured' ? 'paid' : 'attempted';
-  await tx
-    .update(schema.orders)
-    .set({ status: nextOrder, paidAt: status === 'captured' ? new Date() : order.paidAt })
-    .where(eq(schema.orders.id, order.id));
-  const signature = status === 'captured' ? gateway.signCapture(order.publicId, payment!.publicId) : null;
-  await writeAudit(tx, actor, 'billing.payment.attempt', 'payment', payment!.publicId, null, { outcome: input.outcome, method: input.method, orderId: order.publicId });
-  const dto = await orderDto(tx, order.id, gateway.keyId);
+  if (outcome === 'failure') {
+    await exec(tx, sql`select hos_payment_transition(${payment!.id}::uuid, 'failed', 'simulated_failure', 'The mock gateway declined this attempt', null)`);
+    await exec(tx, sql`select hos_order_transition(${locked.id}::uuid, 'attempted')`);
+  } else if (outcome === 'pending') {
+    await exec(tx, sql`select hos_payment_transition(${payment!.id}::uuid, 'pending', null, null, null)`);
+    await exec(tx, sql`select hos_order_transition(${locked.id}::uuid, 'attempted')`);
+  } else {
+    await exec(tx, sql`select hos_payment_transition(${payment!.id}::uuid, 'captured', null, null, null)`);
+    await exec(tx, sql`select hos_order_mark_paid(${locked.id}::uuid)`);
+  }
+  const signature = outcome === 'success' ? gateway.signCapture(locked.publicId, payment!.publicId) : null;
+  await writeAudit(tx, actor, 'billing.payment.attempt', 'payment', payment!.publicId, null, { outcome, method: input.method, orderId: locked.publicId });
+  const dto = await orderDto(tx, locked.id, gateway.keyId);
   const paymentDto = dto.payments.find((p) => p.id === payment!.publicId)!;
-  return { order: dto, payment: paymentDto, checkout: signature ? { orderId: order.publicId, paymentId: payment!.publicId, signature } : null };
+  return { order: dto, payment: paymentDto, checkout: signature ? { orderId: locked.publicId, paymentId: payment!.publicId, signature } : null };
 }
 
 /** Returns null when the signature is wrong. The audit row is written and the caller must commit it (do not throw). */
 export async function verifyPayment(tx: Tx, actor: Actor, body: { orderId: string; paymentId: string; signature: string }, gateway: PaymentGateway): Promise<OrderDto | null> {
-  const order = await mustOrder(tx, body.orderId);
-  const [payment] = await tx.select().from(schema.payments).where(and(eq(schema.payments.orderId, order.id), eq(schema.payments.publicId, body.paymentId)));
+  const locked = await tx.execute<{ id: string; public_id: string; fulfilled_at: Date | null }>(sql`
+    select id, public_id, fulfilled_at from orders where public_id = ${body.orderId}
+  `);
+  const order = locked.rows[0];
+  if (!order) throw new ApiError(404, 'not_found', 'Order not found');
+  const payments = await tx.execute<{ id: string; public_id: string; status: string; signature_verified: boolean }>(sql`
+    select id, public_id, status, signature_verified from payments
+    where order_id = ${order.id} and public_id = ${body.paymentId}
+  `);
+  const payment = payments.rows[0];
   if (!payment) throw new ApiError(404, 'not_found', 'Payment not found');
-  if (!gateway.verifySignature(order.publicId, payment.publicId, body.signature)) {
-    await writeAudit(tx, actor, 'billing.payment.bad_signature', 'payment', payment.publicId, null, { orderId: order.publicId });
+  if (!gateway.verifySignature(order.public_id, payment.public_id, body.signature)) {
+    await writeAudit(tx, actor, 'billing.payment.bad_signature', 'payment', payment.public_id, null, { orderId: order.public_id });
     return null;
   }
   if (payment.status !== 'captured') throw new ApiError(409, 'payment_not_captured', 'Only a captured payment can be verified');
-  if (!payment.signatureVerified) {
-    await tx.update(schema.payments).set({ signatureVerified: true }).where(eq(schema.payments.id, payment.id));
+  if (!payment.signature_verified) {
+    await exec(tx, sql`select hos_payment_transition(${payment.id}::uuid, 'captured', null, null, true)`);
   }
-  if (!order.fulfilledAt) await fulfil(tx, order.id, payment.id);
-  await writeAudit(tx, actor, 'billing.payment.verify', 'order', order.publicId, null, { paymentId: payment.publicId });
+  if (!order.fulfilled_at) await fulfil(tx, order.id, payment.id);
+  await writeAudit(tx, actor, 'billing.payment.verify', 'order', order.public_id, null, { paymentId: payment.public_id });
   return orderDto(tx, order.id, gateway.keyId);
 }
 
+/** Platform or mock-webhook only. A tenant session must not call this. */
 export async function resolvePending(tx: Tx, actor: Actor, paymentPublicId: string, outcome: 'success' | 'failure', gateway: PaymentGateway): Promise<PaymentDto> {
-  const [payment] = await tx.select().from(schema.payments).where(eq(schema.payments.publicId, paymentPublicId));
-  if (!payment) throw new ApiError(404, 'not_found', 'Payment not found');
-  if (payment.status !== 'pending') throw new ApiError(409, 'payment_not_pending', 'That payment is not pending');
-  const order = (await tx.select().from(schema.orders).where(eq(schema.orders.id, payment.orderId)))[0];
-  if (!order) throw new ApiError(404, 'not_found', 'Order not found');
-  const open = OPEN.includes(order.status as (typeof OPEN)[number]);
+  const locked = await tx.execute<{ payment_id: string; payment_status: string; order_id: string; order_status: string; public_id: string }>(sql`
+    select p.id as payment_id, p.status as payment_status, o.id as order_id, o.status as order_status, p.public_id
+    from payments p
+    join orders o on o.id = p.order_id
+    where p.public_id = ${paymentPublicId}
+  `);
+  const row = locked.rows[0];
+  if (!row) throw new ApiError(404, 'not_found', 'Payment not found');
+  if (row.payment_status !== 'pending') throw new ApiError(409, 'payment_not_pending', 'That payment is not pending');
+  const open = OPEN.includes(row.order_status as (typeof OPEN)[number]);
   if (outcome === 'failure' || !open) {
-    await tx
-      .update(schema.payments)
-      .set({ status: 'failed', failureCode: open ? 'simulated_failure' : 'order_closed', failureReason: open ? 'The mock gateway declined this attempt' : 'The order closed before the payment completed' })
-      .where(eq(schema.payments.id, payment.id));
+    const code = open ? 'simulated_failure' : 'order_closed';
+    const reason = open ? 'The mock gateway declined this attempt' : 'The order closed before the payment completed';
+    await exec(tx, sql`select hos_payment_transition(${row.payment_id}::uuid, 'failed', ${code}, ${reason}, null)`);
   } else {
-    await tx.update(schema.payments).set({ status: 'captured', signatureVerified: true, capturedAt: new Date() }).where(eq(schema.payments.id, payment.id));
-    await tx.update(schema.orders).set({ status: 'paid', paidAt: new Date() }).where(eq(schema.orders.id, order.id));
-    if (!order.fulfilledAt) await fulfil(tx, order.id, payment.id);
+    await exec(tx, sql`select hos_payment_transition(${row.payment_id}::uuid, 'captured', null, null, true)`);
+    await exec(tx, sql`select hos_order_mark_paid(${row.order_id}::uuid)`);
+    await fulfil(tx, row.order_id, row.payment_id);
   }
-  await writeAudit(tx, actor, 'billing.payment.resolve', 'payment', payment.publicId, { status: 'pending' }, { outcome, orderOpen: open });
-  const dto = await orderDto(tx, order.id, gateway.keyId);
-  return dto.payments.find((p) => p.id === payment.publicId)!;
+  await writeAudit(tx, actor, 'billing.payment.resolve', 'payment', row.public_id, { status: 'pending' }, { outcome, orderOpen: open });
+  const dto = await orderDto(tx, row.order_id, gateway.keyId);
+  return dto.payments.find((p) => p.id === row.public_id)!;
 }
 
 async function mustOrder(tx: Tx, publicOrderId: string) {
@@ -168,65 +227,18 @@ async function mustOrder(tx: Tx, publicOrderId: string) {
 
 /** Invoice + subscription. Onboarding does not activate the tenant — that is /onboarding/provision. */
 export async function fulfil(tx: Tx, orderId: string, paymentId: string): Promise<void> {
+  const applied = await exec(tx, sql`select hos_subscription_apply_order(${orderId}::uuid) as applied`);
+  if (applied.rows[0]?.applied !== true) return;
   const [order] = await tx.select().from(schema.orders).where(eq(schema.orders.id, orderId));
-  if (!order || order.fulfilledAt) return;
+  if (!order) return;
   const quote = order.quote as QuoteDto;
   const [tenant] = await tx.select().from(schema.tenants);
   if (!tenant) throw new ApiError(404, 'not_found', 'Hospital not found');
-  if (order.purpose === 'onboarding') await ensureSubscription(tx, tenant.id, quote);
-  else await applySubscriptionChange(tx, quote);
   if (order.purpose === 'onboarding' && ['facility', 'locations', 'plan', 'addons', 'payment'].includes(tenant.onboardingStep)) {
     await tx.update(schema.tenants).set({ onboardingStep: 'invoice' }).where(eq(schema.tenants.id, tenant.id));
   }
-  await tx.update(schema.orders).set({ fulfilledAt: new Date(), status: 'paid', paidAt: order.paidAt ?? new Date() }).where(eq(schema.orders.id, order.id));
   // Invoice number last: hos_next_invoice_number locks the counter row until commit.
   await insertInvoice(tx, tenant.id, order.id, paymentId, quote, order.purpose === 'onboarding' ? 'Hospital OS subscription' : 'Hospital OS subscription change');
-}
-
-async function ensureSubscription(tx: Tx, tenantId: string, quote: QuoteDto): Promise<void> {
-  const [existing] = await tx.select().from(schema.subscriptions);
-  if (existing) return;
-  const { book } = await priceBook(tx);
-  const plan = book.plans.find((p) => p.id === quote.config.planId);
-  if (!plan) throw new ApiError(422, 'invalid_config', 'Plan is no longer available');
-  const start = new Date(quote.periodStart);
-  const end = new Date(quote.periodEnd);
-  const [sub] = await tx
-    .insert(schema.subscriptions)
-    .values({
-      tenantId,
-      planId: quote.config.planId,
-      billingCycle: quote.config.cycle,
-      locationCount: quote.config.locationCount,
-      status: 'active',
-      currentPeriodStart: start,
-      currentPeriodEnd: end,
-      creditPaise: 0,
-    })
-    .returning();
-  const unit = quote.config.cycle === 'annual' ? plan.annualPaise : plan.monthlyPaise;
-  await tx.insert(schema.subscriptionItems).values({
-    tenantId,
-    subscriptionId: sub!.id,
-    kind: 'plan',
-    planId: plan.id,
-    unitAmountPaise: unit,
-    quantity: quote.config.locationCount,
-    status: 'active',
-  });
-  for (const moduleId of quote.config.addonModuleIds) {
-    const addon = book.addons.find((a) => a.moduleId === moduleId);
-    if (!addon) continue;
-    await tx.insert(schema.subscriptionItems).values({
-      tenantId,
-      subscriptionId: sub!.id,
-      kind: 'addon',
-      moduleId,
-      unitAmountPaise: quote.config.cycle === 'annual' ? addon.annualPaise : addon.monthlyPaise,
-      quantity: quote.config.locationCount,
-      status: 'active',
-    });
-  }
 }
 
 /**
@@ -242,38 +254,44 @@ export async function applySubscriptionChange(tx: Tx, quote: QuoteDto): Promise<
   const { book } = await priceBook(tx);
   const plan = book.plans.find((p) => p.id === quote.config.planId);
   if (!plan) throw new ApiError(422, 'invalid_config', 'Plan is no longer available');
-  await tx
-    .update(schema.subscriptions)
-    .set({
-      planId: quote.config.planId,
-      locationCount: quote.config.locationCount,
-      creditPaise: quote.change?.creditBalanceAfterPaise ?? sub.creditPaise,
-    })
-    .where(eq(schema.subscriptions.id, sub.id));
-  await tx.update(schema.subscriptionItems).set({ status: 'removed', removedAt: new Date() }).where(eq(schema.subscriptionItems.subscriptionId, sub.id));
-  const unit = sub.billingCycle === 'annual' ? plan.annualPaise : plan.monthlyPaise;
-  await tx.insert(schema.subscriptionItems).values({
-    tenantId: sub.tenantId,
-    subscriptionId: sub.id,
-    kind: 'plan',
-    planId: plan.id,
-    unitAmountPaise: unit,
-    quantity: quote.config.locationCount,
-    status: 'active',
+  await persistSubscription(tx, {
+    planId: quote.config.planId,
+    locationCount: quote.config.locationCount,
+    addonModuleIds: [...quote.config.addonModuleIds],
+    creditPaise: quote.change?.creditBalanceAfterPaise ?? sub.creditPaise,
+    periodStart: sub.currentPeriodStart,
+    periodEnd: sub.currentPeriodEnd,
+    setPeriod: false,
+    reason: 'no_payment_change',
   });
-  for (const moduleId of quote.config.addonModuleIds) {
-    const addon = book.addons.find((a) => a.moduleId === moduleId);
-    if (!addon) continue;
-    await tx.insert(schema.subscriptionItems).values({
-      tenantId: sub.tenantId,
-      subscriptionId: sub.id,
-      kind: 'addon',
-      moduleId,
-      unitAmountPaise: sub.billingCycle === 'annual' ? addon.annualPaise : addon.monthlyPaise,
-      quantity: quote.config.locationCount,
-      status: 'active',
-    });
-  }
+}
+
+async function persistSubscription(
+  tx: Tx,
+  change: {
+    planId: string;
+    locationCount: number;
+    addonModuleIds: string[];
+    creditPaise: number;
+    periodStart: Date;
+    periodEnd: Date;
+    setPeriod: boolean;
+    reason: 'renewal' | 'no_payment_change';
+  },
+): Promise<void> {
+  await exec(
+    tx,
+    sql`select hos_subscription_admin_change(
+      ${change.planId}::uuid,
+      ${change.locationCount}::int,
+      ${JSON.stringify(change.addonModuleIds)}::jsonb,
+      ${change.creditPaise}::bigint,
+      ${change.periodStart.toISOString()}::timestamptz,
+      ${change.periodEnd.toISOString()}::timestamptz,
+      ${change.setPeriod}::boolean,
+      ${change.reason}
+    )`,
+  );
 }
 
 interface InvoiceSource {
@@ -352,10 +370,16 @@ async function issueRenewal(tx: Tx, actor: Actor, row: typeof schema.subscriptio
   }
   const periodStart = new Date(subView.currentPeriodEnd);
   const periodEnd = addCycle(periodStart, cycle);
-  await tx
-    .update(schema.subscriptions)
-    .set({ currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, creditPaise: credit })
-    .where(eq(schema.subscriptions.id, subView.id));
+  await persistSubscription(tx, {
+    planId: config.planId,
+    locationCount: config.locationCount,
+    addonModuleIds: [...config.addonModuleIds],
+    creditPaise: credit,
+    periodStart,
+    periodEnd,
+    setPeriod: true,
+    reason: 'renewal',
+  });
   const invoice = await insertInvoice(
     tx,
     subView.tenantId,

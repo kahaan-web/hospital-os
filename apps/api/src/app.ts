@@ -42,6 +42,8 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.addHook('onRequest', async (req, reply) => {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
+    // The mock gateway signs this body. It has no browser session, so CSRF does not apply.
+    if ((req.url ?? '').split('?')[0] === '/api/v1/billing/webhooks/mock') return;
     if (req.headers['x-hos-csrf'] !== '1') {
       return reply.status(403).send({ error: { code: 'csrf', message: 'Send header x-hos-csrf: 1' } });
     }

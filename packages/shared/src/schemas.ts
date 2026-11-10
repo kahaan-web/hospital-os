@@ -143,8 +143,11 @@ export const PAYMENT_OUTCOMES = ['success', 'failure', 'pending'] as const;
 
 export const payAttemptSchema = z.object({
   method: z.enum(PAYMENT_METHODS),
-  /** Mock gateway only: which outcome to simulate. */
-  outcome: z.enum(PAYMENT_OUTCOMES),
+  /**
+   * Ignored unless NODE_ENV is not production and the platform dev simulator is on.
+   * The server decides the mock outcome (capture) on every other checkout.
+   */
+  outcome: z.enum(PAYMENT_OUTCOMES).optional(),
   details: z
     .object({
       vpa: z.string().trim().max(80).optional(),

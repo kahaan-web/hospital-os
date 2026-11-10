@@ -1,7 +1,11 @@
-import type { LightMyRequestResponse } from 'fastify';
+import { createDb, dbEnv, schema, withPlatform, withTenant } from '@hos/db';
 import { SHEET_FEATURE_DEFS, featureKey } from '@hos/shared';
+import { sql } from 'drizzle-orm';
+import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../apps/api/src/app';
+import { webhookSignature } from '../../apps/api/src/crypto';
+import { apiEnv } from '../../apps/api/src/env';
 
 const PREMIUM_ONLY = featureKey('patient-registration', 'MLC Registration');
 const SHEET_KEYS = new Set(SHEET_FEATURE_DEFS.map((feature) => feature.key));
@@ -138,11 +142,17 @@ it('enforces premium features, plan changes, suspension and renewal', async () =
   expect(detail.json().lines.some((line: { description: string }) => /prorated/i.test(line.description))).toBe(true);
   expect((await feature(basicCookie)).json().error.code).toBe('not_entitled');
 
-  const downgrade = await send(basicCookie, 'POST', '/api/v1/billing/change-apply', {
-    planId: basicPlanId,
-    locationCount: 1,
-    addonModuleIds: [],
-  });
+  const downgrade = await send(
+    basicCookie,
+    'POST',
+    '/api/v1/billing/change-apply',
+    {
+      planId: basicPlanId,
+      locationCount: 1,
+      addonModuleIds: [],
+    },
+    { 'idempotency-key': `apply-${Date.now()}` },
+  );
   expect(downgrade.statusCode, downgrade.body).toBe(200);
   expect(downgrade.json().change.noPayment).toBe(true);
   expect(await sheetFeatureCount(basicCookie)).toBe(66);
@@ -211,6 +221,88 @@ it('enforces premium features, plan changes, suspension and renewal', async () =
   expect((renewed.json() as { description: string }[]).some((row) => row.description.includes('renewal'))).toBe(true);
 });
 
+it('enforces seat limits and resolves a pending payment only through the mock webhook', async () => {
+  const locations = await list(basicCookie, '/api/v1/tenant/locations');
+  const locationId = locations.json()[0].id as string;
+  const handle = createDb(dbEnv().appUrl, { max: 1 });
+  try {
+    await withTenant(handle.db, basicTenantId, async (tx) => {
+      for (let i = 0; i < 6; i++) {
+        await tx.insert(schema.users).values({
+          tenantId: basicTenantId,
+          email: `seat.${i}.${basicTenantId.slice(0, 8)}@sbx.hospitalos.test`,
+          name: `Seat Sample ${i}`,
+          status: 'active',
+        });
+      }
+    });
+    const invited = await send(basicCookie, 'POST', '/api/v1/tenant/users/invite', {
+      name: 'Seat Sample Invite',
+      email: `seat.invite.${Date.now()}@sbx.hospitalos.test`,
+      roleKey: 'front_desk',
+      locationIds: [locationId],
+    });
+    expect(invited.statusCode, invited.body).toBe(200);
+    const over = await send(basicCookie, 'POST', '/api/v1/tenant/users/invite', {
+      name: 'Seat Sample Extra',
+      email: `seat.extra.${Date.now()}@sbx.hospitalos.test`,
+      roleKey: 'front_desk',
+      locationIds: [locationId],
+    });
+    expect(over.statusCode).toBe(403);
+    expect(over.json().error.code).toBe('seat_limit');
+
+    await withPlatform(handle.db, (tx) => tx.execute(sql`update platform_settings set mock_payment_simulator = true where id = 1`));
+    const stamp = `${Date.now()}-sim`;
+    const order = await send(
+      basicCookie,
+      'POST',
+      '/api/v1/billing/orders',
+      { purpose: 'change', config: { planId: mediumPlanId, locationCount: 1, addonModuleIds: [] } },
+      { 'idempotency-key': `sim-ord-${stamp}` },
+    );
+    expect(order.statusCode, order.body).toBe(200);
+    const pending = await send(
+      basicCookie,
+      'POST',
+      `/api/v1/billing/orders/${order.json().id}/pay`,
+      { method: 'upi', outcome: 'pending', details: {} },
+      { 'idempotency-key': `sim-pay-${stamp}` },
+    );
+    expect(pending.statusCode, pending.body).toBe(200);
+    expect(pending.json().payment.status).toBe('pending');
+    const paymentId = pending.json().payment.id as string;
+    const tenantResolve = await send(basicCookie, 'POST', `/api/v1/billing/payments/${paymentId}/resolve`, { outcome: 'success' });
+    expect(tenantResolve.statusCode).toBe(404);
+
+    const body = { paymentId, outcome: 'success' as const };
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/webhooks/mock',
+      payload: body,
+      headers: { 'idempotency-key': `sim-bad-${stamp}`, 'x-hos-signature': '00'.repeat(32) },
+    });
+    expect(bad.statusCode).toBe(401);
+    expect(bad.json().error.code).toBe('signature_invalid');
+    const good = await app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/webhooks/mock',
+      payload: body,
+      headers: {
+        'idempotency-key': `sim-ok-${stamp}`,
+        'x-hos-signature': webhookSignature(apiEnv().gatewaySecret, body),
+      },
+    });
+    expect(good.statusCode, good.body).toBe(200);
+    expect(good.json().status).toBe('captured');
+    const upgraded = await list(basicCookie, '/api/v1/billing/subscription');
+    expect(upgraded.json().planKey).toBe('medium');
+  } finally {
+    await withPlatform(handle.db, (tx) => tx.execute(sql`update platform_settings set mock_payment_simulator = false where id = 1`));
+    await handle.close();
+  }
+});
+
 async function sheetFeatureCount(cookie: string): Promise<number> {
   const res = await list(cookie, '/api/v1/tenant/entitlements');
   expect(res.statusCode, res.body).toBe(200);
@@ -237,12 +329,13 @@ async function payChange(cookie: string, planId: string): Promise<void> {
     cookie,
     'POST',
     `/api/v1/billing/orders/${order.json().id}/pay`,
-    { method: 'upi', outcome: 'success', details: {} },
+    { method: 'upi', outcome: 'failure', details: {} },
     { 'idempotency-key': `pay-${stamp}` },
   );
   expect(paid.statusCode, paid.body).toBe(200);
+  expect(paid.json().payment.status).toBe('captured');
   const checkout = paid.json().checkout as { orderId: string; paymentId: string; signature: string };
-  const verified = await send(cookie, 'POST', '/api/v1/billing/verify', checkout);
+  const verified = await send(cookie, 'POST', '/api/v1/billing/verify', checkout, { 'idempotency-key': `ver-${stamp}` });
   expect(verified.statusCode, verified.body).toBe(200);
 }
 
@@ -292,7 +385,7 @@ async function provisionBasic(stamp: number, email: string, planId: string): Pro
     { 'idempotency-key': `onbpay-${stamp}` },
   );
   expect(paid.statusCode, paid.body).toBe(200);
-  const verifiedPay = await send(cookie, 'POST', '/api/v1/billing/verify', paid.json().checkout);
+  const verifiedPay = await send(cookie, 'POST', '/api/v1/billing/verify', paid.json().checkout, { 'idempotency-key': `onbver-${stamp}` });
   expect(verifiedPay.statusCode, verifiedPay.body).toBe(200);
   const provision = await send(cookie, 'POST', '/api/v1/onboarding/provision', {});
   expect(provision.statusCode, provision.body).toBe(200);

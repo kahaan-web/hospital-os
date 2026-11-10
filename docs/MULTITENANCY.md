@@ -58,7 +58,11 @@ Effective entitlements are pure and live in `computeEntitlements` (`packages/sha
 2. Purchased add-on modules. Buying a module grants every feature of that module.
 3. App Admin overrides, module first, then feature. A feature grant or revoke wins over the module. A module revoke strips that module’s features.
 
-`requireModule` allows the call only when the module’s access is `enabled` (catalogue status available, and at least one feature entitled or an explicit module grant). A coming-soon module stays locked so the UI can show the upsell. `requireFeature` checks the feature key itself, so a Basic hospital can use Patient Registration and still receive `not_entitled` for premium-only MLC Registration (`patient-registration.mlc-registration`).
+`requireModule` allows the call only when the module’s access is `enabled` (catalogue status available, and at least one feature entitled or an explicit module grant). A coming-soon module stays locked so the UI can show the upsell. `requireFeature` checks the feature key itself, so a Basic hospital can use Patient Registration and still receive `not_entitled` for premium-only MLC Registration (`patient-registration.mlc-registration`). The only module routes in this phase are those two probes, and both go through `requireModule`. The feature probe also calls `requireFeature`. Phase B adds a `TENANT_GUARDS` row per real module route.
+
+### Seat limits
+
+A plan includes a fixed number of users **per purchased location**. Decision: Basic 8, Medium 25, Premium 80. Active and pending users count. Disabled users do not, so turning a disabled user back on needs a free seat. `POST /tenant/users/invite` and a status change to `active` return **403 `seat_limit`** when the next user would pass the cap (`seats per location × subscription.locationCount`).
 
 An add-on purchase or a feature grant override opens that feature on the next request. Deleting the override (or a revoke override) closes it again. Suspending the hospital does not change the entitlement set; the suspend check runs first and returns `tenant_suspended`.
 
@@ -86,8 +90,24 @@ Downgrades apply **immediately**, with **no cash refund**. The unused pre-tax am
 
 There is no dunning and no real collection. Calling the endpoint does not change other tenants.
 
+### Who decides a mock payment
+
+The server captures the payment. A client `outcome` on `POST /billing/orders/:id/pay` is ignored unless both of these are true: `NODE_ENV` is not `production`, and `platform_settings.mock_payment_simulator` is true (default false). That flag is the dev simulator. The checkout screen can still send an outcome; the API does not use it while the flag is off, so the demo Pay button records a capture.
+
+A hospital session cannot capture or fail its own pending payment. `POST /billing/payments/:id/resolve` is not a tenant route. The mock gateway calls `POST /api/v1/billing/webhooks/mock` with `Idempotency-Key` and `x-hos-signature` (hex HMAC-SHA256 of the canonical JSON body, keyed with `MOCK_GATEWAY_KEY_SECRET`). The handler looks up the payment’s tenant through `hos_payment_tenant`, then transitions the payment. `hos_app` cannot `SELECT … FOR UPDATE` a payment, because that requires `UPDATE` and those grants were revoked. The lock sits inside `hos_payment_transition`, `hos_order_mark_paid`, and `hos_subscription_apply_order` (`SELECT … FOR UPDATE` as the table owner). Pay still locks the order row directly, which is allowed because `orders` keeps a column `UPDATE` grant. A bad signature is **401 `signature_invalid`**. The route is exempt from the browser CSRF header because the signature is the credential. Verify and fulfil also lock the order and the payment in the request transaction.
+
+`Idempotency-Key` is required on order create, pay, verify, change-apply, and the mock webhook. Change-quote only prices a change, so it does not require a key.
+
+### Financial grants
+
+`hos_app` can insert and read invoices, invoice lines, and payments. It cannot update or delete them (`42501`). Issued invoices and invoice lines are also blocked by a trigger, including for the table owner. Corrections are credit notes: the `credit_notes` table exists (append-only, no API and no UI). A downgrade still does not create one.
+
+Payment status moves only through `hos_payment_transition`. Order status moves through `hos_order_transition` / `hos_order_mark_paid`. `orders` keeps a column grant for `status`, `paid_at`, and `fulfilled_at`, and has no DELETE. `consents` can update only `withdrawn_at`.
+
+`subscriptions` and `subscription_items` are not writable by `hos_app` in any scope. Fulfilment calls `hos_subscription_apply_order(order_id)` after the order is locked, `paid`, and has a captured payment with `signature_verified`. The function checks those facts, writes the subscription from the order quote, and sets `fulfilled_at`. It returns false when the order was already fulfilled, so a second verify does not write a second invoice. A no-payment downgrade and the dev renewal clock call `hos_subscription_admin_change`. Renewal requires platform scope. The no-payment reason is allowed in tenant scope because that is the immediate downgrade, which has no order to apply. The shared writer `hos_subscription_replace` is not granted to `hos_app`.
+
 ## Tests
 
 `npx vitest run apps/api tests/mt` uses a separate database, `hos_mt`. `tests/mt/global-setup.ts` creates it through `DATABASE_ADMIN_URL` (the same bootstrap as `npm run db:migrate`), then runs catalogue seed and demo seed. `HOS_DB_NAME=hos_mt` is set for that Vitest run so the shared `hospital_os` database is left alone.
 
-The suite checks the route inventory, Basic → 403 `not_entitled` on MLC Registration, a grant override → 200, revoke → 403, suspend → `tenant_suspended` with billing reads still allowed, reactivate → 200, a Basic→Medium mock checkout moving sheet entitlements from 66 to 82 with a prorated invoice, an immediate downgrade back with no credit note, and two hospitals whose list endpoints return only their own rows.
+The suite checks the route inventory, Basic → 403 `not_entitled` on MLC Registration, a grant override → 200, revoke → 403, suspend → `tenant_suspended` with billing reads still allowed, reactivate → 200, a Basic→Medium mock checkout moving sheet entitlements from 66 to 82 with a prorated invoice even when the client asks for a failed outcome, an immediate downgrade back with no credit note, two hospitals whose list endpoints return only their own rows, the seat cap, a pending payment that a tenant cannot resolve and a signed webhook can, and `42501` when `hos_app` writes invoices, payments, or subscriptions directly. The wizard and the paid upgrade still go through the definer functions.

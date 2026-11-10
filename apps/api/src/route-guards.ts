@@ -53,7 +53,6 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   view('POST', '/api/v1/billing/orders', 'billing.manage'),
   view('POST', '/api/v1/billing/orders/:orderId/pay', 'billing.manage'),
   view('POST', '/api/v1/billing/verify', 'billing.manage'),
-  view('POST', '/api/v1/billing/payments/:paymentId/resolve', 'billing.manage'),
   view('GET', '/api/v1/billing/subscription', 'billing.view', { allowWhenSuspended: true }),
   view('POST', '/api/v1/billing/change-quote', 'billing.manage'),
   view('POST', '/api/v1/billing/change-apply', 'billing.manage'),
@@ -104,6 +103,7 @@ export function isTenantSurface(method: string, url: string): boolean {
   const verb = method.toUpperCase();
   if (verb === 'HEAD' || verb === 'OPTIONS') return false;
   if (url.startsWith('/api/v1/tenant/') || url === '/api/v1/tenant') return true;
+  if (url.startsWith('/api/v1/billing/webhooks/')) return false;
   if (url.startsWith('/api/v1/billing/')) return true;
   if (url === '/api/v1/onboarding' || url.startsWith('/api/v1/onboarding/')) return true;
   return TENANT_AUTH.has(url);

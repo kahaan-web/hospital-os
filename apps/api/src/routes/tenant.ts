@@ -20,6 +20,7 @@ import { entitlementsDto, invoiceListItem, loadAssignments, locationDtos, roleDt
 import { randomToken, sha256Hex } from '../crypto';
 import { openTenant, verifyChain, type Deps, type TenantGate } from '../guard';
 import { ApiError } from '../http';
+import { assertSeatAvailable } from '../seats';
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -75,6 +76,7 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       const targets = locationIds === null ? [null] : locationIds;
       assertMayGrant(gate, role.key, targets);
       await assertLocationsExist(gate, targets);
+      await assertSeatAvailable(gate.tx, 1);
       const email = req.body.email.toLowerCase();
       const [user] = await gate.tx
         .insert(schema.users)
@@ -110,6 +112,7 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       if (!user) throw new ApiError(404, 'not_found', 'User not found');
       const currentAssignments = await loadAssignments(gate.tx, user.id);
       assertMayEdit(gate, currentAssignments);
+      if (req.body.status === 'active' && user.status === 'disabled') await assertSeatAvailable(gate.tx, 1);
       if (req.body.status) await gate.tx.update(schema.users).set({ status: req.body.status }).where(eq(schema.users.id, user.id));
       if (req.body.status === 'disabled') await gate.tx.execute(sql`select hos_session_revoke_user(${user.id}::uuid)`);
       if (req.body.roleKey || req.body.locationIds !== undefined) {

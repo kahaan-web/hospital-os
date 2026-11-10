@@ -79,7 +79,7 @@ export function BillingSettingsContent() {
     if (!quote) return;
     if (quote.change?.noPayment) {
       try {
-        await apiPost('/billing/orders', { purpose: 'change', config: quote.config }, `change-apply-${crypto.randomUUID()}`);
+        await apiPost('/billing/change-apply', quote.config, `change-apply-${crypto.randomUUID()}`);
         showToast({ tone: 'success', title: 'Plan updated', description: 'No payment due for this change.' });
         load();
       } catch (e) {

@@ -230,9 +230,17 @@ export function routeTemplate(req: FastifyRequest): string {
   return `${req.method} ${req.routeOptions.url ?? req.url}`;
 }
 
+/** Money routes. Quote is a read of a price, so it does not require a key. */
 export function idempotencyRequired(req: FastifyRequest): boolean {
-  const url = req.routeOptions.url ?? req.url;
-  return req.method === 'POST' && (url.endsWith('/billing/orders') || url.endsWith('/billing/orders/:orderId/pay'));
+  if (req.method !== 'POST') return false;
+  const url = req.routeOptions.url ?? req.url.split('?')[0] ?? '';
+  return (
+    url === '/api/v1/billing/orders' ||
+    url === '/api/v1/billing/orders/:orderId/pay' ||
+    url === '/api/v1/billing/verify' ||
+    url === '/api/v1/billing/change-apply' ||
+    url === '/api/v1/billing/webhooks/mock'
+  );
 }
 
 /** Platform scope sees no tenant rows. */
