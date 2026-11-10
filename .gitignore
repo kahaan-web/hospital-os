@@ -13,3 +13,9 @@ playwright-report/
 test-results/
 uploads/
 .claude/settings.local.json
+.expo/
+apps/mobile/dist/
+
+# Cursor worker task files
+.cursor-task.md
+*.tsbuildinfo

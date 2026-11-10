@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+@import '@hos/ui/styles.css';
+
+@source "../../../packages/ui/src";
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+}

@@ -5,7 +5,7 @@ export * from './modules';
 export { SHEET_ROWS, type SheetRow } from './sheet-features.generated';
 
 export type FeatureType = 'function' | 'report' | 'interface' | 'app_feature';
-export type FeatureSource = 'sheet' | 'doc' | 'platform';
+export type FeatureSource = 'sheet' | 'doc' | 'platform' | 'admin';
 export type TierKey = 'basic' | 'medium' | 'premium';
 export const TIER_KEYS: readonly TierKey[] = ['basic', 'medium', 'premium'];
 
