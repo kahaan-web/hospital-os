@@ -25,6 +25,17 @@ import {
 import { createDb, type Tx } from './client';
 import { dbEnv, loadEnvFile } from './env';
 import { hashPassword } from './password';
+import { seedAdt } from './seed-clinical/adt';
+import { seedAppointments } from './seed-clinical/appointments';
+import { seedBilling } from './seed-clinical/billing';
+import { seedClinicalFoundation } from './seed-clinical/foundation';
+import { seedDoctor } from './seed-clinical/doctor';
+import { seedIpbilling } from './seed-clinical/ipbilling';
+import { seedLab } from './seed-clinical/lab';
+import { seedNursing } from './seed-clinical/nursing';
+import { seedPharmacy } from './seed-clinical/pharmacy';
+import { seedPortal } from './seed-clinical/portal';
+import { seedRegistration } from './seed-clinical/registration';
 import * as schema from './schema';
 
 const PLAN_MONTHLY_RUPEES: Record<TierKey, number> = { basic: 12999, medium: 15999, premium: 19999 };
@@ -544,6 +555,7 @@ function printLogins(log: (m: string) => void): void {
   log(`  Doctor           doctor@sunrise.demo / ${DEMO_PASSWORD}`);
   log(`  Nurse            nurse@sunrise.demo / ${DEMO_PASSWORD}`);
   log(`  Cashier          cashier@sunrise.demo / ${DEMO_PASSWORD}`);
+  log(`  Lotus (Basic)    owner@lotus.demo / ${DEMO_PASSWORD}`);
 }
 
 export async function seed(log: (m: string) => void = console.log): Promise<void> {
@@ -561,6 +573,17 @@ export async function seedDemo(log: (m: string) => void = console.log): Promise<
   try {
     await seedCatalogue(handle.db, log);
     await seedDemoTenant(handle.db, log);
+    await seedClinicalFoundation(handle.db, log);
+    await seedRegistration(log);
+    await seedAppointments(log);
+    await seedDoctor(log);
+    await seedAdt(log);
+    await seedBilling(log);
+    await seedIpbilling(log);
+    await seedPharmacy(log);
+    await seedLab(log);
+    await seedNursing(log);
+    await seedPortal(log);
   } finally {
     await Promise.race([handle.close(), new Promise((resolve) => setTimeout(resolve, 2000))]);
   }

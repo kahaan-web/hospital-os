@@ -302,6 +302,8 @@ export const locations = pgTable(
     stateCode: text('state_code').notNull(),
     pincode: text('pincode').notNull().default(''),
     phone: text('phone').notNull().default(''),
+    /** 2–3 character prefix on clinical document numbers, for example MUM. Filled from code when omitted. */
+    docPrefix: text('doc_prefix').notNull().default(''),
     isPrimary: boolean('is_primary').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: createdAt(),
@@ -311,6 +313,7 @@ export const locations = pgTable(
     unique('locations_tenant_id_uq').on(t.tenantId, t.id),
     uniqueIndex('locations_one_primary_uq').on(t.tenantId).where(sql`${t.isPrimary} = true`),
     index('locations_tenant_idx').on(t.tenantId),
+    check('locations_doc_prefix_chk', sql`doc_prefix ~ '^[A-Z0-9]{2,3}$'`),
   ],
 );
 
@@ -325,6 +328,7 @@ export const departments = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    unique('departments_tenant_id_uq').on(t.tenantId, t.id),
     index('departments_tenant_idx').on(t.tenantId, t.locationId),
     foreignKey({
       columns: [t.tenantId, t.locationId],
@@ -345,15 +349,25 @@ export const doctors = pgTable(
     speciality: text('speciality').notNull().default(''),
     /** Seeded sample master — obviously fictional, removable at go-live. */
     isSample: boolean('is_sample').notNull().default(false),
+    userId: uuid('user_id'),
+    departmentId: uuid('department_id'),
+    registrationNo: text('registration_no').notNull().default(''),
+    active: boolean('active').notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [
+    unique('doctors_tenant_id_uq').on(t.tenantId, t.id),
     index('doctors_tenant_idx').on(t.tenantId, t.locationId),
     foreignKey({
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: 'doctors_location_fk',
     }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.tenantId, t.departmentId],
+      foreignColumns: [departments.tenantId, departments.id],
+      name: 'doctors_department_fk',
+    }),
   ],
 );
 
@@ -845,3 +859,5 @@ export const auditLog = pgTable(
     check('audit_actor_chk', sql`actor_type in ('user', 'platform_admin', 'system')`),
   ],
 );
+
+export * from './clinical';
