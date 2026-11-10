@@ -92,6 +92,7 @@ function InvoiceBody({ state }: { state: OnboardingState }) {
             className="hos-invoice-iframe"
             title={`Invoice ${invoice.number}`}
             src={`${API_BASE}/billing/invoices/${invoice.id}/html`}
+            sandbox=""
             style={{
               width: '100%',
               minHeight: '28rem',
