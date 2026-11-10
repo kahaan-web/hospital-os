@@ -34,12 +34,14 @@ export function loadEnvFile(): void {
 }
 
 export interface DbEnv {
-  /** Superuser connection — bootstrap only (creates the two roles below). */
+  /** Superuser connection — bootstrap only (creates the roles below). */
   adminUrl: string;
   /** Owns the schema; runs migrations and seeds. NOSUPERUSER, NOBYPASSRLS. */
   migrationUrl: string;
-  /** What the API connects as. NOSUPERUSER, NOBYPASSRLS; subject to RLS. */
+  /** What the API connects as for tenant traffic. NOSUPERUSER, NOBYPASSRLS; subject to RLS. */
   appUrl: string;
+  /** Login role that may hold platform scope. Separate password and pool from `appUrl`. */
+  platformUrl: string;
   database: string;
 }
 
@@ -48,6 +50,7 @@ const DEV_DEFAULTS = {
   DATABASE_ADMIN_URL: 'postgres://postgres:hos_dev_superuser@127.0.0.1:55432/hospital_os',
   DATABASE_MIGRATION_URL: 'postgres://hos_migrator:hos_dev_migrator@127.0.0.1:55432/hospital_os',
   DATABASE_URL: 'postgres://hos_app:hos_dev_app@127.0.0.1:55432/hospital_os',
+  DATABASE_PLATFORM_URL: 'postgres://hos_platform:hos_dev_platform@127.0.0.1:55432/hospital_os',
 } as const;
 
 function withDatabase(url: string, database: string | undefined): string {
@@ -65,7 +68,7 @@ export function envValue(key: string, devDefault?: string): string {
   throw new Error(`Missing required environment variable ${key}`);
 }
 
-/** Database URLs. `HOS_DB_NAME` swaps the database name in all three (used by the test suite). */
+/** Database URLs. `HOS_DB_NAME` swaps the database name in all four (used by the test suite). */
 export function dbEnv(): DbEnv {
   const override = process.env.HOS_DB_NAME || undefined;
   const adminUrl = withDatabase(envValue('DATABASE_ADMIN_URL', DEV_DEFAULTS.DATABASE_ADMIN_URL), override);
@@ -73,6 +76,7 @@ export function dbEnv(): DbEnv {
     adminUrl,
     migrationUrl: withDatabase(envValue('DATABASE_MIGRATION_URL', DEV_DEFAULTS.DATABASE_MIGRATION_URL), override),
     appUrl: withDatabase(envValue('DATABASE_URL', DEV_DEFAULTS.DATABASE_URL), override),
+    platformUrl: withDatabase(envValue('DATABASE_PLATFORM_URL', DEV_DEFAULTS.DATABASE_PLATFORM_URL), override),
     database: new URL(adminUrl).pathname.replace(/^\//, ''),
   };
 }

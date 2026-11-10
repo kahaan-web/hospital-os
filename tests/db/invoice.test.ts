@@ -21,20 +21,20 @@ describe.sequential('invoice numbers', () => {
   });
 
   it('does not consume a number when the transaction rolls back', async () => {
-    const first = await allocate(app(), true);
-    const second = await allocate(app(), true);
+    const first = await allocate(platform(), true);
+    const second = await allocate(platform(), true);
     expect(second).toBe(first);
   });
 
   it('uses the Indian financial year around midnight IST and stays within 16 characters', async () => {
-    await app().query('BEGIN');
+    await platform().query('BEGIN');
     try {
-      await scopePlatform(app());
-      const march = await app().query<{ fy: string; number: string }>(
+      await scopePlatform(platform());
+      const march = await platform().query<{ fy: string; number: string }>(
         `select fy, number from hos_next_invoice_number($1::timestamptz)`,
         ['2026-03-31T18:29:00.000Z'],
       );
-      const april = await app().query<{ fy: string; number: string }>(
+      const april = await platform().query<{ fy: string; number: string }>(
         `select fy, number from hos_next_invoice_number($1::timestamptz)`,
         ['2026-03-31T18:30:00.000Z'],
       );
@@ -47,12 +47,12 @@ describe.sequential('invoice numbers', () => {
       expect(march.rows[0]?.number).toContain('/2526/');
       expect(april.rows[0]?.number).toContain('/2627/');
     } finally {
-      await app().query('ROLLBACK');
+      await platform().query('ROLLBACK');
     }
   });
 
   it('allocates 20 contiguous numbers under concurrent fulfilments', async () => {
-    const pool = new pg.Pool({ connectionString: dbEnv().appUrl, max: 20, connectionTimeoutMillis: 8_000 });
+    const pool = new pg.Pool({ connectionString: dbEnv().platformUrl, max: 20, connectionTimeoutMillis: 8_000 });
     try {
       const numbers = await Promise.all(
         Array.from({ length: 20 }, () =>
@@ -80,9 +80,9 @@ describe.sequential('invoice numbers', () => {
     }
   });
 
-  function app() {
+  function platform() {
     if (!roles) throw new Error('database clients were not opened');
-    return roles.app;
+    return roles.platform;
   }
 });
 

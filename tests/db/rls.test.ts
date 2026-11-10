@@ -95,6 +95,7 @@ describe.sequential('row level security', () => {
 
   afterEach(async () => {
     await roles?.app.query('ROLLBACK').catch(() => undefined);
+    await roles?.platform.query('ROLLBACK').catch(() => undefined);
   });
 
   afterAll(async () => {
@@ -404,23 +405,23 @@ describe.sequential('row level security', () => {
       await app().query('ROLLBACK');
     }
 
-    await app().query('BEGIN');
+    await platform().query('BEGIN');
     try {
-      await scopePlatform(app(), pair!.a.id);
-      const other = await app().query<{ id: string }>(`select id from modules where id <> $1 limit 1`, [pair!.moduleId]);
+      await scopePlatform(platform(), pair!.a.id);
+      const other = await platform().query<{ id: string }>(`select id from modules where id <> $1 limit 1`, [pair!.moduleId]);
       const moduleId = other.rows[0]?.id;
       expect(moduleId, 'catalogue has a second module').toBeTruthy();
-      await app().query(
+      await platform().query(
         `insert into tenant_entitlement_overrides (tenant_id, target, module_id, effect, reason)
          values ($1, 'module', $2, 'revoke', 'platform on tenant')`,
         [pair!.a.id, moduleId],
       );
-      const seen = await app().query<{ n: number }>(
+      const seen = await platform().query<{ n: number }>(
         `select count(*)::int as n from tenant_entitlement_overrides where reason = 'platform on tenant'`,
       );
       expect(Number(seen.rows[0]?.n)).toBe(1);
     } finally {
-      await app().query('ROLLBACK');
+      await platform().query('ROLLBACK');
     }
   });
 
@@ -440,12 +441,12 @@ describe.sequential('row level security', () => {
       await app().query('ROLLBACK');
     }
 
-    await app().query('BEGIN');
+    await platform().query('BEGIN');
     try {
-      await scopePlatform(app(), pair!.a.id);
-      await expectSqlState(app(), 'select hos_admin_overview()', [], '42501');
+      await scopePlatform(platform(), pair!.a.id);
+      await expectSqlState(platform(), 'select hos_admin_overview()', [], '42501');
     } finally {
-      await app().query('ROLLBACK');
+      await platform().query('ROLLBACK');
     }
 
     const live = randomUUID().replace(/-/g, '');
@@ -500,6 +501,10 @@ describe.sequential('row level security', () => {
   function app() {
     if (!roles) throw new Error('database clients were not opened');
     return roles.app;
+  }
+  function platform() {
+    if (!roles) throw new Error('database clients were not opened');
+    return roles.platform;
   }
   function admin() {
     if (!roles) throw new Error('database clients were not opened');

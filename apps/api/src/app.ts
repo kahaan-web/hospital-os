@@ -2,7 +2,7 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
-import { createDb, dbEnv } from '@hos/db';
+import { attachPlatformDb, createDb, dbEnv } from '@hos/db';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import { apiEnv } from './env';
@@ -18,7 +18,10 @@ import { registerTenant } from './routes/tenant';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const env = apiEnv();
-  const handle = createDb(dbEnv().appUrl, { max: 6 });
+  const urls = dbEnv();
+  const handle = createDb(urls.appUrl, { max: 6 });
+  const platform = createDb(urls.platformUrl, { max: 2 });
+  attachPlatformDb(handle.db, platform.db);
   const app = Fastify({
     logger: process.env.VITEST ? false : { level: process.env.LOG_LEVEL || 'info' },
     trustProxy: false,
@@ -67,7 +70,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.get('/api/docs/json', async () => app.swagger());
 
   app.addHook('onClose', async () => {
-    await Promise.race([handle.close(), new Promise((resolve) => setTimeout(resolve, 2000))]);
+    const close = (fn: () => Promise<void>) => Promise.race([fn(), new Promise((resolve) => setTimeout(resolve, 2000))]);
+    await close(() => handle.close());
+    await close(() => platform.close());
   });
 
   return app;
