@@ -286,7 +286,7 @@ export const platformSettingsSchema = z.object({
   invoicePrefix: z
     .string()
     .trim()
-    .regex(/^[A-Z0-9]{2,5}$/, '2–5 capital letters or digits'),
+    .regex(/^[A-Z0-9]{2,4}$/, '2–4 capital letters or digits'),
 });
 
 /** Flatten a ZodError into { field: message } for forms. */
