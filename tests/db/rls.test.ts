@@ -54,6 +54,10 @@ const TABLES = [
   'clinical_notes',
   'charges',
   'cash_ledger',
+  'doctor_schedules',
+  'schedule_exceptions',
+  'appointments',
+  'opd_queue',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -542,8 +546,16 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return row(common, 'id = $1', b.departmentId, `name = 'Touched by A'`, 'name',
         `insert into departments (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
     case 'doctors':
-      return row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
-        `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
+      return {
+        ...row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
+          `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`),
+        beforeMassDelete: [
+          'delete from opd_queue',
+          'delete from appointments',
+          'delete from schedule_exceptions',
+          'delete from doctor_schedules',
+        ],
+      };
     case 'users':
       return row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
         `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`);
@@ -780,6 +792,32 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'cash_ledger':
       return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
         `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
+    case 'doctor_schedules':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.scheduleId,
+        setSql: 'slot_minutes = 20',
+        untouched: 'select coalesce(slot_minutes = 20, false) as touched from doctor_schedules where id = $1',
+        insertSql: `insert into doctor_schedules (tenant_id, doctor_id, location_id, weekday, start_time, end_time, slot_minutes, max_per_slot) values ($1, '${b.doctorId}', '${b.locationId}', 1, '14:00', '15:00', 15, 1)`,
+        retargetSql: 'update doctor_schedules set tenant_id = $1',
+      };
+    case 'schedule_exceptions':
+      return row(common, 'id = $1', b.exceptionId, `reason = 'Touched by A'`, 'reason',
+        `insert into schedule_exceptions (tenant_id, doctor_id, location_id, on_date, kind, reason) values ($1, '${b.doctorId}', '${b.locationId}', '2026-02-02', 'closed', 'Nope')`);
+    case 'appointments':
+      return row(common, 'id = $1', b.appointmentId, `reason = 'Touched by A'`, 'reason',
+        `insert into appointments (tenant_id, location_id, patient_id, doctor_id, date, slot_start, slot_end, seq, channel, reason) values ($1, '${b.locationId}', '${b.patientId}', '${b.doctorId}', '2026-06-02', '10:00', '10:15', 1, 'counter', 'Nope')`);
+    case 'opd_queue':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.queueId,
+        setSql: 'token = 9',
+        untouched: 'select coalesce(token = 9, false) as touched from opd_queue where id = $1',
+        insertSql: `insert into opd_queue (tenant_id, location_id, encounter_id, patient_id, doctor_id, token, visit_date) values ($1, '${b.locationId}', '${b.spareEncounterId}', '${b.patientId}', '${b.doctorId}', 2, current_date)`,
+        retargetSql: 'update opd_queue set tenant_id = $1',
+      };
     default:
       return assertNever(table);
   }
