@@ -32,7 +32,7 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
 
   useEffect(() => {
     if (open && order) {
-      payKeyRef.current = `${idempotencySeed ?? purpose}-${order.id}-${crypto.randomUUID()}`;
+      payKeyRef.current = newPayKey(purpose, order.id, idempotencySeed);
       setPending(false);
     }
   }, [open, order?.id, idempotencySeed, purpose, order]);
@@ -69,6 +69,8 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
         setPending(true);
         showToast({ tone: 'default', title: 'Payment pending', description: 'The mock gateway webhook confirms this payment.' });
       } else {
+        // The failed attempt stored this key. The next click must be a new attempt so a different outcome is honoured.
+        payKeyRef.current = newPayKey(purpose, order.id, idempotencySeed);
         showToast({ tone: 'error', title: 'Payment failed', description: result.payment.failureReason ?? 'Try again.' });
       }
     } catch (e) {
@@ -80,7 +82,7 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
     } finally {
       setBusy(false);
     }
-  }, [order, method, outcome, paymentDetails, onPaid, onClose, showToast]);
+  }, [order, method, outcome, paymentDetails, onPaid, onClose, showToast, purpose, idempotencySeed]);
 
   const amount = order?.amountPaise ?? 0;
   const tax = order?.quote.totals;
@@ -204,6 +206,10 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
       )}
     </Dialog>
   );
+}
+
+function newPayKey(purpose: 'onboarding' | 'change', orderId: string, seed: string | undefined): string {
+  return `${seed ?? purpose}-${orderId}-${crypto.randomUUID()}`;
 }
 
 function Row({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
