@@ -2,7 +2,7 @@
 
 Read this with `CLAUDE.md`, `docs/PLAN.md`, `docs/CONTRACTS.md` (its Tenancy/RLS design and Addenda stay authoritative)
 and `docs/DESIGN_GUIDE.md`. One foundation task (B0) merges first. After it, 11 worker tasks (B1–B11) run in waves (§5).
-Use mock data only, with obviously fictional seed names (`Aarav Sample`, `Meera Demo`). No real gateway, SMS or email.
+Use mock data only, with realistic but fictional Indian seed names, every row flagged sample (DEMO- UHIDs, 00- ABHA ids, @sbx addresses, +91 90000 mobiles); never real people. No real gateway, SMS or email.
 
 ## 0. Decisions (made while planning; a reviewer can overturn them)
 1. **Routes.** Module routes live under `/api/v1/tenant/m/<moduleKey>/…` (the CONTRACTS "Module guard" rule). A B0
@@ -160,7 +160,7 @@ Order gates by `kind`:
     one line, `export * from './clinical';`.
   - Seed stubs: `packages/db/src/seed-clinical/<dir>.ts`, called from `seedDemo`.
   - The B0 seed creates the Lotus tenant and the overrides from decision 10, and links `doctor@sunrise.demo` to a
-    doctor record. It also adds 12 fictional patients, about 30 services with tariffs, 3 open OPD encounters and 1 open
+    doctor record. It loads the 45 sample patients from `seedDemoPeople` (packages/db/src/seed-demo-people.ts, re-run `npm run db:seed:demo` after the patients table exists) instead of 12, and adds about 30 services with tariffs, 3 open OPD encounters and 1 open
     IPD encounter.
 - **Tests:**
   - `testkit.ts` provides `clinicalFixture()` (Sunrise A and Lotus B sessions plus seeded ids) and

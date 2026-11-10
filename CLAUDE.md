@@ -27,7 +27,7 @@ tier includes, and prices.
   created later).
 
 ## Non-negotiables
-- **Mock / sample data only.** Never real patient data. Seed names must be obviously fictional.
+- **Mock / sample data only.** Never real patient data. Seed data uses realistic but fictional Indian names: every row is flagged sample (is_sample), with DEMO- UHIDs, 00- ABHA ids, @sbx email addresses and +91 90000 mobiles. Never real people.
 - **No real payment gateway**, no real SMS/email providers. Mock them behind interfaces so real ones plug in later.
 - No secrets committed: use `.env.example`; `.env` is git-ignored.
 - Tenant isolation is enforced in Postgres (row-level security keyed on a per-request session setting), not only in app

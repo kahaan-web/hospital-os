@@ -1,7 +1,7 @@
 'use client';
 
 import type { ChecklistItemDto, DashboardDto, TenantMe } from '@hos/shared';
-import { Badge, Button, Checkbox, ModuleTile, PageHeader, StatCard } from '@hos/ui';
+import { Badge, Checkbox, ModuleTile, PageHeader, StatCard } from '@hos/ui';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { PageError, PageLoading } from '@/features/common/LoadState';

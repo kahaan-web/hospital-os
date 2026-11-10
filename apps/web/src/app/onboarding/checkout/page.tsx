@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckoutModal } from '@/features/billing/CheckoutModal';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
+import { wt } from '@/i18n';
 import { formatINR } from '@/lib/format';
 import { ApiError, apiGet, apiPost } from '@/lib/api';
 
@@ -60,10 +61,10 @@ export default function CheckoutPage() {
       <OnboardingGate allowedHrefs={['/onboarding/checkout']} currentHref="/onboarding/checkout">
         {() => (
           <>
-            <PageHeader title="Review and pay" description="Mock Razorpay-style checkout with UPI, card, and net banking." />
+            <PageHeader title={wt('checkout.title')} description={wt('checkout.description')} />
             <Card style={{ maxWidth: '32rem' }}>
               <CardBody>
-                {loading ? <p>Loading server quote…</p> : null}
+                {loading ? <p>{wt('checkout.loadingQuote')}</p> : null}
                 {quote ? (
                   <dl style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 'var(--hos-space-2)', fontSize: 'var(--hos-text-sm)' }}>
                     <dt>Plan</dt>
@@ -77,7 +78,7 @@ export default function CheckoutPage() {
                   </dl>
                 ) : null}
                 <Button type="button" style={{ marginTop: 'var(--hos-space-4)' }} onClick={createOrder} disabled={!quote}>
-                  Open mock checkout
+                  {wt('checkout.openModal')}
                 </Button>
               </CardBody>
             </Card>

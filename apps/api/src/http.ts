@@ -1,5 +1,5 @@
 import { schema, withPlatform, withPlatformOnTenant, withTenant, type Db, type Tx } from '@hos/db';
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { and, eq, sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { hasZodFastifySchemaValidationErrors, isResponseSerializationError } from 'fastify-type-provider-zod';
@@ -22,7 +22,7 @@ export function sendError(reply: FastifyReply, statusCode: number, code: string,
   return reply.status(statusCode).send({ error: { code, message, ...(extra?.fields ? { fields: extra.fields } : {}), ...(extra?.details !== undefined ? { details: extra.details } : {}) } });
 }
 
-export function installErrorHandler(app: { setErrorHandler: Function; setNotFoundHandler: Function }): void {
+export function installErrorHandler(app: Pick<FastifyInstance, 'setErrorHandler' | 'setNotFoundHandler'>): void {
   app.setNotFoundHandler((_req: FastifyRequest, reply: FastifyReply) => {
     sendError(reply, 404, 'not_found', 'Not found');
   });

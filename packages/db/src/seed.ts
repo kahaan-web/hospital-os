@@ -37,6 +37,7 @@ import { seedPharmacy } from './seed-clinical/pharmacy';
 import { seedPortal } from './seed-clinical/portal';
 import { seedRegistration } from './seed-clinical/registration';
 import * as schema from './schema';
+import { seedDemoPeople } from './seed-demo-people';
 
 const PLAN_MONTHLY_RUPEES: Record<TierKey, number> = { basic: 12999, medium: 15999, premium: 19999 };
 const SHEET_COUNTS: Record<TierKey, number> = { basic: 66, medium: 82, premium: 112 };
@@ -573,6 +574,7 @@ export async function seedDemo(log: (m: string) => void = console.log): Promise<
   try {
     await seedCatalogue(handle.db, log);
     await seedDemoTenant(handle.db, log);
+    await seedDemoPeople(handle.db, log);
     await seedClinicalFoundation(handle.db, log);
     await seedRegistration(log);
     await seedAppointments(log);

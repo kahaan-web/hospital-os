@@ -28,7 +28,7 @@ import {
   type TenantSummaryDto,
   type UserDto,
 } from '@hos/shared';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 import { ApiError } from './http';
 
 export function iso(value: Date | string | null | undefined): string | null {
@@ -261,7 +261,6 @@ export async function moduleStates(db: Queryable, planId: string | null, addonMo
     })),
   });
 
-  const planName = new Map(plans.map((p) => [p.id, p]));
   const featuresOfPlan = new Map<string, Set<string>>();
   for (const link of links) {
     const set = featuresOfPlan.get(link.planId) ?? new Set<string>();

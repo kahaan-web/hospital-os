@@ -92,7 +92,12 @@ export const facilitySchema = z.object({
     .refine((v) => v === '' || checkGstin(v).valid, 'GSTIN must be 15 characters, like 27ABCDE1234F1Z5')
     .default(''),
   registrationNo: z.string().trim().min(2, 'Enter the registration or licence number').max(60),
-  bedCount: z.number().int('Whole number of beds').min(0).max(5000),
+  bedCount: z
+    .number()
+    .int('Enter the number of beds, or 0 if none')
+    .min(0)
+    .max(5000)
+    .nullable(),
   specialities: z.array(z.string().trim().min(1).max(60)).max(30),
 });
 export type FacilityInput = z.infer<typeof facilitySchema>;

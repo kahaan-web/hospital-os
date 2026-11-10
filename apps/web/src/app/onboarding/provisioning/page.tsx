@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
+import { wt } from '@/i18n';
 import { ApiError, apiPost } from '@/lib/api';
 
 export default function ProvisioningPage() {
@@ -23,10 +24,10 @@ export default function ProvisioningPage() {
     try {
       const res = await apiPost<ProvisioningResult>('/onboarding/provision', undefined, provisionKeyRef.current);
       setResult(res);
-      showToast({ tone: 'success', title: 'Tenant provisioned' });
+      showToast({ tone: 'success', title: wt('provisioning.provisioned') });
       window.setTimeout(() => router.replace('/app'), 2000);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Provisioning failed');
+      setError(e instanceof ApiError ? e.message : wt('provisioning.failed'));
     } finally {
       setBusy(false);
     }
@@ -46,18 +47,18 @@ export default function ProvisioningPage() {
       >
         {() => (
           <>
-            <PageHeader title="Provisioning" description="Creating tenant, locations, roles and sample masters." />
+            <PageHeader title={wt('provisioning.title')} description={wt('provisioning.description')} />
             {busy && !result ? (
               <ProvisioningLoad>
-                <Spinner aria-label="Provisioning" />
-                <span>Setting up your hospital workspace…</span>
+                <Spinner aria-label={wt('provisioning.title')} />
+                <span>{wt('provisioning.loading')}</span>
               </ProvisioningLoad>
             ) : null}
             {error ? (
               <div>
                 <p style={{ color: 'var(--hos-fg-danger)' }}>{error}</p>
                 <Button type="button" onClick={run}>
-                  Retry
+                  {wt('common.retry')}
                 </Button>
               </div>
             ) : null}
