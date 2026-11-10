@@ -2,7 +2,7 @@
 
 import { Dialog, Input } from '@hos/ui';
 import { Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface CommandItem {
   id: string;
@@ -20,8 +20,13 @@ export interface CommandPaletteProps {
 export function CommandPalette({ items, open, onOpenChange }: CommandPaletteProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const isOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
+
+  useEffect(() => {
+    if (isOpen) searchRef.current?.focus();
+  }, [isOpen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -57,11 +62,11 @@ export function CommandPalette({ items, open, onOpenChange }: CommandPaletteProp
       <div style={{ display: 'flex', gap: 'var(--hos-space-2)', alignItems: 'center' }}>
         <Search size={18} aria-hidden strokeWidth={1.5} style={{ color: 'var(--hos-fg-muted)' }} />
         <Input
+          ref={searchRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search commands…"
           aria-label="Search commands"
-          autoFocus
         />
       </div>
       <ul

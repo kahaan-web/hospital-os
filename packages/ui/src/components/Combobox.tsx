@@ -46,6 +46,7 @@ export function Combobox({
   const [activeIndex, setActiveIndex] = useState(0);
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.value === value);
 
@@ -65,6 +66,10 @@ export function Combobox({
     const selectedIndex = filtered.findIndex((o) => o.value === value && !o.disabled);
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : selectableIndices[0] ?? 0);
   }, [open, filtered, value, selectableIndices]);
+
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -101,8 +106,7 @@ export function Combobox({
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-describedby={ariaDescribedBy}
-          aria-invalid={ariaInvalid ?? invalid ?? undefined}
-          className={cn('hos-input hos-focus-visible', invalid && 'hos-input--error')}
+          className={cn('hos-input hos-focus-visible', (invalid || ariaInvalid) && 'hos-input--error')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -152,11 +156,11 @@ export function Combobox({
         >
           <div style={{ padding: 'var(--hos-space-2)' }}>
             <Input
+              ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
-              autoFocus
             />
           </div>
           {filtered.length === 0 ? (
@@ -180,6 +184,12 @@ export function Combobox({
                     tabIndex={-1}
                     onMouseEnter={() => !opt.disabled && setActiveIndex(index)}
                     onClick={() => pick(opt)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        pick(opt);
+                      }
+                    }}
                   >
                     <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--hos-space-2)' }}>
                       {opt.value === value ? <Check size={14} strokeWidth={1.5} /> : <span style={{ width: 14 }} />}
