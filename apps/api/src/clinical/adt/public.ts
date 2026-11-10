@@ -1,10 +1,10 @@
 import type { Tx } from '@hos/db';
 import type { AdmissionRequestSink } from '@hos/shared';
-import { ApiError } from '../../http';
+import { requestAdmission } from './service';
 
-/** B4 replaces this. Admission requests are not available until that task. */
+/** Admission requests from the doctor workspace (CPOE) and from the ADT counter. */
 export const admissions: AdmissionRequestSink<Tx> = {
-  async request() {
-    throw new ApiError(422, 'not_available', 'Admission requests are not available yet');
+  async request(ctx, input) {
+    return requestAdmission(ctx, input);
   },
 };
