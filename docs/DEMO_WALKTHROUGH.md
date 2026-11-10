@@ -15,7 +15,7 @@ Stack for this verification: API `http://127.0.0.1:4410`, web `http://127.0.0.1:
 
 | Step | URL | Expected | Result |
 | --- | --- | --- | --- |
-| Load home | `http://127.0.0.1:3410/` | Plan cards from `/catalog`, “Sample price” badges, CTA “Start setup” | **not verified** (Next dev compile failed resolving `lucide-react` from `@hos/ui` when compiling `/`; API rewrite `GET /api/v1/health` via web **PASS** 200) |
+| Load home | `http://127.0.0.1:3410/` | Plan cards from `/catalog`, “Sample price” badges, CTA “Start setup” | **PASS** (`GET /` HTTP 200 after fixing incomplete `lucide-react` in `node_modules`; API rewrite health **PASS**) |
 
 ---
 
@@ -103,3 +103,4 @@ Smoke on 4410: **34 passed, 3 failed** — seed/account issues, not web-polish r
 - Reviewer clone: web **3400**, API **4400**, no env file required.
 - This worktree demo: copy `apps/web/.env.example` pattern into `.env.local` with `HOS_API_ORIGIN=http://127.0.0.1:4410`; API `$env:API_PORT='4410'`, web `next dev -p 3410`.
 - Catalogue money remains labelled **Sample price**; null catalogue add-on prices show **Price not set**.
+- If `next dev` errors with `Can't resolve 'lucide-react'`, the hoisted tarball was incomplete — remove `node_modules/lucide-react` and run `npm install` from the repo root (apps/web and `@hos/ui` already declare the dependency).
