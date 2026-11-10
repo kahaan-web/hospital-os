@@ -1,6 +1,6 @@
 import { schema } from '@hos/db';
 import { changeConfigSchema, createOrderSchema, payAttemptSchema, resolvePendingSchema, verifyPaymentSchema } from '@hos/shared';
-import { asc, eq } from 'drizzle-orm';
+import { asc } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';

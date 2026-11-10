@@ -80,7 +80,7 @@ function pdfText(value: string): string {
     .replaceAll('\u2212', '-')
     .replaceAll('\u00a0', ' ')
     .replaceAll('\u202f', ' ')
-    .replace(/[^\u0000-\u00ff]/g, '');
+    .replace(/[\u0100-\uffff]/g, '');
 }
 
 function wrap(text: string, width: number): string[] {
