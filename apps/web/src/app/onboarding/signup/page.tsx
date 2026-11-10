@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { OnboardingWizardShell } from '@/features/onboarding/OnboardingWizardShell';
+import { wt } from '@/i18n';
 import { ApiError, apiGet, apiPost } from '@/lib/api';
 
 export default function SignupPage() {
@@ -53,9 +54,13 @@ export default function SignupPage() {
       setChallengeId(res.challengeId);
       setDevCode(res.devCode ?? null);
       setStep('otp');
-      toast.toast({ tone: 'default', title: 'OTP sent (mock)', description: res.devCode ? `Dev code: ${res.devCode}` : 'Check server logs in dev.' });
+      toast.toast({
+        tone: 'default',
+        title: wt('signup.otpSent'),
+        description: res.devCode ? `Dev code: ${res.devCode}` : wt('signup.otpSentDesc'),
+      });
     } catch (e) {
-      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: 'Signup failed' });
+      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: wt('signup.signupFailed') });
     } finally {
       setBusy(false);
     }
@@ -72,7 +77,7 @@ export default function SignupPage() {
       await apiPost<TenantMe>('/auth/otp/verify', parsed.data);
       router.replace('/onboarding/facility');
     } catch (e) {
-      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: 'OTP verification failed' });
+      setErrors(e instanceof ApiError ? { ...(e.fields ?? {}), form: e.message } : { form: wt('signup.otpFailed') });
     } finally {
       setBusy(false);
     }
@@ -80,26 +85,26 @@ export default function SignupPage() {
 
   return (
     <OnboardingWizardShell currentHref="/onboarding/signup">
-      <PageHeader title="Create your Hospital OS account" description="Owner or manager sign-up with mock OTP and DPDP consent." />
+      <PageHeader title={wt('signup.title')} description={wt('signup.description')} />
       {step === 'signup' ? (
         <Card style={{ maxWidth: '32rem' }}>
           <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-4)' }}>
-            <Field label="Your name" error={errors.name}>
+            <Field label={wt('signup.yourName')} error={errors.name}>
               <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} invalid={!!errors.name} />
             </Field>
-            <Field label="Email" error={errors.email}>
+            <Field label={wt('signup.email')} error={errors.email}>
               <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} invalid={!!errors.email} />
             </Field>
-            <Field label="Mobile (+91)" error={errors.mobile}>
+            <Field label={wt('signup.mobile')} error={errors.mobile}>
               <Input value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} invalid={!!errors.mobile} />
             </Field>
-            <Field label="Password" error={errors.password}>
+            <Field label={wt('signup.password')} error={errors.password}>
               <Input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} invalid={!!errors.password} />
             </Field>
-            <Field label="Role">
+            <Field label={wt('signup.role')}>
               <Select value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value as 'owner' | 'manager' }))}>
-                <option value="owner">Owner</option>
-                <option value="manager">Manager</option>
+                <option value="owner">{wt('signup.roleOwner')}</option>
+                <option value="manager">{wt('signup.roleManager')}</option>
               </Select>
             </Field>
             {notice ? (
@@ -109,43 +114,43 @@ export default function SignupPage() {
               </div>
             ) : null}
             <Checkbox
-              label="I accept the terms of service"
+              label={wt('signup.acceptTerms')}
               checked={form.acceptTerms}
               onCheckedChange={(v) => setForm((f) => ({ ...f, acceptTerms: v === true }))}
             />
             <Checkbox
-              label="I consent to the privacy notice for account and billing"
+              label={wt('signup.acceptPrivacy')}
               checked={form.acceptPrivacy}
               onCheckedChange={(v) => setForm((f) => ({ ...f, acceptPrivacy: v === true }))}
             />
             <Checkbox
-              label="Send product updates (optional)"
+              label={wt('signup.productUpdates')}
               checked={form.productUpdates}
               onCheckedChange={(v) => setForm((f) => ({ ...f, productUpdates: v === true }))}
             />
             {errors.form ? <p role="alert" style={{ color: 'var(--hos-fg-danger)', margin: 0 }}>{errors.form}</p> : null}
             <Button type="button" onClick={startSignup} loading={busy} disabled={!notice}>
-              Send OTP
+              {wt('signup.sendOtp')}
             </Button>
           </CardBody>
         </Card>
       ) : (
         <Card style={{ maxWidth: '24rem' }}>
           <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-4)' }}>
-            <Field label="6-digit OTP" error={errors.code} hint={devCode ? `Dev code: ${devCode}` : undefined}>
+            <Field label={wt('signup.otpLabel')} error={errors.code} hint={devCode ? `Dev code: ${devCode}` : undefined}>
               <Input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" autoComplete="one-time-code" />
             </Field>
             <Button type="button" onClick={verifyOtp} loading={busy}>
-              Verify and continue
+              {wt('signup.verifyContinue')}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setStep('signup')}>
-              Back
+              {wt('wizard.back')}
             </Button>
           </CardBody>
         </Card>
       )}
       <p style={{ marginTop: 'var(--hos-space-4)', fontSize: 'var(--hos-text-sm)' }}>
-        Already have an account? <Link href="/login">Sign in</Link>
+        {wt('signup.alreadyAccount')} <Link href="/login">{wt('common.signIn')}</Link>
       </p>
     </OnboardingWizardShell>
   );

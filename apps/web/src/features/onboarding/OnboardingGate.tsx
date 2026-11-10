@@ -23,8 +23,8 @@ export function OnboardingGate({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  // Callers pass inline arrays; key on the joined value so load() is not recreated every render.
   const allowedKey = allowedHrefs.join('|');
-
   const load = useCallback(async () => {
     const firstPaint = !hasLoadedRef.current;
     if (firstPaint) setLoading(true);
@@ -48,8 +48,12 @@ export function OnboardingGate({
       const resumeIdx = wizardHrefIndex(resume);
       const currentIdx = wizardHrefIndex(currentHref);
       if (currentIdx > resumeIdx) {
-        router.replace(resume);
-        return;
+        const oneStepAhead =
+          allowedKey.split('|').includes(currentHref) && currentIdx === resumeIdx + 1;
+        if (!oneStepAhead) {
+          router.replace(resume);
+          return;
+        }
       }
       setState(onboarding);
     } catch (e: unknown) {

@@ -49,7 +49,7 @@ Children reference parents by `(tenant_id, id)` composite foreign keys, so a row
 
 How it is checked:
 
-- `apps/api/src/security.test.ts` (vitest, throwaway database) checks that another tenant's invoice and user come back as 404, plus idempotency replay, entitlement and payment-signature checks.
+- `apps/api/src/security.test.ts` (vitest; runs against the env database, `HOS_DB_NAME`, default `hospital_os`, and needs the seeded demo; not a throwaway database) checks that another tenant's invoice and user come back as 404, plus idempotency replay, entitlement and payment-signature checks.
 - `scripts/smoke.mjs` signs in as Sunrise Care and as a second hospital (the Lotus demo tenant once Phase B seeds it, otherwise a throwaway signup) and asserts that the second hospital gets 404 on Sunrise's invoices and invoice PDF, never lists them, and cannot switch into a Sunrise location; with Lotus it also checks locations, staff and (once built) patients. With `--db` it connects as `hos_app` and checks that with no tenant set every tenant table reads empty, that another tenant sees 0 Sunrise rows, cannot update them and cannot insert into Sunrise (42501).
 
 **Limit.** `hos_app` sets its own GUCs. RLS protects against application bugs (a query that forgets `WHERE tenant_id = …`). It does not protect against a fully compromised API process, which could set `app.tenant_id` to any tenant id it learns. Mitigations: no `BYPASSRLS`, statement timeout 10s and idle-in-transaction timeout 15s on `hos_app`, the API never exposed except behind TLS, and the audit chain plus proxy logs for forensics.

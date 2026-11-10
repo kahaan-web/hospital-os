@@ -11,3 +11,21 @@ body {
   min-height: 100%;
   margin: 0;
 }
+
+/* Invoice wizard: hide chrome when printing the HTML invoice from a dedicated window/tab. */
+@media print {
+  body:has(.hos-invoice-print-area) .hos-wizard-header,
+  body:has(.hos-invoice-print-area) .hos-wizard-stepper,
+  body:has(.hos-invoice-print-area) .hos-wizard-back,
+  body:has(.hos-invoice-print-area) .hos-page-header,
+  body:has(.hos-invoice-print-area) .no-print,
+  body:has(.hos-invoice-print-area) .hos-invoice-meta,
+  body:has(.hos-invoice-print-area) .hos-toast-viewport {
+    display: none !important;
+  }
+
+  body:has(.hos-invoice-print-area) .hos-wizard-shell,
+  body:has(.hos-invoice-print-area) {
+    background: #fff !important;
+  }
+}
