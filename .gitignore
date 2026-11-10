@@ -16,3 +16,4 @@ uploads/
 
 # Cursor worker task files
 .cursor-task.md
+*.tsbuildinfo
