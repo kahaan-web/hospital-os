@@ -148,18 +148,32 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
   r.post('/api/v1/auth/login', { ...limit, schema: { body: loginSchema } }, async (req, reply) => {
     const email = req.body.email.toLowerCase();
     const meta = requestMeta(req);
-    const admin = await platform(deps.db, async (tx) => {
-      const [row] = await tx.select().from(schema.platformAdmins).where(eq(schema.platformAdmins.email, email));
-      return row ?? null;
-    });
-    if (admin) {
-      if (!(await verifyPassword(admin.passwordHash, req.body.password))) {
+
+    // Hospital staff resolve on the app pool, then the tenant connection and that tenant's audit chain.
+    const lookup = await deps.db.execute<{ tenant_id: string; user_id: string }>(sql`select tenant_id, user_id from hos_login_lookup(${email})`);
+    const hit = lookup.rows[0];
+    if (!hit) {
+      const adminLookup = await deps.db.execute<{
+        id: string;
+        email: string;
+        name: string;
+        password_hash: string;
+        totp_secret: string | null;
+        totp_enabled: boolean;
+      }>(sql`select id, email, name, password_hash, totp_secret, totp_enabled from hos_admin_login_lookup(${email})`);
+      const admin = adminLookup.rows[0];
+      if (!admin) {
+        await verifyPassword(DUMMY_PASSWORD_HASH, req.body.password);
+        throw new ApiError(401, 'invalid_credentials', 'Email or password is not right');
+      }
+      // Platform pool only after this email is a platform admin.
+      if (!(await verifyPassword(admin.password_hash, req.body.password))) {
         await platform(deps.db, (tx) => writeAudit(tx, platformActor(admin.id, email, meta), 'auth.login.failed', 'platform_admin', admin.id, null, {}));
         throw new ApiError(401, 'invalid_credentials', 'Email or password is not right');
       }
-      if (admin.totpEnabled) {
+      if (admin.totp_enabled) {
         if (!req.body.totp) throw new ApiError(401, 'totp_required', 'Enter the 6-digit authenticator code');
-        if (!admin.totpSecret || !verifyTotp(admin.totpSecret, req.body.totp)) {
+        if (!admin.totp_secret || !verifyTotp(admin.totp_secret, req.body.totp)) {
           await platform(deps.db, (tx) => writeAudit(tx, platformActor(admin.id, email, meta), 'auth.login.totp_failed', 'platform_admin', admin.id, null, {}));
           throw new ApiError(401, 'totp_invalid', 'That authenticator code is not right');
         }
@@ -171,17 +185,10 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
         await writeAudit(tx, platformActor(admin.id, email, meta), 'auth.session.login', 'platform_admin', admin.id, null, {});
       });
       reply.setCookie(SESSION_COOKIE, token, cookieOptions(deps.env, 8 * 60 * 60));
-      const platformMe = { kind: 'platform' as const, admin: { id: admin.id, name: admin.name, email: admin.email, totpEnabled: admin.totpEnabled } };
+      const platformMe = { kind: 'platform' as const, admin: { id: admin.id, name: admin.name, email: admin.email, totpEnabled: admin.totp_enabled } };
       return req.headers['x-hos-client'] === 'native' ? { ...platformMe, sessionToken: token } : platformMe;
     }
 
-    const lookup = await deps.db.execute<{ tenant_id: string; user_id: string }>(sql`select tenant_id, user_id from hos_login_lookup(${email})`);
-    const hit = lookup.rows[0];
-    if (!hit) {
-      await verifyPassword(DUMMY_PASSWORD_HASH, req.body.password);
-      await platform(deps.db, (tx) => writeAudit(tx, { actorType: 'system', actorId: null, actorLabel: email, tenantId: null, locationId: null, ...meta }, 'auth.login.failed', 'user', null, null, {}));
-      throw new ApiError(401, 'invalid_credentials', 'Email or password is not right');
-    }
     const token = randomToken();
     const outcome = await tenant(deps.db, hit.tenant_id, async (tx) => {
       const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, hit.user_id));

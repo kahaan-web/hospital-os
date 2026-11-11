@@ -158,4 +158,29 @@ describe.sequential('platform scope login', () => {
       await platform().query('ROLLBACK');
     }
   });
+
+  it('hides clinical PHI from platform scope even when a tenant is selected', async () => {
+    const found = await admin().query<{ id: string; n: number }>(
+      `select t.id, (select count(*)::int from patients p where p.tenant_id = t.id) as n
+         from tenants t
+        where exists (select 1 from patients p where p.tenant_id = t.id)
+        limit 1`,
+    );
+    const row = found.rows[0];
+    expect(Number(row?.n), 'seed has no patients to hide').toBeGreaterThan(0);
+    await platform().query('BEGIN');
+    try {
+      await platform().query(`select set_config('app.scope', 'platform', true), set_config('app.tenant_id', $1, true)`, [row!.id]);
+      const seen = await platform().query<{ n: number }>(`select count(*)::int as n from patients`);
+      expect(Number(seen.rows[0]?.n)).toBe(0);
+      await expectSqlState(
+        platform(),
+        `insert into patients (tenant_id, uhid, first_name, gender, is_sample) values ($1, $2, 'Nope', 'other', true)`,
+        [row!.id, `DEMO-phi-${randomUUID().slice(0, 8)}`],
+        '42501',
+      );
+    } finally {
+      await platform().query('ROLLBACK');
+    }
+  });
 });

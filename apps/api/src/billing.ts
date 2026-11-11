@@ -49,19 +49,19 @@ async function exec(tx: Tx, query: SqlQuery) {
   }
 }
 
-async function simulatorEnabled(tx: Tx, production: boolean): Promise<boolean> {
-  if (production) return false;
+async function simulatorEnabled(tx: Tx, allowSimulator: boolean): Promise<boolean> {
+  if (!allowSimulator) return false;
   const rows = await tx.execute<{ enabled: boolean }>(sql`select mock_payment_simulator as enabled from platform_settings where id = 1`);
   return rows.rows[0]?.enabled === true;
 }
 
-/** The server captures unless the dev simulator is on and the client named an outcome. */
+/** The server captures unless dev-insecure mode is on, the simulator flag is on, and the client named an outcome. */
 export async function decideOutcome(
   tx: Tx,
-  production: boolean,
+  allowSimulator: boolean,
   requested: 'success' | 'failure' | 'pending' | undefined,
 ): Promise<'success' | 'failure' | 'pending'> {
-  if ((await simulatorEnabled(tx, production)) && requested) return requested;
+  if ((await simulatorEnabled(tx, allowSimulator)) && requested) return requested;
   return 'success';
 }
 
@@ -129,7 +129,7 @@ export async function payOrder(
   orderPublicId: string,
   input: { method: 'upi' | 'card' | 'netbanking'; outcome?: 'success' | 'failure' | 'pending'; details: Record<string, string | undefined> },
   gateway: PaymentGateway,
-  production: boolean,
+  allowSimulator: boolean,
 ): Promise<PayAttemptResult> {
   const order = await mustOrder(tx, orderPublicId);
   await tx.execute(sql`select id from orders where id = ${order.id} for update`);
@@ -140,7 +140,7 @@ export async function payOrder(
     .from(schema.payments)
     .where(and(eq(schema.payments.orderId, locked.id), eq(schema.payments.status, 'pending')));
   if (pending.length > 0) throw new ApiError(409, 'payment_pending', 'A payment is still pending on this order');
-  const outcome = await decideOutcome(tx, production, input.outcome);
+  const outcome = await decideOutcome(tx, allowSimulator, input.outcome);
   const details: Record<string, string> = {};
   for (const [k, v] of Object.entries(input.details)) if (v) details[k] = v;
   const [payment] = await tx

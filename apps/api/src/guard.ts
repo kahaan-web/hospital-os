@@ -10,6 +10,7 @@ import {
   ApiError,
   idempotencyKey,
   idempotencyRequired,
+  idempotencyScope,
   requestHash,
   requestMeta,
   readSessionToken,
@@ -171,7 +172,16 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       if (policy.feature) await gate.requireFeature(resolveGuardKey(policy.feature, req));
     }
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return fn(gate);
-    return withIdempotency(tx, reply, tenantId, routeTemplate(req), idempotencyKey(req), idempotencyRequired(req), requestHash(req), () => fn(gate));
+    return withIdempotency(
+      tx,
+      reply,
+      tenantId,
+      idempotencyScope(routeTemplate(req), actor.actorId),
+      idempotencyKey(req),
+      idempotencyRequired(req),
+      requestHash(req),
+      () => fn(gate),
+    );
   });
 }
 

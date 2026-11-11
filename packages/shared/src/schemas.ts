@@ -149,7 +149,7 @@ export const PAYMENT_OUTCOMES = ['success', 'failure', 'pending'] as const;
 export const payAttemptSchema = z.object({
   method: z.enum(PAYMENT_METHODS),
   /**
-   * Ignored unless NODE_ENV is not production and the platform dev simulator is on.
+   * Ignored unless HOS_DEV_INSECURE=1 (never in production) and the platform dev simulator is on.
    * The server decides the mock outcome (capture) on every other checkout.
    */
   outcome: z.enum(PAYMENT_OUTCOMES).optional(),

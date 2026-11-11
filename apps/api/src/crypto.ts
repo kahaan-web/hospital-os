@@ -34,9 +34,30 @@ export function paymentSignature(secret: string, orderPublicId: string, paymentP
   return createHmac('sha256', secret).update(`${orderPublicId}|${paymentPublicId}`).digest('hex');
 }
 
-/** Lowercase hex HMAC-SHA256 of the canonical JSON body. Mock webhook only. */
-export function webhookSignature(secret: string, body: unknown): string {
-  return createHmac('sha256', secret).update(canonicalJson(body)).digest('hex');
+/** Reject webhook timestamps further than this from the server clock. */
+export const WEBHOOK_MAX_SKEW_MS = 5 * 60 * 1000;
+
+/** Unix seconds, the value that goes in `x-hos-timestamp` and under the HMAC. */
+export function webhookTimestamp(at = Date.now()): string {
+  return String(Math.floor(at / 1000));
+}
+
+/** True when `timestamp` is unix seconds (or ms) within {@link WEBHOOK_MAX_SKEW_MS}. */
+export function webhookTimestampFresh(timestamp: string, now = Date.now()): boolean {
+  if (!/^[0-9]{10,13}$/.test(timestamp)) return false;
+  const raw = Number(timestamp);
+  if (!Number.isFinite(raw)) return false;
+  const ms = raw > 10_000_000_000 ? raw : raw * 1000;
+  return Math.abs(now - ms) <= WEBHOOK_MAX_SKEW_MS;
+}
+
+/**
+ * Lowercase hex HMAC-SHA256 of `${timestamp}.${canonicalJson(body)}`.
+ * The timestamp is outside the body so a captured request cannot be re-signed
+ * without the webhook secret, and an old signature fails the skew check.
+ */
+export function webhookSignature(secret: string, timestamp: string, body: unknown): string {
+  return createHmac('sha256', secret).update(`${timestamp}.${canonicalJson(body)}`).digest('hex');
 }
 
 export function canonicalJson(value: unknown): string {

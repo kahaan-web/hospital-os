@@ -589,7 +589,7 @@ export async function seedDemo(log: (m: string) => void = console.log): Promise<
   try {
     await seedCatalogue(handle.db, log);
     // Demo checkout still offers success / failure / pending. The API honours that
-    // choice only when this flag is on and NODE_ENV is not production.
+    // choice only when this flag is on and HOS_DEV_INSECURE=1 (never when NODE_ENV=production).
     await handle.db
       .update(schema.platformSettings)
       .set({ mockPaymentSimulator: true })

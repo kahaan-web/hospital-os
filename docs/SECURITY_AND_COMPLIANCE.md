@@ -73,9 +73,9 @@ Logged today: sign-in, failed sign-in, staff invites and role changes, onboardin
 
 ## Encryption
 
-- **In transit.** Production terminates TLS 1.2+ at the edge and forwards to the API on a private network. The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`. **Dev runs plain HTTP on 127.0.0.1** (API 4400, web 3400, Postgres 55432 bound to localhost only).
+- **In transit.** Production terminates TLS 1.2+ at the edge and forwards to the API on a private network. The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` unless `HOS_DEV_INSECURE=1` (that flag is ignored when `NODE_ENV=production`). **Dev runs plain HTTP on 127.0.0.1** (API 4400, web 3400, Postgres 55432 bound to localhost only).
 - **At rest.** Intended: managed Postgres or an encrypted volume, encrypted backups with a separate key, all in an India region. **Not in place in dev**: the Docker volume `hospital-os-pgdata` is not encrypted.
-- **Secrets.** Passwords are argon2id. Session tokens are 32 random bytes; only their SHA-256 is stored. OTP and invite tokens are stored hashed. `.env` is git-ignored; `.env.example` holds dev-only values. Production refuses to start without a real `MOCK_GATEWAY_KEY_SECRET` and forces secret echoing off.
+- **Secrets.** Passwords are argon2id. Session tokens are 32 random bytes; only their SHA-256 is stored. OTP and invite tokens are stored hashed. `.env` is git-ignored; `.env.example` holds dev-only values. The API refuses to start on the published mock secrets unless `HOS_DEV_INSECURE=1`, and that flag is ignored when `NODE_ENV=production`. OTP echoing stays off unless the flag is set.
 - **Field level.** Designed, not built: government identifiers (ABHA number and address, any Aadhaar token) encrypted with a per-tenant data key wrapped by an India-region KMS key. The Phase B plan stores Aadhaar only as ID type plus last 4 digits; ABHA fields are optional and stored in clear until this lands, which is acceptable only while data is sample. Seeded ABHA-style numbers start with `00-` (never issued) and addresses end in `@sbx` (the ABDM sandbox suffix). **Recommended before go-live:** a CHECK that refuses ABHA values on rows not marked `is_sample` until encryption exists.
 
 ## Consent

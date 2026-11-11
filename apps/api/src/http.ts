@@ -235,7 +235,7 @@ export function readSessionToken(req: FastifyRequest): string | undefined {
 }
 
 export function cookieOptions(env: ApiEnv, maxAgeSeconds: number) {
-  return { httpOnly: true, sameSite: 'lax' as const, secure: env.production, path: '/', maxAge: maxAgeSeconds };
+  return { httpOnly: true, sameSite: 'lax' as const, secure: env.secureCookies, path: '/', maxAge: maxAgeSeconds };
 }
 
 export interface ResolvedSession {
@@ -278,6 +278,11 @@ export async function resolveSession(db: Db, token: string | undefined): Promise
 }
 
 const IDEMPOTENCY_RE = /^[A-Za-z0-9_-]{8,128}$/;
+
+/** Replay store key. The actor is part of the scope so a colleague with the same header does not receive the stored body. */
+export function idempotencyScope(route: string, actorId: string | null): string {
+  return `${route} actor:${actorId ?? 'system'}`;
+}
 
 export async function withIdempotency<T>(
   tx: Tx,
