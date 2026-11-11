@@ -12,7 +12,7 @@ import {
   rejectSampleSchema,
   saveResultsSchema,
 } from '@hos/shared';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -260,7 +260,7 @@ export function registerLab(app: FastifyInstance, deps: Deps): void {
 
   // Token auth, not a user session. The global CSRF hook still applies because app.ts is shared.
   // TENANT_GUARDS lists this route so the inventory stays closed; openTenant is intentionally not used.
-  r.post(`${PREFIX}/interfaces/:id/ingest`, async (req, reply) => {
+  r.post(`${PREFIX}/interfaces/:id/ingest`, async (req) => {
     const raw = req.headers['x-lab-interface-token'];
     const token = typeof raw === 'string' ? raw.trim() : '';
     if (!token) throw new ApiError(401, 'invalid_token', 'The analyser token is missing or not valid');

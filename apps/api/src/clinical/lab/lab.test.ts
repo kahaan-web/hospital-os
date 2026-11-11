@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { createDb, dbEnv, schema, withTenant, type Tx } from '@hos/db';
 import { flagLabValue, type LabAccessionDetailDto, type LabFlag } from '@hos/shared';
 import { eq, sql } from 'drizzle-orm';
-import { PDFDocument } from 'pdf-lib';
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../app';
