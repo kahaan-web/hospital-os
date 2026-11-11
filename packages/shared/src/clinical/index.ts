@@ -37,6 +37,7 @@ export {
 } from './codes';
 export * from './patient';
 export * from './registration';
+export * from './doctor';
 export * from './encounter';
 export {
   ORDER_ITEM_STATUSES,
