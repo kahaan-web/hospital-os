@@ -1,7 +1,7 @@
 import { schema, type Tx } from '@hos/db';
 import {
   CLINICAL_FEATURES,
-  type AdmissionRequestInput,
+  type CpoeAdmissionRequestInput,
   type CasePaperDto,
   type CasePaperInput,
   type ClinicalCtx,
@@ -363,7 +363,7 @@ export async function vitalsGraph(ctx: ClinicalCtx<Tx>, encounterId: string): Pr
   };
 }
 
-export async function admissionRequest(ctx: ClinicalCtx<Tx>, encounterId: string, input: AdmissionRequestInput) {
+export async function admissionRequest(ctx: ClinicalCtx<Tx>, encounterId: string, input: CpoeAdmissionRequestInput) {
   const encounter = await readEncounter(ctx, encounterId);
   const doctor = await doctorForUser(ctx);
   const doctorId = doctor?.id ?? encounter.doctorId;

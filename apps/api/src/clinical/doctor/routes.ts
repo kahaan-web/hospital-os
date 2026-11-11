@@ -1,5 +1,5 @@
 import {
-  admissionRequestSchema,
+  cpoeAdmissionRequestSchema,
   casePaperSchema,
   orderSetSchema,
   prescriptionSchema,
@@ -179,7 +179,7 @@ export function registerDoctor(app: FastifyInstance, deps: Deps): void {
 
   r.post(
     `${PREFIX_CPOE}/encounters/:id/admission-request`,
-    { schema: { params: z.object({ id: z.uuid() }), body: admissionRequestSchema } },
+    { schema: { params: z.object({ id: z.uuid() }), body: cpoeAdmissionRequestSchema } },
     async (req, reply) =>
       run(req, reply, async (gate) => {
         await guardCpoe(gate, doctorFeatures.requestAdmission, true);

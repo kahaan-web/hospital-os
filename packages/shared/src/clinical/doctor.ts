@@ -143,12 +143,12 @@ export const serviceOrderSchema = z.object({
 });
 export type ServiceOrderInput = z.infer<typeof serviceOrderSchema>;
 
-export const admissionRequestSchema = z.object({
+export const cpoeAdmissionRequestSchema = z.object({
   reason: z.string().trim().min(2).max(500),
   plannedOn: z.string().date(),
   wardType: z.enum(WARD_TYPES).optional(),
 });
-export type AdmissionRequestInput = z.infer<typeof admissionRequestSchema>;
+export type CpoeAdmissionRequestInput = z.infer<typeof cpoeAdmissionRequestSchema>;
 
 export interface VitalsGraphPoint {
   recordedAt: string;
