@@ -274,7 +274,6 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
       return { otpauthUrl: otpauthUrl(admin.email, secret), secret };
     }
     return openTenant(deps, req, reply, async (gate) => {
-      gate.requirePermission('tenant.manage');
       if (gate.user.totpEnabled) throw new ApiError(409, 'totp_enabled', 'Authenticator is already on');
       await gate.tx.update(schema.users).set({ totpSecret: secret, totpEnabled: false }).where(eq(schema.users.id, gate.user.id));
       await gate.audit('auth.totp.setup', 'user', gate.user.id, null, {});
@@ -295,7 +294,6 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
       return reply.status(204).send();
     }
     await openTenant(deps, req, reply, async (gate) => {
-      gate.requirePermission('tenant.manage');
       if (!gate.user.totpSecret || !verifyTotp(gate.user.totpSecret, req.body.code)) throw new ApiError(401, 'totp_invalid', 'That authenticator code is not right');
       await gate.tx.update(schema.users).set({ totpEnabled: true }).where(eq(schema.users.id, gate.user.id));
       await gate.audit('auth.totp.enable', 'user', gate.user.id, null, {});
@@ -311,10 +309,21 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
     const meta = requestMeta(req);
     const token = randomToken();
     const userId = await tenant(deps.db, tenantId, async (tx) => {
-      const [invite] = await tx.select().from(schema.invitations).where(eq(schema.invitations.tokenHash, hash));
-      if (!invite || invite.status !== 'pending') throw new ApiError(400, 'invite_invalid', 'This invite has expired or was already used');
-      const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, invite.userId));
-      if (!user) throw new ApiError(400, 'invite_invalid', 'This invite has expired or was already used');
+      const locked = await tx.execute<{ id: string; user_id: string; status: string; expires_at: Date | string }>(sql`
+        select id, user_id, status, expires_at
+        from invitations
+        where token_hash = ${hash}
+        for update
+      `);
+      const invite = locked.rows[0];
+      if (!invite || invite.status !== 'pending' || new Date(invite.expires_at).getTime() <= Date.now()) {
+        throw new ApiError(400, 'invite_invalid', 'This invite has expired or was already used');
+      }
+      const userRows = await tx.execute<{ id: string; email: string; status: string }>(sql`
+        select id, email, status from users where id = ${invite.user_id}::uuid for update
+      `);
+      const user = userRows.rows[0];
+      if (!user || user.status !== 'pending') throw new ApiError(400, 'invite_invalid', 'This invite has expired or was already used');
       await tx.update(schema.users).set({ passwordHash: await hashPassword(req.body.password), status: 'active' }).where(eq(schema.users.id, user.id));
       await tx.update(schema.invitations).set({ status: 'accepted', acceptedAt: new Date() }).where(eq(schema.invitations.id, invite.id));
       await tx.execute(sql`select hos_session_create(${sha256Hex(token)}, 'tenant', ${user.id}::uuid, null, null, ${meta.ip}, ${meta.userAgent})`);

@@ -59,7 +59,7 @@ it('issues unique UHIDs for ten concurrent creates', async () => {
     ),
   );
   const codes = results.map((r) => r.statusCode);
-  expect(codes, codes.map((c, i) => `${i}:${c}`).join(', ')).toEqual(Array(10).fill(201));
+  expect(codes, results.map((r, i) => `${i}:${r.statusCode}:${r.body}`).join(' | ')).toEqual(Array(10).fill(201));
   const uhids = results.map((r) => (r.json() as { uhid: string }).uhid);
   expect(new Set(uhids).size).toBe(10);
 }, 60_000);

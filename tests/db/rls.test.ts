@@ -67,6 +67,30 @@ const TABLES = [
   'mlc_cases',
   'order_sets',
   'prescription_templates',
+  'pharmacy_items',
+  'pharmacy_suppliers',
+  'pharmacy_batches',
+  'pharmacy_stock',
+  'pharmacy_stock_moves',
+  'pharmacy_grns',
+  'pharmacy_grn_lines',
+  'pharmacy_sales',
+  'pharmacy_sale_lines',
+  'pharmacy_sale_returns',
+  'pharmacy_sale_return_lines',
+  'pharmacy_ip_issues',
+  'pharmacy_ip_issue_lines',
+  'pharmacy_adjustments',
+  'pharmacy_adjustment_lines',
+  'pharmacy_supplier_returns',
+  'pharmacy_supplier_return_lines',
+  'wards',
+  'rooms',
+  'beds',
+  'admissions',
+  'bed_assignments',
+  'admission_requests',
+  'discharge_summaries',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -580,6 +604,10 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         ...row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
           `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`),
         beforeMassDelete: [
+          'delete from discharge_summaries',
+          'delete from bed_assignments',
+          'delete from admission_requests',
+          'delete from admissions',
           'delete from opd_queue',
           'delete from appointments',
           'delete from schedule_exceptions',
@@ -911,6 +939,195 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(name = 'Touched by A', false) as touched from prescription_templates where id = $1`,
         insertSql: `insert into prescription_templates (tenant_id, name, items) values ($1, 'Nope', '[]'::jsonb)`,
         retargetSql: `update prescription_templates set tenant_id = $1`,
+      };
+    case 'pharmacy_items':
+      return {
+        ...row(common, 'id = $1', b.pharmacyItemId, `brand = 'Touched by A'`, 'brand',
+          `insert into pharmacy_items (tenant_id, generic_code, brand, form, strength, hsn, gst_rate_bp, schedule) values ($1, 'PARACETAMOL', 'Nope', 'tablet', '500 mg', '3004', 0, 'OTC')`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_suppliers':
+      return {
+        ...row(common, 'id = $1', b.pharmacySupplierId, `name = 'Touched by A'`, 'name',
+          `insert into pharmacy_suppliers (tenant_id, name) values ($1, 'Nope Pharma')`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_batches':
+      return {
+        ...row(common, 'id = $1', b.pharmacyBatchId, `batch_no = 'Touched by A'`, 'batch_no',
+          `insert into pharmacy_batches (tenant_id, item_id, batch_no, expiry, mrp_paise, purchase_rate_paise) values ($1, '${b.pharmacyItemId}', 'NOPE', current_date + 30, 100, 50)`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_stock':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacyStockId,
+        setSql: `qty = 7`,
+        untouched: `select coalesce(qty = 7, false) as touched from pharmacy_stock where id = $1`,
+        insertSql: `insert into pharmacy_stock (tenant_id, batch_id, location_id, qty) values ($1, '${b.pharmacyBatchId}', '${b.locationId}', 1)`,
+        retargetSql: `update pharmacy_stock set tenant_id = $1`,
+      };
+    case 'pharmacy_stock_moves':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacyMoveId,
+        setSql: `reason = 'Touched by A'`,
+        untouched: `select coalesce(reason = 'Touched by A', false) as touched from pharmacy_stock_moves where id = $1`,
+        insertSql: `insert into pharmacy_stock_moves (tenant_id, batch_id, location_id, qty, move_type, ref_type, ref_id) values ($1, '${b.pharmacyBatchId}', '${b.locationId}', 1, 'adjustment', 'fixture', '${b.pharmacyBatchId}')`,
+        retargetSql: `update pharmacy_stock_moves set tenant_id = $1`,
+        updateGuard: true,
+        massDelete: 'forbidden',
+      };
+    case 'pharmacy_grns':
+      return {
+        ...row(common, 'id = $1', b.pharmacyGrnId, `notes = 'Touched by A'`, 'notes',
+          `insert into pharmacy_grns (tenant_id, location_id, supplier_id, number) values ($1, '${b.locationId}', '${b.pharmacySupplierId}', 'ZGR${pair.runId}')`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_grn_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacyGrnLineId,
+        setSql: `qty = 9`,
+        untouched: `select coalesce(qty = 9, false) as touched from pharmacy_grn_lines where id = $1`,
+        insertSql: `insert into pharmacy_grn_lines (tenant_id, grn_id, line_no, item_id, batch_id, qty, mrp_paise, purchase_rate_paise, gst_rate_bp) values ($1, '${b.pharmacyGrnId}', 2, '${b.pharmacyItemId}', '${b.pharmacyBatchId}', 1, 100, 50, 0)`,
+        retargetSql: `update pharmacy_grn_lines set tenant_id = $1`,
+      };
+    case 'pharmacy_sales':
+      return {
+        ...row(common, 'id = $1', b.pharmacySaleId, `walkin_name = 'Touched by A'`, 'walkin_name',
+          `insert into pharmacy_sales (tenant_id, location_id, kind, number, mode, doc_type, gross_paise, taxable_paise, cgst_paise, sgst_paise, total_paise) values ($1, '${b.locationId}', 'outside', 'ZPS${pair.runId}', 'cash', 'tax_invoice', 100, 100, 0, 0, 100)`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_sale_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacySaleLineId,
+        setSql: `qty = 9`,
+        untouched: `select coalesce(qty = 9, false) as touched from pharmacy_sale_lines where id = $1`,
+        insertSql: `insert into pharmacy_sale_lines (tenant_id, sale_id, line_no, item_id, batch_id, qty, mrp_paise, gst_rate_bp, gross_paise, taxable_paise, tax_paise) values ($1, '${b.pharmacySaleId}', 2, '${b.pharmacyItemId}', '${b.pharmacyBatchId}', 1, 100, 0, 100, 100, 0)`,
+        retargetSql: `update pharmacy_sale_lines set tenant_id = $1`,
+        massDelete: 'skip',
+      };
+    case 'pharmacy_sale_returns':
+      return {
+        ...row(common, 'id = $1', b.pharmacySaleReturnId, `reason = 'Touched by A'`, 'reason',
+          `insert into pharmacy_sale_returns (tenant_id, location_id, sale_id, number, reason, gross_paise, taxable_paise, tax_paise) values ($1, '${b.locationId}', '${b.pharmacySaleId}', 'ZPR${pair.runId}', 'Nope', 0, 0, 0)`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_sale_return_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacySaleReturnLineId,
+        setSql: `qty = 9`,
+        untouched: `select coalesce(qty = 9, false) as touched from pharmacy_sale_return_lines where id = $1`,
+        insertSql: `insert into pharmacy_sale_return_lines (tenant_id, return_id, line_no, sale_line_id, batch_id, qty, gross_paise, taxable_paise, tax_paise) values ($1, '${b.pharmacySaleReturnId}', 2, '${b.pharmacySaleLineId}', '${b.pharmacyBatchId}', 1, 0, 0, 0)`,
+        retargetSql: `update pharmacy_sale_return_lines set tenant_id = $1`,
+      };
+    case 'pharmacy_ip_issues':
+      return {
+        ...row(common, 'id = $1', b.pharmacyIpIssueId, `notes = 'Touched by A'`, 'notes',
+          `insert into pharmacy_ip_issues (tenant_id, location_id, encounter_id, patient_id, number) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'ZPI${pair.runId}')`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_ip_issue_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacyIpIssueLineId,
+        setSql: `qty = 9`,
+        untouched: `select coalesce(qty = 9, false) as touched from pharmacy_ip_issue_lines where id = $1`,
+        insertSql: `insert into pharmacy_ip_issue_lines (tenant_id, issue_id, line_no, item_id, batch_id, qty, mrp_paise) values ($1, '${b.pharmacyIpIssueId}', 2, '${b.pharmacyItemId}', '${b.pharmacyBatchId}', 1, 100)`,
+        retargetSql: `update pharmacy_ip_issue_lines set tenant_id = $1`,
+      };
+    case 'pharmacy_adjustments':
+      return {
+        ...row(common, 'id = $1', b.pharmacyAdjustmentId, `reason = 'Touched by A'`, 'reason',
+          `insert into pharmacy_adjustments (tenant_id, location_id, number, reason) values ($1, '${b.locationId}', 'ZAJ${pair.runId}', 'Nope')`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_adjustment_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacyAdjustmentLineId,
+        setSql: `qty_delta = 2`,
+        untouched: `select coalesce(qty_delta = 2, false) as touched from pharmacy_adjustment_lines where id = $1`,
+        insertSql: `insert into pharmacy_adjustment_lines (tenant_id, adjustment_id, line_no, batch_id, qty_delta) values ($1, '${b.pharmacyAdjustmentId}', 2, '${b.pharmacyBatchId}', 1)`,
+        retargetSql: `update pharmacy_adjustment_lines set tenant_id = $1`,
+      };
+    case 'pharmacy_supplier_returns':
+      return {
+        ...row(common, 'id = $1', b.pharmacySupplierReturnId, `reason = 'Touched by A'`, 'reason',
+          `insert into pharmacy_supplier_returns (tenant_id, location_id, supplier_id, number, reason) values ($1, '${b.locationId}', '${b.pharmacySupplierId}', 'ZSR${pair.runId}', 'Nope')`),
+        massDelete: 'skip',
+      };
+    case 'pharmacy_supplier_return_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.pharmacySupplierReturnLineId,
+        setSql: `qty = 9`,
+        untouched: `select coalesce(qty = 9, false) as touched from pharmacy_supplier_return_lines where id = $1`,
+        insertSql: `insert into pharmacy_supplier_return_lines (tenant_id, return_id, line_no, batch_id, qty) values ($1, '${b.pharmacySupplierReturnId}', 2, '${b.pharmacyBatchId}', 1)`,
+        retargetSql: `update pharmacy_supplier_return_lines set tenant_id = $1`,
+      };
+    case 'wards':
+      return {
+        ...row(common, 'id = $1', b.wardId, `name = 'Touched by A'`, 'name',
+          `insert into wards (tenant_id, location_id, code, name, ward_type) values ($1, '${b.locationId}', 'ZZ', 'Nope', 'general')`),
+        beforeMassDelete: ['delete from bed_assignments', 'delete from beds', 'delete from rooms'],
+      };
+    case 'rooms':
+      return {
+        ...row(common, 'id = $1', b.roomId, `name = 'Touched by A'`, 'name',
+          `insert into rooms (tenant_id, ward_id, code, name) values ($1, '${b.wardId}', 'ZZ', 'Nope')`),
+        beforeMassDelete: ['delete from bed_assignments', 'delete from beds'],
+      };
+    case 'beds':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.bedId,
+        setSql: `status = 'maintenance'`,
+        untouched: `select coalesce(status = 'maintenance', false) as touched from beds where id = $1`,
+        insertSql: `insert into beds (tenant_id, room_id, label, ward_class) values ($1, '${b.roomId}', 'ZZ', 'general')`,
+        retargetSql: `update beds set tenant_id = $1`,
+        beforeMassDelete: ['delete from bed_assignments'],
+      };
+    case 'admissions':
+      return {
+        ...row(common, 'id = $1', b.admissionId, `attendant = 'Touched by A'`, 'attendant',
+          `insert into admissions (tenant_id, location_id, encounter_id, patient_id, number, admission_type) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'ZN${pair.runId}', 'elective')`),
+        beforeMassDelete: ['delete from discharge_summaries', 'delete from bed_assignments', 'delete from admission_requests'],
+      };
+    case 'bed_assignments':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.bedAssignmentId,
+        setSql: `from_at = timestamptz '2020-01-01+00'`,
+        untouched: `select coalesce(from_at = timestamptz '2020-01-01+00', false) as touched from bed_assignments where id = $1`,
+        insertSql: `insert into bed_assignments (tenant_id, admission_id, bed_id, to_at) values ($1, '${b.admissionId}', '${b.bedId}', now())`,
+        retargetSql: `update bed_assignments set tenant_id = $1`,
+      };
+    case 'admission_requests':
+      return row(common, 'id = $1', b.admissionRequestId, `reason = 'Touched by A'`, 'reason',
+        `insert into admission_requests (tenant_id, location_id, patient_id, from_encounter_id, doctor_id, reason, planned_on) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', '${b.doctorId}', 'Nope', current_date)`);
+    case 'discharge_summaries':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.summaryId,
+        setSql: `sections = '{"diagnosis":"Touched by A"}'::jsonb`,
+        untouched: `select coalesce(sections->>'diagnosis' = 'Touched by A', false) as touched from discharge_summaries where id = $1`,
+        insertSql: `insert into discharge_summaries (tenant_id, admission_id, sections) values ($1, '${b.admissionId}', '{}'::jsonb)`,
+        retargetSql: `update discharge_summaries set tenant_id = $1`,
       };
     default:
       return assertNever(table);

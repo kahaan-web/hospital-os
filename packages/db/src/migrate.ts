@@ -15,6 +15,23 @@ function literal(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+/** Shared-cluster role DDL can lose to another worktree's migrate. Retry that race only. */
+function concurrentCatalogUpdate(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('tuple concurrently updated');
+}
+
+async function retryCatalog<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!concurrentCatalogUpdate(err) || attempt >= 5) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+}
+
 function credentials(url: string, expectedRole: string): { password: string } {
   const u = new URL(url);
   const user = decodeURIComponent(u.username);
@@ -55,10 +72,10 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
     ] as const) {
       const found = await maint.query('select 1 from pg_roles where rolname = $1', [role]);
       const attrs = `login password ${literal(password)} nosuperuser nobypassrls nocreatedb nocreaterole ${inherit}`;
-      await maint.query(found.rowCount === 0 ? `create role ${role} ${attrs}` : `alter role ${role} ${attrs}`);
+      await retryCatalog(() => maint.query(found.rowCount === 0 ? `create role ${role} ${attrs}` : `alter role ${role} ${attrs}`));
     }
     // One direction only. hos_platform inherits hos_app's grants; hos_app cannot SET ROLE hos_platform.
-    await maint.query(`grant ${APP_ROLE} to ${PLATFORM_ROLE}`);
+    await retryCatalog(() => maint.query(`grant ${APP_ROLE} to ${PLATFORM_ROLE}`));
   } finally {
     await closeClient(maint);
   }
@@ -75,8 +92,8 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
     // pg_catalog.sha256 and drops the wrapper; migrate() then drops the extension.
     await admin.query('create extension if not exists pgcrypto');
     for (const role of [APP_ROLE, PLATFORM_ROLE]) {
-      await admin.query(`alter role ${role} set statement_timeout = '10s'`);
-      await admin.query(`alter role ${role} set idle_in_transaction_session_timeout = '15s'`);
+      await retryCatalog(() => admin.query(`alter role ${role} set statement_timeout = '10s'`));
+      await retryCatalog(() => admin.query(`alter role ${role} set idle_in_transaction_session_timeout = '15s'`));
     }
   } finally {
     await closeClient(admin);

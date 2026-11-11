@@ -193,8 +193,8 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/switch-location', { permission: AUTHENTICATED }),
-  entry('POST', '/api/v1/auth/totp/setup', { permission: 'tenant.manage' }),
-  entry('POST', '/api/v1/auth/totp/enable', { permission: 'tenant.manage' }),
+  entry('POST', '/api/v1/auth/totp/setup', { permission: AUTHENTICATED }),
+  entry('POST', '/api/v1/auth/totp/enable', { permission: AUTHENTICATED }),
 
   view('GET', '/api/v1/onboarding', 'tenant.manage'),
   view('GET', '/api/v1/onboarding/quote', 'tenant.manage'),
@@ -308,6 +308,30 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   ...registrationGuards(),
   ...doctorGuards(),
 
+  // B7 pharmacy. Feature checks that depend on the body or the report key stay in the handler.
+  entry('GET', '/api/v1/tenant/m/pharmacy/items', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/items', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('PATCH', '/api/v1/tenant/m/pharmacy/items/:id', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/suppliers', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/suppliers', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('PATCH', '/api/v1/tenant/m/pharmacy/suppliers/:id', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/grns', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.material-receipts' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/supplier-returns', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.material-returns' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/stock', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.stock-register-summary-details' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/prescriptions/open', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-op-patients' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/sales', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/sales/:id', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/sales/:id/return', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/sales/:id/print', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/inpatients', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/ip-issues', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/ip-issues', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/ip-issues/:id/return', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/adjustments', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.stock-adjustments' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/reports/:report', {
+    permission: ['pharmacy.manage', 'reports.view'],
+    module: 'pharmacy',
+  }),
   // B2 appointments and OPD. Feature is set when the handler requires that one key.
   // Routes that accept any of several features keep the check in the handler.
   entry('GET', '/api/v1/tenant/m/appointments/schedules/:doctorId', {
@@ -376,6 +400,137 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     permission: ['opd.manage', 'reports.view'],
     module: 'opd-visit',
     feature: CLINICAL_FEATURES.opdVisit.visitStatistics,
+  }),
+
+  // B4 ADT. Stickers and the discharge summary share one print URL; the handler picks the feature.
+  entry('GET', '/api/v1/tenant/m/adt/wards', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/wards', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/adt/wards/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/rooms', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/rooms', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/adt/rooms/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/beds', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/beds', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/adt/beds/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/bed-board', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions/:id/transfer', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.transfer,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions/:id/discharge', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.discharge,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions/:id/summary', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummary,
+  }),
+  entry('PUT', '/api/v1/tenant/m/adt/admissions/:id/summary', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummary,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions/:id/summary/finalise', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummary,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/bed-charges/post', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admission-requests', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admission-requests', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions/:id/print/:kind/:format', {
+    permission: 'adt.manage',
+    module: 'adt',
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/admissions', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admissionRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/transfers', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.transferRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/discharges', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/discharge-summaries', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummaryReport,
   }),
 ];
 

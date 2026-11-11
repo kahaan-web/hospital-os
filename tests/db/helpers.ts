@@ -65,6 +65,30 @@ export interface Side {
   mlcId: string;
   orderSetId: string;
   prescriptionTemplateId: string;
+  pharmacyItemId: string;
+  pharmacySupplierId: string;
+  pharmacyBatchId: string;
+  pharmacyStockId: string;
+  pharmacyMoveId: string;
+  pharmacyGrnId: string;
+  pharmacyGrnLineId: string;
+  pharmacySaleId: string;
+  pharmacySaleLineId: string;
+  pharmacySaleReturnId: string;
+  pharmacySaleReturnLineId: string;
+  pharmacyIpIssueId: string;
+  pharmacyIpIssueLineId: string;
+  pharmacyAdjustmentId: string;
+  pharmacyAdjustmentLineId: string;
+  pharmacySupplierReturnId: string;
+  pharmacySupplierReturnLineId: string;
+  wardId: string;
+  roomId: string;
+  bedId: string;
+  admissionId: string;
+  bedAssignmentId: string;
+  admissionRequestId: string;
+  summaryId: string;
 }
 
 export interface FixturePair {
@@ -469,6 +493,139 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, 'Fixture template', '[]'::jsonb) returning id`,
     [tenant.id],
   );
+  const pharmacySupplier = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_suppliers (tenant_id, name) values ($1, 'Nope Pharma (Sample)') returning id`,
+    [tenant.id],
+  );
+  const pharmacyItem = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_items (tenant_id, generic_code, brand, form, strength, hsn, gst_rate_bp, schedule)
+     values ($1, 'PARACETAMOL', 'Nope', 'tablet', '500 mg', '3004', 1200, 'OTC') returning id`,
+    [tenant.id],
+  );
+  const pharmacyBatch = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_batches (tenant_id, item_id, supplier_id, batch_no, expiry, mrp_paise, purchase_rate_paise)
+     values ($1, $2, $3, 'B1', current_date + 30, 100, 50) returning id`,
+    [tenant.id, pharmacyItem.id, pharmacySupplier.id],
+  );
+  const pharmacyStock = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_stock (tenant_id, batch_id, location_id, qty) values ($1, $2, $3, 1) returning id`,
+    [tenant.id, pharmacyBatch.id, location.id],
+  );
+  const pharmacyMove = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_stock_moves (tenant_id, batch_id, location_id, qty, move_type, ref_type, ref_id)
+     values ($1, $2, $3, 1, 'adjustment', 'fixture', $2) returning id`,
+    [tenant.id, pharmacyBatch.id, location.id],
+  );
+  const pharmacyGrn = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_grns (tenant_id, location_id, supplier_id, number) values ($1, $2, $3, $4) returning id`,
+    [tenant.id, location.id, pharmacySupplier.id, `ZGR${runId}${mark}`],
+  );
+  const pharmacyGrnLine = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_grn_lines (tenant_id, grn_id, line_no, item_id, batch_id, qty, mrp_paise, purchase_rate_paise, gst_rate_bp)
+     values ($1, $2, 1, $3, $4, 1, 100, 50, 1200) returning id`,
+    [tenant.id, pharmacyGrn.id, pharmacyItem.id, pharmacyBatch.id],
+  );
+  const pharmacySale = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_sales (tenant_id, location_id, kind, number, mode, doc_type, gross_paise, taxable_paise, cgst_paise, sgst_paise, total_paise)
+     values ($1, $2, 'outside', $3, 'cash', 'tax_invoice', 100, 100, 0, 0, 100) returning id`,
+    [tenant.id, location.id, `ZPS${runId}${mark}`],
+  );
+  const pharmacySaleLine = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_sale_lines (tenant_id, sale_id, line_no, item_id, batch_id, qty, mrp_paise, gst_rate_bp, gross_paise, taxable_paise, tax_paise)
+     values ($1, $2, 1, $3, $4, 1, 100, 0, 100, 100, 0) returning id`,
+    [tenant.id, pharmacySale.id, pharmacyItem.id, pharmacyBatch.id],
+  );
+  const pharmacySaleReturn = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_sale_returns (tenant_id, location_id, sale_id, number, reason, gross_paise, taxable_paise, tax_paise)
+     values ($1, $2, $3, $4, 'Nope', 0, 0, 0) returning id`,
+    [tenant.id, location.id, pharmacySale.id, `ZPR${runId}${mark}`],
+  );
+  const pharmacySaleReturnLine = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_sale_return_lines (tenant_id, return_id, line_no, sale_line_id, batch_id, qty, gross_paise, taxable_paise, tax_paise)
+     values ($1, $2, 1, $3, $4, 1, 0, 0, 0) returning id`,
+    [tenant.id, pharmacySaleReturn.id, pharmacySaleLine.id, pharmacyBatch.id],
+  );
+  const pharmacyIpIssue = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_ip_issues (tenant_id, location_id, encounter_id, patient_id, number) values ($1, $2, $3, $4, $5) returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, `ZPI${runId}${mark}`],
+  );
+  const pharmacyIpIssueLine = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_ip_issue_lines (tenant_id, issue_id, line_no, item_id, batch_id, qty, mrp_paise)
+     values ($1, $2, 1, $3, $4, 1, 100) returning id`,
+    [tenant.id, pharmacyIpIssue.id, pharmacyItem.id, pharmacyBatch.id],
+  );
+  const pharmacyAdjustment = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_adjustments (tenant_id, location_id, number, reason) values ($1, $2, $3, 'Nope') returning id`,
+    [tenant.id, location.id, `ZAJ${runId}${mark}`],
+  );
+  const pharmacyAdjustmentLine = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_adjustment_lines (tenant_id, adjustment_id, line_no, batch_id, qty_delta) values ($1, $2, 1, $3, 1) returning id`,
+    [tenant.id, pharmacyAdjustment.id, pharmacyBatch.id],
+  );
+  const pharmacySupplierReturn = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_supplier_returns (tenant_id, location_id, supplier_id, number, reason) values ($1, $2, $3, $4, 'Nope') returning id`,
+    [tenant.id, location.id, pharmacySupplier.id, `ZSR${runId}${mark}`],
+  );
+  const pharmacySupplierReturnLine = await one<{ id: string }>(
+    migrator,
+    `insert into pharmacy_supplier_return_lines (tenant_id, return_id, line_no, batch_id, qty) values ($1, $2, 1, $3, 1) returning id`,
+    [tenant.id, pharmacySupplierReturn.id, pharmacyBatch.id],
+  );
+  const ward = await one<{ id: string }>(
+    migrator,
+    `insert into wards (tenant_id, location_id, code, name, ward_type)
+     values ($1, $2, $3, 'Sample ward', 'general') returning id`,
+    [tenant.id, location.id, `W${mark}`],
+  );
+  const room = await one<{ id: string }>(
+    migrator,
+    `insert into rooms (tenant_id, ward_id, code, name) values ($1, $2, 'R1', 'Sample room') returning id`,
+    [tenant.id, ward.id],
+  );
+  const bed = await one<{ id: string }>(
+    migrator,
+    `insert into beds (tenant_id, room_id, label, ward_class) values ($1, $2, 'B1', 'general') returning id`,
+    [tenant.id, room.id],
+  );
+  const admission = await one<{ id: string }>(
+    migrator,
+    `insert into admissions (tenant_id, location_id, encounter_id, patient_id, doctor_id, number, admission_type, attendant)
+     values ($1, $2, $3, $4, $5, $6, 'elective', 'Sample') returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, doctor.id, `ZA${runId}${mark}`],
+  );
+  const bedAssignment = await one<{ id: string }>(
+    migrator,
+    `insert into bed_assignments (tenant_id, admission_id, bed_id) values ($1, $2, $3) returning id`,
+    [tenant.id, admission.id, bed.id],
+  );
+  const admissionRequest = await one<{ id: string }>(
+    migrator,
+    `insert into admission_requests (tenant_id, location_id, patient_id, from_encounter_id, doctor_id, reason, planned_on)
+     values ($1, $2, $3, $4, $5, 'Sample request', current_date) returning id`,
+    [tenant.id, location.id, patient.id, encounter.id, doctor.id],
+  );
+  const summary = await one<{ id: string }>(
+    migrator,
+    `insert into discharge_summaries (tenant_id, admission_id, sections)
+     values ($1, $2, '{"diagnosis":"Sample"}'::jsonb) returning id`,
+    [tenant.id, admission.id],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -512,6 +669,30 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     mlcId: mlc.id,
     orderSetId: orderSet.id,
     prescriptionTemplateId: rxTemplate.id,
+    pharmacyItemId: pharmacyItem.id,
+    pharmacySupplierId: pharmacySupplier.id,
+    pharmacyBatchId: pharmacyBatch.id,
+    pharmacyStockId: pharmacyStock.id,
+    pharmacyMoveId: pharmacyMove.id,
+    pharmacyGrnId: pharmacyGrn.id,
+    pharmacyGrnLineId: pharmacyGrnLine.id,
+    pharmacySaleId: pharmacySale.id,
+    pharmacySaleLineId: pharmacySaleLine.id,
+    pharmacySaleReturnId: pharmacySaleReturn.id,
+    pharmacySaleReturnLineId: pharmacySaleReturnLine.id,
+    pharmacyIpIssueId: pharmacyIpIssue.id,
+    pharmacyIpIssueLineId: pharmacyIpIssueLine.id,
+    pharmacyAdjustmentId: pharmacyAdjustment.id,
+    pharmacyAdjustmentLineId: pharmacyAdjustmentLine.id,
+    pharmacySupplierReturnId: pharmacySupplierReturn.id,
+    pharmacySupplierReturnLineId: pharmacySupplierReturnLine.id,
+    wardId: ward.id,
+    roomId: room.id,
+    bedId: bed.id,
+    admissionId: admission.id,
+    bedAssignmentId: bedAssignment.id,
+    admissionRequestId: admissionRequest.id,
+    summaryId: summary.id,
   };
 }
 
@@ -520,8 +701,32 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   const ids = [pair.a.id, pair.b.id];
   // Immutability triggers fire for the superuser too. Disable them only for this
   // transaction, then turn them back on before commit (DDL rolls back with the tx).
-  const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes'];
+  const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes', 'pharmacy_stock_moves'];
   const steps = [
+    `delete from pharmacy_stock_moves where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_supplier_return_lines where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_supplier_returns where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_adjustment_lines where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_adjustments where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_ip_issue_lines where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_ip_issues where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_sale_return_lines where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_sale_returns where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_sale_lines where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_sales where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_grn_lines where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_grns where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_stock where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_batches where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_items where tenant_id = any($1::uuid[])`,
+    `delete from pharmacy_suppliers where tenant_id = any($1::uuid[])`,
+    `delete from discharge_summaries where tenant_id = any($1::uuid[])`,
+    `delete from admission_requests where tenant_id = any($1::uuid[])`,
+    `delete from bed_assignments where tenant_id = any($1::uuid[])`,
+    `delete from admissions where tenant_id = any($1::uuid[])`,
+    `delete from beds where tenant_id = any($1::uuid[])`,
+    `delete from rooms where tenant_id = any($1::uuid[])`,
+    `delete from wards where tenant_id = any($1::uuid[])`,
     `delete from opd_queue where tenant_id = any($1::uuid[])`,
     `delete from appointments where tenant_id = any($1::uuid[])`,
     `delete from schedule_exceptions where tenant_id = any($1::uuid[])`,

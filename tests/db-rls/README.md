@@ -84,6 +84,8 @@ Sample names, `@sbx` mail, `90000` mobiles, `DEMO-` UHIDs, `00-` ABHA numbers, `
 | `core.ts` | Phase A tenant tables (locations through audit_log) |
 | `clinical-foundation.ts` | B0: number_series, patients, patient_alerts, encounters, services, tariffs, clinical_orders, clinical_order_items, vital_signs, clinical_notes, charges, cash_ledger |
 | `credit-notes.ts` | Inserts one row per tenant only when `credit_notes` exists. The table is added by `feat/mt-hardening` and is not on this branch, so the seed reads the catalogue and fills required columns. Until the table exists, the seed does nothing. |
+| `registration.ts` | B1: `patient_documents` and `mlc_cases` when those tables exist |
+| `adt.ts` | B4: wards, rooms, beds, admissions, bed_assignments, admission_requests, discharge_summaries |
 
 A Phase B module adds `fixtures/<module>.ts` and one line in `fixtureModules`. It does not edit another module's file.
 
@@ -94,7 +96,7 @@ Documented in `docs/CONTRACTS.md` §4 and `docs/PLATFORM_SCOPE.md`. The tests as
 | Function | What hos_app gets |
 |---|---|
 | `hos_login_lookup(email)` | One row `(tenant_id, user_id)` for that exact email, or no row. Not a wildcard, not the rest of the user. |
-| `hos_otp_tenant(id)` / `hos_invite_tenant(token)` | The `tenant_id` for that exact unexpired secret, or null. |
+| `hos_otp_tenant(id)` / `hos_invite_tenant(token)` | The `tenant_id` for that exact unexpired secret, or null. An invite also requires the invited user to still be `pending`. |
 | `hos_session_resolve(token_hash)` | One session's documented columns when the hash is exact, unexpired and unrevoked. A prefix, an unknown hash, an expired session or a revoked session returns no row. |
 | `hos_session_create` | Creates a session for the current tenant's user. The other tenant's user is `42501`. |
 | `hos_session_set_location` | A location in the current tenant only. |
