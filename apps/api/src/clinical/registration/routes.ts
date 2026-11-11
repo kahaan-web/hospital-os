@@ -129,6 +129,8 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
       }
       if (!fileBuffer) throw new ApiError(400, 'validation', 'Attach a PDF, JPG or PNG up to 5 MB');
       const detected = detectPatientFile(fileBuffer);
+      // Reject an unknown patient before mkdir/write so a bad id leaves no file on disk.
+      await readPatient(gate.tx, req.params.id);
       const name = `${docFileName()}.${detected.ext}`;
       const relative = join('patients', gate.actor.tenantId!, req.params.id, 'docs', name);
       await ensureUploadDir(deps.env.uploadDir, ['patients', gate.actor.tenantId!, req.params.id, 'docs']);

@@ -39,6 +39,83 @@ function entry(method: string, url: string, guard: TenantRouteGuard): [string, T
 const view = (method: string, url: string, permission: string, extra: Partial<TenantRouteGuard> = {}): [string, TenantRouteGuard] =>
   entry(method, url, { permission, ...extra });
 
+const REG = '/api/v1/tenant/m/patient-registration';
+const regFeature = CLINICAL_FEATURES.patientRegistration;
+
+/** B1 routes. Print features depend on :kind and are enforced in the handler. */
+function registrationGuards(): [string, TenantRouteGuard][] {
+  return [
+    entry('POST', `${REG}/patients`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.newRegistration,
+    }),
+    entry('PATCH', `${REG}/patients/:id`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.editRegistration,
+    }),
+    entry('POST', `${REG}/patients/:id/photo`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+    }),
+    entry('GET', `${REG}/patients/:id/documents`, {
+      permission: ['patients.view', 'patients.manage'],
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('POST', `${REG}/patients/:id/documents`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('DELETE', `${REG}/patients/:id/documents/:docId`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('GET', `${REG}/patients/:id/documents/:docId/file`, {
+      permission: ['patients.view', 'patients.manage'],
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('GET', `${REG}/patients/:id/print/:kind/:format`, {
+      permission: ['patients.view', 'patients.manage'],
+      module: 'patient-registration',
+    }),
+    entry('GET', `${REG}/reports/register`, {
+      permission: 'reports.view',
+      module: 'patient-registration',
+      feature: regFeature.printRegister,
+    }),
+    entry('GET', `${REG}/reports/register.csv`, {
+      permission: 'reports.view',
+      module: 'patient-registration',
+      feature: regFeature.patientExcelData,
+    }),
+    entry('POST', `${REG}/patients/:id/mailer`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.sendMailers,
+    }),
+    entry('GET', `${REG}/mlc`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.mlcCaseRegister,
+    }),
+    entry('POST', `${REG}/mlc`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.mlcRegistration,
+    }),
+    entry('GET', `${REG}/reports/mlc`, {
+      permission: 'reports.view',
+      module: 'patient-registration',
+      feature: regFeature.mlcCaseRegister,
+    }),
+  ];
+}
+
 const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
@@ -154,76 +231,77 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/tenant/clinical/doctors', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/services', { permission: AUTHENTICATED }),
 
-  // B1 patient registration. These handlers are already mounted on this branch, so openTenant
-  // fails closed without a row. Print chooses the feature from :kind inside the handler.
-  // The photo upload does not check a feature. B2 appointment handlers are still empty stubs.
-  entry('POST', '/api/v1/tenant/m/patient-registration/patients', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.newRegistration,
+  // B1. Permission, module and feature match each handler. Photo has no feature gate.
+  ...registrationGuards(),
+
+  // B2 appointments and OPD. Feature is set when the handler requires that one key.
+  // Routes that accept any of several features keep the check in the handler.
+  entry('GET', '/api/v1/tenant/m/appointments/schedules/:doctorId', {
+    permission: 'appointments.manage',
+    module: 'appointments',
   }),
-  entry('PATCH', '/api/v1/tenant/m/patient-registration/patients/:id', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.editRegistration,
+  entry('PUT', '/api/v1/tenant/m/appointments/schedules/:doctorId', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.takeAppointment,
   }),
-  entry('POST', '/api/v1/tenant/m/patient-registration/patients/:id/photo', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
+  entry('GET', '/api/v1/tenant/m/appointments/slots', {
+    permission: 'appointments.manage',
+    module: 'appointments',
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/patients/:id/documents', {
-    permission: ['patients.view', 'patients.manage'],
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  entry('GET', '/api/v1/tenant/m/appointments/diary', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.diary,
   }),
-  entry('POST', '/api/v1/tenant/m/patient-registration/patients/:id/documents', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  entry('GET', '/api/v1/tenant/m/appointments/appointments/:id', {
+    permission: ['appointments.manage', 'opd.manage'],
+    module: 'appointments',
   }),
-  entry('DELETE', '/api/v1/tenant/m/patient-registration/patients/:id/documents/:docId', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  entry('POST', '/api/v1/tenant/m/appointments/appointments', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.takeAppointment,
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/patients/:id/documents/:docId/file', {
-    permission: ['patients.view', 'patients.manage'],
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  entry('POST', '/api/v1/tenant/m/appointments/appointments/:id/reschedule', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.cancelReschedule,
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/patients/:id/print/:kind/:format', {
-    permission: ['patients.view', 'patients.manage'],
-    module: 'patient-registration',
+  entry('POST', '/api/v1/tenant/m/appointments/appointments/:id/cancel', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.cancelReschedule,
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/reports/register', {
-    permission: 'reports.view',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.printRegister,
+  entry('POST', '/api/v1/tenant/m/opd-visit/visits', {
+    permission: 'opd.manage',
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegistration,
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/reports/register.csv', {
-    permission: 'reports.view',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.patientExcelData,
+  entry('GET', '/api/v1/tenant/m/opd-visit/queue', {
+    permission: 'opd.manage',
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegistration,
   }),
-  entry('POST', '/api/v1/tenant/m/patient-registration/patients/:id/mailer', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.sendMailers,
+  entry('POST', '/api/v1/tenant/m/opd-visit/visits/:id/status', {
+    permission: 'opd.manage',
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegistration,
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/mlc', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.mlcCaseRegister,
+  entry('GET', '/api/v1/tenant/m/opd-visit/reports/visit-register', {
+    permission: ['opd.manage', 'reports.view'],
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegister,
   }),
-  entry('POST', '/api/v1/tenant/m/patient-registration/mlc', {
-    permission: 'patients.manage',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.mlcRegistration,
+  entry('GET', '/api/v1/tenant/m/opd-visit/reports/visit-detail-by-doctor', {
+    permission: ['opd.manage', 'reports.view'],
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitDetailByDoctor,
   }),
-  entry('GET', '/api/v1/tenant/m/patient-registration/reports/mlc', {
-    permission: 'reports.view',
-    module: 'patient-registration',
-    feature: CLINICAL_FEATURES.patientRegistration.mlcCaseRegister,
+  entry('GET', '/api/v1/tenant/m/opd-visit/reports/visit-statistics', {
+    permission: ['opd.manage', 'reports.view'],
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitStatistics,
   }),
 
   // B4 ADT. Stickers and the discharge summary share one print URL; the handler picks the feature.

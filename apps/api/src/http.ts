@@ -240,10 +240,12 @@ export function routeTemplate(req: FastifyRequest): string {
 }
 
 /**
- * Money routes, plus ADT admit / transfer / discharge / bed-day posting.
- * Quote is a read of a price, so it does not require a key.
+ * Money routes, ADT admit / transfer / discharge / bed-day posting, and
+ * appointment / OPD visit creates. Quote is a read of a price, so it does not require a key.
  * Bed-day posting inserts clinical charges (INSERT is still granted). It does not
  * update invoices, payments, or subscriptions.
+ * Visit registration posts the consultation charge. Appointment create takes a seat.
+ * Cancel, reschedule and queue status are not creates, so they stay optional.
  */
 const IDEMPOTENT_POSTS = new Set([
   '/api/v1/billing/orders',
@@ -256,6 +258,8 @@ const IDEMPOTENT_POSTS = new Set([
   '/api/v1/tenant/m/adt/admissions/:id/transfer',
   '/api/v1/tenant/m/adt/admissions/:id/discharge',
   '/api/v1/tenant/m/adt/bed-charges/post',
+  '/api/v1/tenant/m/appointments/appointments',
+  '/api/v1/tenant/m/opd-visit/visits',
 ]);
 
 export function idempotencyRequired(req: FastifyRequest): boolean {
