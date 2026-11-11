@@ -116,6 +116,79 @@ function registrationGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+const OPD_DOC = '/api/v1/tenant/m/opd-visit/doctor';
+const CPOE = '/api/v1/tenant/m/cpoe';
+const opdFeat = CLINICAL_FEATURES.opdVisit;
+const cpoeFeat = CLINICAL_FEATURES.cpoe;
+
+/** B3 doctor workspace routes. */
+function doctorGuards(): [string, TenantRouteGuard][] {
+  return [
+    entry('GET', `${OPD_DOC}/my-queue`, {
+      permission: 'clinical.view',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('GET', `${OPD_DOC}/encounters/:id/case-paper`, {
+      permission: 'clinical.view',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('PUT', `${OPD_DOC}/encounters/:id/case-paper`, {
+      permission: 'clinical.order',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('POST', `${OPD_DOC}/encounters/:id/prescription`, {
+      permission: 'clinical.order',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('GET', `${OPD_DOC}/encounters/:id/print/:kind/:format`, {
+      permission: 'clinical.view',
+      module: 'opd-visit',
+    }),
+    entry('GET', `${CPOE}/inpatients`, {
+      permission: 'clinical.view',
+      module: 'cpoe',
+    }),
+    entry('POST', `${CPOE}/encounters/:id/orders/diagnostic`, {
+      permission: 'clinical.order',
+      module: ['cpoe', 'lab'],
+      feature: cpoeFeat.diagnosticOrders,
+    }),
+    entry('POST', `${CPOE}/encounters/:id/orders/procedure`, {
+      permission: 'clinical.order',
+      module: 'cpoe',
+      feature: cpoeFeat.procedureOrders,
+    }),
+    entry('GET', `${CPOE}/order-sets`, {
+      permission: 'clinical.view',
+      module: 'cpoe',
+      feature: cpoeFeat.diagnosticOrders,
+    }),
+    entry('POST', `${CPOE}/order-sets`, {
+      permission: 'clinical.order',
+      module: 'cpoe',
+      feature: cpoeFeat.diagnosticOrders,
+    }),
+    entry('POST', `${CPOE}/encounters/:id/admission-request`, {
+      permission: 'clinical.order',
+      module: 'cpoe',
+      feature: cpoeFeat.requestAdmission,
+    }),
+    entry('GET', `${CPOE}/encounters/:id/vitals-graph`, {
+      permission: 'clinical.view',
+      module: 'cpoe',
+      feature: cpoeFeat.vitalsTable,
+    }),
+    entry('GET', `${CPOE}/encounters/:id/print/:kind/:format`, {
+      permission: 'clinical.view',
+      module: ['opd-visit', 'cpoe'],
+    }),
+  ];
+}
+
 const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
@@ -233,6 +306,7 @@ const ENTRIES: [string, TenantRouteGuard][] = [
 
   // B1. Permission, module and feature match each handler. Photo has no feature gate.
   ...registrationGuards(),
+  ...doctorGuards(),
 ];
 
 const keys = ENTRIES.map(([key]) => key);
