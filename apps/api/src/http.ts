@@ -249,7 +249,8 @@ export function idempotencyRequired(req: FastifyRequest): boolean {
     url === '/api/v1/billing/verify' ||
     url === '/api/v1/billing/change-apply' ||
     url === '/api/v1/billing/webhooks/mock' ||
-    url === '/api/v1/tenant/clinical/encounters/:id/orders'
+    url === '/api/v1/tenant/clinical/encounters/:id/orders' ||
+    url === '/api/v1/tenant/m/lab/accessions'
   );
 }
 

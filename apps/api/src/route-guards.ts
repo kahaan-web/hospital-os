@@ -116,6 +116,35 @@ function registrationGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+const LAB = '/api/v1/tenant/m/lab';
+const labFeature = CLINICAL_FEATURES.lab;
+
+/** B8 laboratory. Feature gates follow Sheet1 (Medium, except email and equipment which are Premium). */
+function labGuards(): [string, TenantRouteGuard][] {
+  const manage = (method: string, url: string, feature: string, permission: string | readonly string[] = 'lab.manage'): [string, TenantRouteGuard] =>
+    entry(method, url, { permission, module: 'lab', feature });
+  return [
+    manage('GET', `${LAB}/tests`, labFeature.masterTemplate),
+    manage('POST', `${LAB}/tests`, labFeature.masterTemplate),
+    manage('PATCH', `${LAB}/tests/:id`, labFeature.masterTemplate),
+    manage('GET', `${LAB}/tests/:id/params`, labFeature.masterTemplate),
+    manage('POST', `${LAB}/tests/:id/params`, labFeature.masterTemplate),
+    manage('PATCH', `${LAB}/tests/:id/params/:paramId`, labFeature.masterTemplate),
+    manage('GET', `${LAB}/worklist`, labFeature.sampleStatus),
+    manage('GET', `${LAB}/accessions/:id`, labFeature.sampleStatus),
+    manage('POST', `${LAB}/accessions`, labFeature.sampleCollection),
+    manage('POST', `${LAB}/accessions/:id/receive`, labFeature.sampleCollection),
+    manage('POST', `${LAB}/accessions/:id/reject`, labFeature.sampleCollection),
+    manage('PUT', `${LAB}/accessions/:id/results`, labFeature.resultEntry),
+    manage('POST', `${LAB}/accessions/:id/verify`, labFeature.resultEntry, 'lab.verify'),
+    manage('GET', `${LAB}/accessions/:id/report`, labFeature.labResultReport),
+    manage('POST', `${LAB}/accessions/:id/email`, labFeature.sendResultOnEmail),
+    manage('GET', `${LAB}/patients/:id/history`, labFeature.patientHistory),
+    manage('GET', `${LAB}/reports/mis`, labFeature.labMis),
+    manage('POST', `${LAB}/interfaces/:id/ingest`, labFeature.labEquipments),
+  ];
+}
+
 const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
@@ -233,6 +262,8 @@ const ENTRIES: [string, TenantRouteGuard][] = [
 
   // B1. Permission, module and feature match each handler. Photo has no feature gate.
   ...registrationGuards(),
+  // B8. Ingest is token-authenticated in the handler; the row keeps the inventory closed.
+  ...labGuards(),
 ];
 
 const keys = ENTRIES.map(([key]) => key);
