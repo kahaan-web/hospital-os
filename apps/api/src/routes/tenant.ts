@@ -11,6 +11,7 @@ import {
   type DashboardDto,
   type DprDto,
   type PageDto,
+  permissionsAt,
 } from '@hos/shared';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -19,7 +20,7 @@ import { z } from 'zod';
 import { entitlementsDto, invoiceListItem, loadAssignments, locationDtos, roleDtos, userDtos, type Assignment } from '../catalog';
 import { randomToken, sha256Hex } from '../crypto';
 import { openTenant, verifyChain, type Deps, type TenantGate } from '../guard';
-import { ApiError } from '../http';
+import { ApiError, isClinicalAuditEntity } from '../http';
 import { assertSeatAvailable } from '../seats';
 
 const listQuery = z.object({
@@ -99,7 +100,7 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
         template: 'user_invite',
         body: `Open ${devInviteUrl} to set a password.`,
       });
-      await gate.audit('tenant.user.invite', 'user', user!.id, null, { email, role: role.key });
+      await gate.audit('tenant.user.invite', 'user', user!.id, null, { role: role.key });
       const [dto] = (await userDtos(gate.tx)).filter((u) => u.id === user!.id);
       return { user: dto!, ...(deps.env.exposeSecrets ? { devInviteUrl } : {}) };
     }),
@@ -173,7 +174,8 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       const rows = await gate.tx.select().from(schema.auditLog).orderBy(desc(schema.auditLog.seq)).limit(req.query.pageSize).offset(offset);
       const counted = await gate.tx.select({ n: sql<number>`count(*)::int` }).from(schema.auditLog);
       const n = counted[0]?.n ?? 0;
-      return { items: rows.map(auditDto), total: Number(n), page: req.query.page, pageSize: req.query.pageSize } satisfies PageDto<AuditEntryDto>;
+      const canViewPatients = permissionsAt(gate.assignments, gate.locationId).has('patients.view');
+      return { items: rows.map((row) => auditDto(row, canViewPatients)), total: Number(n), page: req.query.page, pageSize: req.query.pageSize } satisfies PageDto<AuditEntryDto>;
     }),
   );
 
@@ -275,7 +277,8 @@ function page<T>(items: T[], pageNo: number, pageSize: number): PageDto<T> {
   return { items: items.slice(start, start + pageSize), total: items.length, page: pageNo, pageSize };
 }
 
-function auditDto(row: typeof schema.auditLog.$inferSelect): AuditEntryDto {
+function auditDto(row: typeof schema.auditLog.$inferSelect, canViewPatients: boolean): AuditEntryDto {
+  const hidePayload = !canViewPatients && isClinicalAuditEntity(row.entityType);
   return {
     id: String(row.id),
     seq: row.seq,
@@ -287,8 +290,8 @@ function auditDto(row: typeof schema.auditLog.$inferSelect): AuditEntryDto {
     entityId: row.entityId,
     locationId: row.locationId,
     ip: row.ip,
-    before: row.before,
-    after: row.after,
+    before: hidePayload ? null : row.before,
+    after: hidePayload ? null : row.after,
     hash: row.hash,
     tenantId: row.tenantId,
   };

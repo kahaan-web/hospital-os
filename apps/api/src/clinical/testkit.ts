@@ -38,6 +38,9 @@ async function loadFixture(): Promise<ClinicalFixture> {
   }
   const handle = createDb(dbEnv().migrationUrl, { max: 1 });
   try {
+    // seedDemo turns the mock simulator on for the demo checkout. The suite default is off
+    // (see vitest global setup). Leave it off so a later billing test captures a client "failure".
+    await handle.db.execute(sql`update platform_settings set mock_payment_simulator = false where id = 1`);
     const party = async (slug: string, email: string): Promise<PartyFixture> => {
       const [tenant] = await handle.db.select().from(schema.tenants).where(eq(schema.tenants.slug, slug));
       if (!tenant) throw new Error(`missing tenant ${slug}`);

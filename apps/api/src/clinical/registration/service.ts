@@ -150,7 +150,14 @@ export async function updatePatient(ctx: ClinicalCtx<Tx>, id: string, input: Pat
   }
   const [row] = await ctx.tx.update(schema.patients).set(patch).where(eq(schema.patients.id, id)).returning();
   if (!row) throw new ApiError(404, 'not_found', 'Patient not found');
-  await ctx.audit('registration.patient.update', 'patient', id, existing, patientDto(row));
+  const changed = Object.keys(patch);
+  await ctx.audit(
+    'registration.patient.update',
+    'patient',
+    id,
+    { uhid: existing.uhid, status: existing.status },
+    { uhid: row.uhid, status: row.status, changed },
+  );
   return patientDto(row);
 }
 
@@ -200,7 +207,7 @@ export async function addDocument(
       uploadedBy: ctx.userId,
     })
     .returning();
-  await ctx.audit('registration.document.create', 'patient_document', row!.id, null, { kind });
+  await ctx.audit('registration.document.create', 'patient_document', row!.id, null, { kind, mime, size });
   return documentDto(row!);
 }
 
@@ -211,7 +218,7 @@ export async function deleteDocument(ctx: ClinicalCtx<Tx>, patientId: string, do
     .where(and(eq(schema.patientDocuments.patientId, patientId), eq(schema.patientDocuments.id, docId)));
   if (!row) throw new ApiError(404, 'not_found', 'Document not found');
   await ctx.tx.delete(schema.patientDocuments).where(eq(schema.patientDocuments.id, docId));
-  await ctx.audit('registration.document.delete', 'patient_document', docId, row, null);
+  await ctx.audit('registration.document.delete', 'patient_document', docId, { kind: row.kind, mime: row.mime, size: row.size }, null);
 }
 
 export async function sendMailer(
