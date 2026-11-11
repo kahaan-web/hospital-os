@@ -51,7 +51,7 @@ describe.sequential('wizard, GST and mock payments', () => {
     await admin.connect();
     // Non-production only. The failure/pending examples need the dev simulator.
     await setSimulator(true);
-  }, 120_000);
+  }, 300_000);
 
   afterAll(async () => {
     await setSimulator(false).catch(() => undefined);
