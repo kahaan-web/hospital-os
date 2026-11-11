@@ -54,7 +54,15 @@ describe.sequential('wizard, GST and mock payments', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await setSimulator(false).catch(() => undefined);
+    // A dropped admin client used to swallow this reset and leave the simulator on.
+    // The next file then treats a requested payment failure as a real failure.
+    const reset = new pg.Client({ connectionString: dbEnv().adminUrl, connectionTimeoutMillis: 4_000 });
+    try {
+      await reset.connect();
+      await reset.query('update platform_settings set mock_payment_simulator = false where id = 1');
+    } finally {
+      await reset.end().catch(() => undefined);
+    }
     await admin?.end().catch(() => undefined);
     await app?.close();
   });
