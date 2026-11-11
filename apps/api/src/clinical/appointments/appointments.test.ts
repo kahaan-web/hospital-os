@@ -105,7 +105,7 @@ it('builds slots from the weekly hours and from exceptions', async () => {
   const offGrid = await app.inject({
     method: 'POST',
     url: '/api/v1/tenant/m/appointments/appointments',
-    headers: { cookie, 'x-hos-csrf': '1' },
+    headers: { cookie, 'x-hos-csrf': '1', 'idempotency-key': idemKey('offgrid') },
     payload: { doctorId, date: '2026-12-01', slotStart: '09:15', reason: 'Not on the grid', patientId: fx.sunrise.patientId },
   });
   expect(offGrid.statusCode).toBe(422);
@@ -118,8 +118,8 @@ it('gives one success and one 409 when two bookings take the same seat', async (
   await putSchedule(cookie, doctorId, { windows: windows(30, 1, '09:30') });
   const payload = { doctorId, date: openDate(), slotStart: '09:00', reason: 'Concurrent seat', patientId: fx.sunrise.patientId };
   const [a, b] = await Promise.all([
-    app.inject({ method: 'POST', url: '/api/v1/tenant/m/appointments/appointments', headers: { cookie, 'x-hos-csrf': '1' }, payload }),
-    app.inject({ method: 'POST', url: '/api/v1/tenant/m/appointments/appointments', headers: { cookie, 'x-hos-csrf': '1' }, payload }),
+    app.inject({ method: 'POST', url: '/api/v1/tenant/m/appointments/appointments', headers: { cookie, 'x-hos-csrf': '1', 'idempotency-key': idemKey('seat-a') }, payload }),
+    app.inject({ method: 'POST', url: '/api/v1/tenant/m/appointments/appointments', headers: { cookie, 'x-hos-csrf': '1', 'idempotency-key': idemKey('seat-b') }, payload }),
   ]);
   const codes = [a.statusCode, b.statusCode].sort();
   expect(codes, `${a.body}\n${b.body}`).toEqual([201, 409]);
@@ -132,7 +132,7 @@ it('checks a patient in once, including an idempotency replay', async () => {
   const booked = await app.inject({
     method: 'POST',
     url: '/api/v1/tenant/m/appointments/appointments',
-    headers: { cookie, 'x-hos-csrf': '1' },
+    headers: { cookie, 'x-hos-csrf': '1', 'idempotency-key': idemKey('book') },
     payload: { doctorId, date: openDate(), slotStart: '11:00', reason: 'Check-in sample', patientId: fx.sunrise.patientId },
   });
   expect(booked.statusCode, booked.body).toBe(201);
@@ -172,7 +172,7 @@ it('links a phone booking to the patient on arrival', async () => {
   const booked = await app.inject({
     method: 'POST',
     url: '/api/v1/tenant/m/appointments/appointments',
-    headers: { cookie, 'x-hos-csrf': '1' },
+    headers: { cookie, 'x-hos-csrf': '1', 'idempotency-key': idemKey('phone') },
     payload: {
       doctorId,
       date: openDate(),

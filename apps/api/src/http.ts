@@ -239,11 +239,23 @@ export function routeTemplate(req: FastifyRequest): string {
   return `${req.method} ${req.routeOptions.url ?? req.url}`;
 }
 
+/**
+ * Money and booking creates. Quote is a read of a price, so it does not require a key.
+ * Visit registration posts the consultation charge. Appointment create takes a seat.
+ * Cancel, reschedule and queue status are not creates, so they stay optional.
+ */
 export function idempotencyRequired(req: FastifyRequest): boolean {
-  const url = req.routeOptions.url ?? req.url;
+  if (req.method !== 'POST') return false;
+  const url = req.routeOptions.url ?? req.url.split('?')[0] ?? '';
   return (
-    req.method === 'POST' &&
-    (url.endsWith('/billing/orders') || url.endsWith('/billing/orders/:orderId/pay') || url.endsWith('/clinical/encounters/:id/orders'))
+    url === '/api/v1/billing/orders' ||
+    url === '/api/v1/billing/orders/:orderId/pay' ||
+    url === '/api/v1/billing/verify' ||
+    url === '/api/v1/billing/change-apply' ||
+    url === '/api/v1/billing/webhooks/mock' ||
+    url === '/api/v1/tenant/clinical/encounters/:id/orders' ||
+    url === '/api/v1/tenant/m/appointments/appointments' ||
+    url === '/api/v1/tenant/m/opd-visit/visits'
   );
 }
 

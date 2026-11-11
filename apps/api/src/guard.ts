@@ -20,6 +20,7 @@ import {
   writeAudit,
   type Actor,
 } from './http';
+import { AUTHENTICATED, lookupTenantGuard, resolveGuardKey } from './route-guards';
 
 export interface Deps {
   db: Db;
@@ -42,7 +43,17 @@ export interface TenantGate {
   requireAnyPermission: (keys: string[]) => void;
   requireModule: (key: string) => Promise<void>;
   requireAnyModule: (keys: string[]) => Promise<void>;
-  requireFeature: (key: string) => Promise<void>;
+  /**
+   * 403 `not_entitled` unless this request's entitlement set contains `featureKey`.
+   * The module and feature load is memoised for this request and recomputed on the next one,
+   * so a plan change, add-on purchase, or App Admin override is visible immediately.
+   */
+  requireFeature: (featureKey: string) => Promise<void>;
+}
+
+/** `Array.isArray` does not narrow `readonly T[]` out of a union with `T`. */
+function isList<T>(value: T | readonly T[] | null | undefined): value is readonly T[] {
+  return Array.isArray(value);
 }
 
 export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: FastifyReply, fn: (gate: TenantGate) => Promise<T>): Promise<T> {
@@ -57,8 +68,10 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
     if (!user || user.status !== 'active') throw new ApiError(401, 'unauthenticated', 'Sign in again');
     const [hospital] = await tx.select().from(schema.tenants);
     if (!hospital) throw new ApiError(401, 'unauthenticated', 'Sign in again');
-    const path = req.routeOptions.url ?? req.url;
-    if (hospital.status === 'suspended' && !path.includes('/auth/me') && !path.includes('/auth/logout')) {
+    const path = (req.routeOptions.url ?? req.url).split('?')[0] ?? req.url;
+    const policy = lookupTenantGuard(req.method, path);
+    if (!policy) throw new ApiError(500, 'guard_missing', `No tenant guard for ${req.method} ${path}`);
+    if (hospital.status === 'suspended' && !policy.allowWhenSuspended) {
       throw new ApiError(403, 'tenant_suspended', 'This hospital account is suspended');
     }
     if (hospital.status === 'onboarding' && !path.includes('/auth/') && !path.includes('/onboarding') && !path.includes('/billing/')) {
@@ -85,15 +98,19 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       ip: meta.ip,
       userAgent: meta.userAgent,
     };
-    let access: ReturnType<typeof moduleStates> | null = null;
-    const loadAccess = () => {
-      if (!access) {
-        access = (async () => {
+    let entitlements: Promise<{ features: Set<string>; accessByModule: Map<string, string> }> | null = null;
+    const loadEntitlements = () => {
+      if (!entitlements) {
+        entitlements = (async () => {
           const subscription = await subscriptionDto(tx);
-          return moduleStates(tx, subscription?.planId ?? null, subscription?.addons.map((a) => a.moduleId) ?? []);
+          const access = await moduleStates(tx, subscription?.planId ?? null, subscription?.addons.map((addon) => addon.moduleId) ?? []);
+          return {
+            features: new Set(access.features),
+            accessByModule: new Map(access.states.map((state) => [state.key, state.access])),
+          };
         })();
       }
-      return access;
+      return entitlements;
     };
     const notEntitled = (moduleKey: string) => new ApiError(403, 'not_entitled', 'This module is not included in your plan', undefined, { moduleKey });
     const gate: TenantGate = {
@@ -105,8 +122,12 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
       assignments,
       tokenHash: resolved.hash,
       audit: (action, entityType, entityId, before, after) => writeAudit(tx, actor, action, entityType, entityId, before, after),
-      requirePermission: (key) => assertPermission(assignments, locationId, key),
+      requirePermission: (key) => {
+        if (key === AUTHENTICATED) return;
+        assertPermission(assignments, locationId, key);
+      },
       requireAnyPermission: (keys) => {
+        if (keys.includes(AUTHENTICATED)) return;
         if (!keys.some((key) => {
           try {
             assertPermission(assignments, locationId, key);
@@ -119,19 +140,36 @@ export async function openTenant<T>(deps: Deps, req: FastifyRequest, reply: Fast
         }
       },
       requireModule: async (key) => {
-        const states = await loadAccess();
-        const mod = states.states.find((m) => m.key === key);
-        if (!mod || mod.access !== 'enabled') throw notEntitled(key);
+        const loaded = await loadEntitlements();
+        if (loaded.accessByModule.get(key) !== 'enabled') throw notEntitled(key);
       },
       requireAnyModule: async (keys) => {
-        const states = await loadAccess();
-        if (!keys.some((key) => states.states.find((m) => m.key === key)?.access === 'enabled')) throw notEntitled(keys[0] ?? '');
+        const loaded = await loadEntitlements();
+        if (!keys.some((key) => loaded.accessByModule.get(key) === 'enabled')) throw notEntitled(keys[0] ?? '');
       },
-      requireFeature: async (key) => {
-        const states = await loadAccess();
-        if (!states.features.includes(key)) throw new ApiError(403, 'not_entitled', 'This feature is not included in your plan', undefined, { featureKey: key });
+      requireFeature: async (featureKey) => {
+        const loaded = await loadEntitlements();
+        if (!loaded.features.has(featureKey)) {
+          throw new ApiError(403, 'not_entitled', 'This feature is not included in your plan', undefined, { featureKey });
+        }
       },
     };
+    if (isList(policy.permission)) gate.requireAnyPermission([...policy.permission]);
+    else if (policy.permission) gate.requirePermission(policy.permission);
+    const moduleSpec = policy.module;
+    if (moduleSpec && policy.feature && !isList(moduleSpec)) {
+      const moduleKey = resolveGuardKey(moduleSpec, req);
+      const featureKey = resolveGuardKey(policy.feature, req);
+      if (!featureKey.startsWith(`${moduleKey}.`)) {
+        throw new ApiError(403, 'not_entitled', 'This feature is not included in your plan', undefined, { moduleKey, featureKey });
+      }
+      await gate.requireModule(moduleKey);
+      await gate.requireFeature(featureKey);
+    } else {
+      if (isList(moduleSpec)) await gate.requireAnyModule(moduleSpec.map((item) => resolveGuardKey(item, req)));
+      else if (moduleSpec) await gate.requireModule(resolveGuardKey(moduleSpec, req));
+      if (policy.feature) await gate.requireFeature(resolveGuardKey(policy.feature, req));
+    }
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return fn(gate);
     return withIdempotency(tx, reply, tenantId, routeTemplate(req), idempotencyKey(req), idempotencyRequired(req), requestHash(req), () => fn(gate));
   });

@@ -1,7 +1,9 @@
 import { defineConfig } from 'vitest/config';
 
-// One config for the three Phase A suites. `npm test` is `vitest run`.
-// Uses database `hos_test` (see tests/vitest.global-setup.ts); demo DB hospital_os is not written.
+// One config for the Phase A suites plus tests/db-rls. `npm test` is `vitest run`.
+// The API suites use database `hos_test` (see tests/vitest.global-setup.ts). Demo DB hospital_os is not written.
+// tests/db-rls ignores HOS_DB_NAME and uses hos_u1 (override with HOS_RLS_DATABASE_URL). It skips only when that
+// Postgres is unreachable.
 export default defineConfig({
   test: {
     globalSetup: ['./tests/vitest.global-setup.ts'],

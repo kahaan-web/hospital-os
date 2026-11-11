@@ -24,7 +24,6 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
   const [method, setMethod] = useState<PaymentMethod>('upi');
   const [outcome, setOutcome] = useState<PayOutcome>('success');
   const [busy, setBusy] = useState(false);
-  const [lastPaymentId, setLastPaymentId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [vpa, setVpa] = useState('demo@upi');
   const [cardLast4, setCardLast4] = useState('1111');
@@ -33,9 +32,8 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
 
   useEffect(() => {
     if (open && order) {
-      payKeyRef.current = `${idempotencySeed ?? purpose}-${order.id}-${crypto.randomUUID()}`;
+      payKeyRef.current = newPayKey(purpose, order.id, idempotencySeed);
       setPending(false);
-      setLastPaymentId(null);
     }
   }, [open, order?.id, idempotencySeed, purpose, order]);
 
@@ -55,19 +53,24 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
         payKeyRef.current,
       );
       if (result.payment.status === 'captured' && result.checkout) {
-        const verified = await apiPost<OrderDto>('/billing/verify', {
-          orderId: result.checkout.orderId,
-          paymentId: result.checkout.paymentId,
-          signature: result.checkout.signature,
-        });
+        const verified = await apiPost<OrderDto>(
+          '/billing/verify',
+          {
+            orderId: result.checkout.orderId,
+            paymentId: result.checkout.paymentId,
+            signature: result.checkout.signature,
+          },
+          `${payKeyRef.current}-verify`,
+        );
         showToast({ tone: 'success', title: 'Payment recorded', description: 'Your subscription is active.' });
         onPaid(verified);
         onClose();
       } else if (result.payment.status === 'pending') {
-        setLastPaymentId(result.payment.id);
         setPending(true);
-        showToast({ tone: 'default', title: 'Payment pending', description: 'Resolve when your bank confirms.' });
+        showToast({ tone: 'default', title: 'Payment pending', description: 'The mock gateway webhook confirms this payment.' });
       } else {
+        // The failed attempt stored this key. The next click must be a new attempt so a different outcome is honoured.
+        payKeyRef.current = newPayKey(purpose, order.id, idempotencySeed);
         showToast({ tone: 'error', title: 'Payment failed', description: result.payment.failureReason ?? 'Try again.' });
       }
     } catch (e) {
@@ -79,52 +82,7 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
     } finally {
       setBusy(false);
     }
-  }, [order, method, outcome, paymentDetails, onPaid, onClose, showToast]);
-
-  const resolvePending = useCallback(
-    async (resolveOutcome: 'success' | 'failure') => {
-      if (!lastPaymentId) return;
-      setBusy(true);
-      try {
-        await apiPost(`/billing/payments/${lastPaymentId}/resolve`, { outcome: resolveOutcome });
-        if (resolveOutcome === 'success' && order) {
-          showToast({ tone: 'success', title: 'Payment recorded', description: 'Your subscription is active.' });
-          onPaid({ ...order, status: 'paid' });
-          onClose();
-        } else {
-          showToast({ tone: 'error', title: 'Payment failed', description: 'The pending payment did not clear.' });
-          setPending(false);
-          setLastPaymentId(null);
-        }
-      } catch (e) {
-        showToast({
-          tone: 'error',
-          title: 'Could not resolve',
-          description: e instanceof ApiError ? e.message : 'Try again',
-        });
-      } finally {
-        setBusy(false);
-      }
-    },
-    [lastPaymentId, order, onPaid, onClose, showToast],
-  );
-
-  const retryPayment = useCallback(async () => {
-    if (!lastPaymentId) {
-      setPending(false);
-      return;
-    }
-    setBusy(true);
-    try {
-      await apiPost(`/billing/payments/${lastPaymentId}/resolve`, { outcome: 'failure' });
-    } catch {
-      /* pending may already be cleared */
-    } finally {
-      setPending(false);
-      setLastPaymentId(null);
-      setBusy(false);
-    }
-  }, [lastPaymentId]);
+  }, [order, method, outcome, paymentDetails, onPaid, onClose, showToast, purpose, idempotencySeed]);
 
   const amount = order?.amountPaise ?? 0;
   const tax = order?.quote.totals;
@@ -201,16 +159,12 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
       ) : null}
       {pending ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-3)' }}>
-          <p style={{ margin: 0 }}>Payment is pending. Simulate bank confirmation:</p>
+          <p style={{ margin: 0 }}>
+            Payment is pending. The hospital cannot confirm it. The mock gateway webhook captures or fails this attempt.
+          </p>
           <Row>
-            <Button type="button" disabled={busy} onClick={() => resolvePending('success')}>
-              Mark success
-            </Button>
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => resolvePending('failure')}>
-              Mark failure
-            </Button>
-            <Button type="button" variant="ghost" disabled={busy} onClick={retryPayment}>
-              Retry payment
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Close
             </Button>
           </Row>
         </div>
@@ -230,7 +184,7 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
             onValueChange={(v) => setMethod(v as PaymentMethod)}
           />
           <Stack style={{ marginTop: 'var(--hos-space-4)' }}>
-            <Field label="Simulate outcome" hint="For demo only">
+            <Field label="Simulate outcome" hint="The server captures the payment. This choice applies only when the dev simulator is on.">
               <Select value={outcome} onChange={(e) => setOutcome(e.target.value as PayOutcome)}>
                 {PAYMENT_OUTCOMES.map((o) => (
                   <option key={o} value={o}>
@@ -252,6 +206,10 @@ export function CheckoutModal({ open, onClose, order, onPaid, purpose, idempoten
       )}
     </Dialog>
   );
+}
+
+function newPayKey(purpose: 'onboarding' | 'change', orderId: string, seed: string | undefined): string {
+  return `${seed ?? purpose}-${orderId}-${crypto.randomUUID()}`;
 }
 
 function Row({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {

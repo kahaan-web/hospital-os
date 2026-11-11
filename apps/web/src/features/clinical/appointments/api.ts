@@ -28,7 +28,7 @@ export const appointmentsApi = {
   schedule: (doctorId: string) => apiGet<DoctorScheduleDto>(`/tenant/m/appointments/schedules/${doctorId}`),
   saveSchedule: (doctorId: string, body: PutScheduleInput) => apiPut<DoctorScheduleDto>(`/tenant/m/appointments/schedules/${doctorId}`, body),
   appointment: (id: string) => apiGet<AppointmentDto>(`/tenant/m/appointments/appointments/${id}`),
-  book: (body: unknown) => apiPost<AppointmentDto>('/tenant/m/appointments/appointments', body),
+  book: (body: unknown) => apiPost<AppointmentDto>('/tenant/m/appointments/appointments', body, crypto.randomUUID()),
   cancel: (id: string, reason: string) => apiPost<AppointmentDto>(`/tenant/m/appointments/appointments/${id}/cancel`, { reason }),
   reschedule: (id: string, date: string, slotStart: string) =>
     apiPost<AppointmentDto>(`/tenant/m/appointments/appointments/${id}/reschedule`, { date, slotStart }),

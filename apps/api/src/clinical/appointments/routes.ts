@@ -13,7 +13,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError, idempotencyKey } from '../../http';
+import { ApiError } from '../../http';
 import {
   bookCounter,
   cancelAppointment,
@@ -60,12 +60,6 @@ async function requireOneFeature(gate: TenantGate, keys: string[]): Promise<void
     }
   }
   throw new ApiError(403, 'not_entitled', 'This feature is not included in your plan', undefined, { featureKey: keys[0] });
-}
-
-function requireIdempotency(req: FastifyRequest): void {
-  if (!idempotencyKey(req)) {
-    throw new ApiError(400, 'idempotency_key_required', 'Send an Idempotency-Key header (8–128 letters, numbers, _ or -)');
-  }
 }
 
 export function registerAppointments(app: FastifyInstance, deps: Deps): void {
@@ -150,7 +144,6 @@ export function registerAppointments(app: FastifyInstance, deps: Deps): void {
 
   r.post('/api/v1/tenant/m/opd-visit/visits', { schema: { body: registerVisitSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireIdempotency(req);
       gate.requirePermission('opd.manage');
       await gate.requireModule('opd-visit');
       await gate.requireFeature(visit.visitRegistration);

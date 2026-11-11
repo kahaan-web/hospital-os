@@ -1,6 +1,6 @@
 import { schema } from '@hos/db';
-import { changeConfigSchema, createOrderSchema, payAttemptSchema, resolvePendingSchema, verifyPaymentSchema } from '@hos/shared';
-import { asc } from 'drizzle-orm';
+import { changeConfigSchema, createOrderSchema, payAttemptSchema, verifyPaymentSchema } from '@hos/shared';
+import { asc, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -8,7 +8,12 @@ import { applySubscriptionChange, createOrder, payOrder, resolvePending, verifyP
 import { invoiceDto, invoiceListItem, quoteFor, subscriptionDto } from '../catalog';
 import { invoiceHtml, invoicePdf } from '../documents';
 import { openTenant, type Deps, type TenantGate } from '../guard';
-import { ApiError, idempotencyKey } from '../http';
+import { ApiError, idempotencyKey, requestHash, requestMeta, routeTemplate, tenant, withIdempotency, type Actor } from '../http';
+
+const mockWebhookSchema = z.object({
+  paymentId: z.string().min(1).max(64),
+  outcome: z.enum(['success', 'failure']),
+});
 
 export function registerBilling(app: FastifyInstance, deps: Deps): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -27,7 +32,7 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
   r.post('/api/v1/billing/orders/:orderId/pay', { schema: { params: z.object({ orderId: z.string().min(1) }), body: payAttemptSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       gate.requirePermission('billing.manage');
-      return payOrder(gate.tx, gate.actor, req.params.orderId, req.body, deps.gateway);
+      return payOrder(gate.tx, gate.actor, req.params.orderId, req.body, deps.gateway, deps.env.production);
     }),
   );
 
@@ -43,12 +48,32 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.post('/api/v1/billing/payments/:paymentId/resolve', { schema: { params: z.object({ paymentId: z.string().min(1) }), body: resolvePendingSchema } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
-      gate.requirePermission('billing.manage');
-      return resolvePending(gate.tx, gate.actor, req.params.paymentId, req.body.outcome, deps.gateway);
-    }),
-  );
+  r.post('/api/v1/billing/webhooks/mock', { schema: { body: mockWebhookSchema } }, async (req, reply) => {
+    const key = idempotencyKey(req);
+    if (!key) throw new ApiError(400, 'idempotency_key_required', 'Send an Idempotency-Key header (8–128 letters, numbers, _ or -)');
+    const presented = req.headers['x-hos-signature'];
+    if (!deps.gateway.verifyWebhook(req.body, typeof presented === 'string' ? presented : '')) {
+      return reply.status(401).send({ error: { code: 'signature_invalid', message: 'The webhook signature does not match' } });
+    }
+    const found = await deps.db.execute<{ tenant_id: string | null }>(sql`select hos_payment_tenant(${req.body.paymentId}) as tenant_id`);
+    const tenantId = found.rows[0]?.tenant_id;
+    if (!tenantId) throw new ApiError(404, 'not_found', 'Payment not found');
+    const meta = requestMeta(req);
+    const actor: Actor = {
+      actorType: 'system',
+      actorId: null,
+      actorLabel: 'mock-gateway',
+      tenantId,
+      locationId: null,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    };
+    return tenant(deps.db, tenantId, (tx) =>
+      withIdempotency(tx, reply, tenantId, routeTemplate(req), key, true, requestHash(req), () =>
+        resolvePending(tx, actor, req.body.paymentId, req.body.outcome, deps.gateway),
+      ),
+    );
+  });
 
   r.get('/api/v1/billing/subscription', async (req, reply) =>
     run(req, reply, async (gate) => {
