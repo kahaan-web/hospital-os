@@ -23,6 +23,14 @@ import { ApiError } from '../../http';
 import { encounterDto, patientSummary } from '../encounters';
 import { clinical } from '../registry';
 
+/**
+ * Serialises bookings for one doctor slot until the transaction ends. Without it, a second
+ * request can read the free seats before the first commits and take seq 2 of a one-seat slot.
+ */
+async function lockSlot(tx: Tx, doctorId: string, date: string, slotStart: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'appt:' + doctorId + ':' + date + ':' + slotStart}, 0))`);
+}
+
 type Ctx = ClinicalCtx<Tx>;
 type Appt = typeof schema.appointments.$inferSelect;
 
@@ -251,6 +259,7 @@ export async function bookAppointment(ctx: Ctx, input: BookArgs): Promise<Appoin
   } else {
     await assertPatient(ctx, input.patientId);
   }
+  await lockSlot(ctx.tx, input.doctorId, input.date, input.slotStart);
   const slots = await listSlots(ctx, { doctorId: input.doctorId, date: input.date });
   const slot = slots.find((row) => row.start === input.slotStart);
   if (!slot) throw new ApiError(422, 'not_on_schedule', 'That time is not a clinic slot');
@@ -326,6 +335,7 @@ export async function rescheduleAppointment(ctx: Ctx, id: string, next: { date: 
     const [dto] = await decorate(ctx, [row]);
     return dto!;
   }
+  await lockSlot(ctx.tx, row.doctorId, next.date, next.slotStart);
   const slots = await listSlots(ctx, { doctorId: row.doctorId, date: next.date });
   const slot = slots.find((item) => item.start === next.slotStart);
   if (!slot) throw new ApiError(422, 'not_on_schedule', 'That time is not a clinic slot');

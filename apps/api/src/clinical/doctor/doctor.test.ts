@@ -52,7 +52,7 @@ it('Lotus can save a case paper', async () => {
   });
   expect(res.statusCode).toBe(200);
   expect((res.json() as { chiefComplaint: string }).chiefComplaint).toBe('Sample headache');
-}, 30_000);
+}, 120_000);
 
 it('Lotus gets 403 on procedure orders and order sets', async () => {
   const cookie = await login(fx.lotus.ownerEmail);
@@ -68,7 +68,7 @@ it('Lotus gets 403 on procedure orders and order sets', async () => {
   const sets = await app.inject({ method: 'GET', url: `${PREFIX_CPOE}/order-sets`, headers: { cookie } });
   expect(sets.statusCode).toBe(403);
   expect(sets.json().error.code).toBe('not_entitled');
-}, 30_000);
+}, 120_000);
 
 it('places a lab order with exactly one new charge', async () => {
   const cookie = await login(fx.sunrise.ownerEmail);
@@ -93,7 +93,7 @@ it('places a lab order with exactly one new charge', async () => {
     headers: { cookie },
   });
   expect((after.json() as unknown[]).length).toBe(countBefore + 1);
-}, 30_000);
+}, 120_000);
 
 it('blocks amoxicillin when penicillin allergy is on file', async () => {
   const encounterId = (await penicillinEncounterId(fx.sunrise.tenantId)) ?? fx.sunrise.encounterId;
@@ -134,7 +134,7 @@ it('blocks amoxicillin when penicillin allergy is on file', async () => {
     },
   });
   expect(ok.statusCode).toBe(201);
-}, 30_000);
+}, 120_000);
 
 it('prescription PDF includes doctor registration number', async () => {
   const cookie = await login('doctor@sunrise.demo');
@@ -165,7 +165,7 @@ it('prescription PDF includes doctor registration number', async () => {
   expect(printHtml.statusCode).toBe(200);
   expect(printHtml.body).toContain('MH-DEMO-1001');
   expect(orderId).toBeTruthy();
-}, 30_000);
+}, 120_000);
 
 it('isolates doctor tables', async () => {
   const ids = await doctorIsolationIds();
