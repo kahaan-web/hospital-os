@@ -1,6 +1,7 @@
 -- P2-6: platform-on-tenant must not read clinical PHI.
--- Filename 0180 (not 0028): a 00xx file sorts before 0100, so on a fresh database
--- it would run before these tables exist. 0180 sorts after 0171.
+-- Filename 0900 (not 0028): a 00xx file sorts before 0100, so on a fresh database
+-- it would run before these tables exist. 0900 sorts after every module range (01xx).
+-- Clinical tables added by later modules must be added to this list (or a later 09xx file).
 -- There is no break-glass reader. App Admin tenant detail stays on non-clinical tables.
 -- Tenant scope (hos_scope() = 'tenant') is unchanged. hos_migrator keeps the owner policy.
 
