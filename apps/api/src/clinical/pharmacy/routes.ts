@@ -20,7 +20,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError, idempotencyKey } from '../../http';
+import { ApiError } from '../../http';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { pharmacyReport } from './reports';
 import { saleInvoiceDoc } from './prints';
@@ -51,12 +51,6 @@ const PREFIX = `/api/v1/tenant/m/${MODULE}`;
 
 const searchQuery = z.object({ q: z.string().trim().max(80).optional() });
 const idParams = z.object({ id: z.uuid() });
-
-function requireKey(req: FastifyRequest): void {
-  if (!idempotencyKey(req)) {
-    throw new ApiError(400, 'idempotency_key_required', 'Send an Idempotency-Key header (8–128 letters, numbers, _ or -)');
-  }
-}
 
 function ctx(gate: TenantGate) {
   if (!gate.locationId || !gate.actor.tenantId) throw new ApiError(422, 'location_required', 'Choose a location');
@@ -126,7 +120,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/grns`, { schema: { body: pharmacyGrnSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       await gate.requireFeature(pharmacyFeatures.materialReceipts);
       const created = await postGrn(ctx(gate), req.body);
@@ -137,7 +130,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/supplier-returns`, { schema: { body: pharmacySupplierReturnSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       await gate.requireFeature(pharmacyFeatures.materialReturns);
       const created = await postSupplierReturn(ctx(gate), req.body);
@@ -164,7 +156,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/sales`, { schema: { body: pharmacySaleSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       await gate.requireFeature(req.body.kind === 'outside' ? pharmacyFeatures.outsideSales : pharmacyFeatures.issueToOp);
       const created = await postSale(ctx(gate), req.body);
@@ -182,7 +173,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/sales/:id/return`, { schema: { params: idParams, body: pharmacySaleReturnSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       const sale = await readSale(ctx(gate), req.params.id);
       await gate.requireFeature(sale.kind === 'outside' ? pharmacyFeatures.outsideSales : pharmacyFeatures.issueToOp);
@@ -226,7 +216,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/ip-issues`, { schema: { body: pharmacyIpIssueSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       await gate.requireFeature(pharmacyFeatures.issueToIp);
       const created = await postIpIssue(ctx(gate), req.body);
@@ -237,7 +226,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/ip-issues/:id/return`, { schema: { params: idParams, body: pharmacyIpReturnSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       await gate.requireFeature(pharmacyFeatures.issueToIp);
       const created = await returnIpIssue(ctx(gate), req.params.id, req.body);
@@ -248,7 +236,6 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/adjustments`, { schema: { body: pharmacyAdjustmentSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate);
       await gate.requireFeature(pharmacyFeatures.stockAdjustments);
       const created = await postAdjustment(ctx(gate), req.body);

@@ -239,7 +239,11 @@ export function routeTemplate(req: FastifyRequest): string {
   return `${req.method} ${req.routeOptions.url ?? req.url}`;
 }
 
-/** Money routes. Quote is a read of a price, so it does not require a key. */
+/**
+ * Money and stock-posting routes. A quote only prices a change, so it does not require a key.
+ * Pharmacy sale, goods receipt, IP issue, return and adjustment replay through the same key
+ * instead of a second check inside the handler.
+ */
 export function idempotencyRequired(req: FastifyRequest): boolean {
   if (req.method !== 'POST') return false;
   const url = req.routeOptions.url ?? req.url.split('?')[0] ?? '';
@@ -249,7 +253,14 @@ export function idempotencyRequired(req: FastifyRequest): boolean {
     url === '/api/v1/billing/verify' ||
     url === '/api/v1/billing/change-apply' ||
     url === '/api/v1/billing/webhooks/mock' ||
-    url === '/api/v1/tenant/clinical/encounters/:id/orders'
+    url === '/api/v1/tenant/clinical/encounters/:id/orders' ||
+    url === '/api/v1/tenant/m/pharmacy/sales' ||
+    url === '/api/v1/tenant/m/pharmacy/sales/:id/return' ||
+    url === '/api/v1/tenant/m/pharmacy/grns' ||
+    url === '/api/v1/tenant/m/pharmacy/supplier-returns' ||
+    url === '/api/v1/tenant/m/pharmacy/ip-issues' ||
+    url === '/api/v1/tenant/m/pharmacy/ip-issues/:id/return' ||
+    url === '/api/v1/tenant/m/pharmacy/adjustments'
   );
 }
 

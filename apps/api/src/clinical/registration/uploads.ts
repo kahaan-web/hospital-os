@@ -10,9 +10,3 @@ export function detectPatientFile(bytes: Buffer): { ext: 'png' | 'jpg' | 'pdf'; 
   if (bytes.length >= 5 && bytes.subarray(0, 5).toString() === '%PDF-') return { ext: 'pdf', mime: 'application/pdf' };
   throw new ApiError(400, 'validation', 'Use a PDF, JPG or PNG up to 5 MB');
 }
-
-export function patientPhotoMime(ext: string): string {
-  if (ext === 'png') return 'image/png';
-  if (ext === 'jpg') return 'image/jpeg';
-  return 'application/octet-stream';
-}
