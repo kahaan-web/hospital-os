@@ -80,6 +80,10 @@ const KNOWN_TABLES = [
   'clinical_notes',
   'charges',
   'cash_ledger',
+  'doctor_schedules',
+  'schedule_exceptions',
+  'appointments',
+  'opd_queue',
 ] as const;
 
 async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {
