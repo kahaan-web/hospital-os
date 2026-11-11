@@ -54,6 +54,13 @@ export interface Side {
   chargeId: string;
   cashId: string;
   mlcId: string;
+  billId: string;
+  billLineId: string;
+  depositId: string;
+  settlementId: string;
+  concessionId: string;
+  refundId: string;
+  creditNoteId: string;
 }
 
 export interface FixturePair {
@@ -382,6 +389,57 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, $3, $4, 'Fixture MLC') returning id`,
     [tenant.id, patient.id, encounter.id, `ZML${runId}${mark}`],
   );
+  const bill = await one<{ id: string }>(
+    migrator,
+    `insert into bills (
+       tenant_id, location_id, patient_id, encounter_id, kind, number, doc_type, status, pay_class,
+       subtotal_paise, discount_paise, cgst_paise, sgst_paise, igst_paise, round_off_paise, total_paise, paid_paise
+     ) values (
+       $1, $2, $3, $4, 'op', $5, 'bill_of_supply', 'final', 'cash',
+       100, 0, 0, 0, 0, 0, 100, 100
+     ) returning id`,
+    [tenant.id, location.id, patient.id, encounter.id, `OB${runId}${mark}`],
+  );
+  const billLine = await one<{ id: string }>(
+    migrator,
+    `insert into bill_lines (
+       tenant_id, bill_id, charge_id, line_no, description, qty, unit_price_paise, amount_paise,
+       discount_paise, bill_discount_paise, taxable_paise, gst_treatment, service_date
+     ) values (
+       $1, $2, $3, 1, 'Sample consultation', 1, 100, 100, 0, 0, 100, 'exempt_healthcare', current_date
+     ) returning id`,
+    [tenant.id, bill.id, charge.id],
+  );
+  const deposit = await one<{ id: string }>(
+    migrator,
+    `insert into deposits (tenant_id, location_id, patient_id, number, amount_paise, balance_paise, mode, status)
+     values ($1, $2, $3, $4, 100, 100, 'cash', 'open') returning id`,
+    [tenant.id, location.id, patient.id, `DP${runId}${mark}`],
+  );
+  const settlement = await one<{ id: string }>(
+    migrator,
+    `insert into bill_settlements (tenant_id, bill_id, mode, amount_paise, instrument_ref)
+     values ($1, $2, 'cash', 100, 'Sample') returning id`,
+    [tenant.id, bill.id],
+  );
+  const concession = await one<{ id: string }>(
+    migrator,
+    `insert into concessions (tenant_id, bill_id, amount_paise, reason, status)
+     values ($1, $2, 100, 'Sample concession', 'requested') returning id`,
+    [tenant.id, bill.id],
+  );
+  const refund = await one<{ id: string }>(
+    migrator,
+    `insert into refunds (tenant_id, bill_id, number, amount_paise, reason, mode)
+     values ($1, $2, $3, 100, 'Sample refund', 'cash') returning id`,
+    [tenant.id, bill.id, `RF${runId}${mark}`],
+  );
+  const creditNote = await one<{ id: string }>(
+    migrator,
+    `insert into bill_credit_notes (tenant_id, bill_id, refund_id, number, amount_paise, reason, status)
+     values ($1, $2, $3, $4, 100, 'Sample credit note', 'issued') returning id`,
+    [tenant.id, bill.id, refund.id, `CN${runId}${mark}`],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -417,6 +475,13 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     chargeId: charge.id,
     cashId: cash.id,
     mlcId: mlc.id,
+    billId: bill.id,
+    billLineId: billLine.id,
+    depositId: deposit.id,
+    settlementId: settlement.id,
+    concessionId: concession.id,
+    refundId: refund.id,
+    creditNoteId: creditNote.id,
   };
 }
 
@@ -424,6 +489,13 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   if (!pair) return;
   const ids = [pair.a.id, pair.b.id];
   const steps = [
+    `delete from bill_credit_notes where tenant_id = any($1::uuid[])`,
+    `delete from refunds where tenant_id = any($1::uuid[])`,
+    `delete from concessions where tenant_id = any($1::uuid[])`,
+    `delete from bill_settlements where tenant_id = any($1::uuid[])`,
+    `delete from bill_lines where tenant_id = any($1::uuid[])`,
+    `delete from deposits where tenant_id = any($1::uuid[])`,
+    `delete from bills where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,

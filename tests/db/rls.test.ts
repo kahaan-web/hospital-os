@@ -59,6 +59,13 @@ const TABLES = [
   'charges',
   'cash_ledger',
   'mlc_cases',
+  'bills',
+  'bill_lines',
+  'deposits',
+  'bill_settlements',
+  'concessions',
+  'refunds',
+  'bill_credit_notes',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -161,9 +168,10 @@ describe.sequential('row level security', () => {
       'tenants',
     ].sort();
     const expected = [...TABLES].sort();
+    const known = new Set<string>(expected);
     const missing = expected.filter((name) => !discovered.includes(name));
     expect(missing, 'tenant tables missing from the database').toEqual([]);
-    const extra = discovered.filter((name) => !expected.includes(name));
+    const extra = discovered.filter((name) => !known.has(name));
     if (extra.length === 0) return;
     // A shared hos_test can contain tenant tables from migrations this worktree does not have
     // (other worktrees apply 0100+ clinical migrations to the same database). Those must not
@@ -760,7 +768,7 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.serviceId, `name = 'Touched by A'`, 'name',
           `insert into services (tenant_id, code, name, category) values ($1, 'NO${pair.runId}', 'Nope', 'misc')`),
-        beforeMassDelete: ['delete from charges', 'delete from tariffs'],
+        beforeMassDelete: ['delete from bill_lines', 'delete from charges', 'delete from tariffs'],
       };
     case 'tariffs':
       return {
@@ -805,8 +813,11 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         massDelete: 'forbidden',
       };
     case 'charges':
-      return row(common, 'id = $1', b.chargeId, `description = 'Touched by A'`, 'description',
-        `insert into charges (tenant_id, location_id, encounter_id, patient_id, description, qty, unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id, source_line) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'Nope', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', '${b.encounterId}', 'nope')`);
+      return {
+        ...row(common, 'id = $1', b.chargeId, `description = 'Touched by A'`, 'description',
+          `insert into charges (tenant_id, location_id, encounter_id, patient_id, description, qty, unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id, source_line) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'Nope', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', '${b.encounterId}', 'nope')`),
+        beforeMassDelete: ['delete from bill_lines'],
+      };
     case 'cash_ledger':
       return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
         `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
@@ -820,6 +831,33 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary) values ($1, '${b.patientId}', '${b.encounterId}', 'ZML${pair.runId}', 'Nope')`,
         retargetSql: `update mlc_cases set tenant_id = $1`,
       };
+    case 'bills':
+      return {
+        ...row(common, 'id = $1', b.billId, `cancel_reason = 'Touched by A'`, 'cancel_reason',
+          `insert into bills (tenant_id, location_id, patient_id, encounter_id, kind, doc_type, status, pay_class, subtotal_paise, total_paise) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', 'op', 'bill_of_supply', 'draft', 'cash', 100, 100)`),
+        beforeMassDelete: ['delete from bill_credit_notes', 'delete from refunds', 'delete from concessions', 'delete from bill_settlements', 'delete from bill_lines'],
+      };
+    case 'bill_lines':
+      return row(common, 'id = $1', b.billLineId, `description = 'Touched by A'`, 'description',
+        `insert into bill_lines (tenant_id, bill_id, charge_id, line_no, description, qty, unit_price_paise, amount_paise, taxable_paise, gst_treatment, service_date) values ($1, '${b.billId}', gen_random_uuid(), 2, 'Nope', 1, 100, 100, 100, 'exempt_healthcare', current_date)`);
+    case 'deposits':
+      return row(common, 'id = $1', b.depositId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
+        `insert into deposits (tenant_id, location_id, patient_id, number, amount_paise, balance_paise, mode) values ($1, '${b.locationId}', '${b.patientId}', 'DPNO${pair.runId}', 100, 100, 'cash')`);
+    case 'bill_settlements':
+      return row(common, 'id = $1', b.settlementId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
+        `insert into bill_settlements (tenant_id, bill_id, mode, amount_paise) values ($1, '${b.billId}', 'cash', 100)`);
+    case 'concessions':
+      return row(common, 'id = $1', b.concessionId, `reason = 'Touched by A'`, 'reason',
+        `insert into concessions (tenant_id, bill_id, amount_paise, reason) values ($1, '${b.billId}', 100, 'Nope')`);
+    case 'refunds':
+      return {
+        ...row(common, 'id = $1', b.refundId, `reason = 'Touched by A'`, 'reason',
+          `insert into refunds (tenant_id, bill_id, number, amount_paise, reason, mode) values ($1, '${b.billId}', 'RFNO${pair.runId}', 100, 'Nope', 'cash')`),
+        beforeMassDelete: ['delete from bill_credit_notes'],
+      };
+    case 'bill_credit_notes':
+      return row(common, 'id = $1', b.creditNoteId, `reason = 'Touched by A'`, 'reason',
+        `insert into bill_credit_notes (tenant_id, bill_id, number, amount_paise) values ($1, '${b.billId}', 'CNNO${pair.runId}', 100)`);
     default:
       return assertNever(table);
   }
