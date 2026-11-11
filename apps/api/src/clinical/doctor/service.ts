@@ -144,7 +144,6 @@ async function addNoteIfText(
   encounter: typeof schema.encounters.$inferSelect,
   kind: ClinicalNoteKind,
   body: string,
-  extra?: { code?: string | null; codeDisplay?: string | null },
 ) {
   const trimmed = body.trim();
   if (!trimmed && kind !== 'diagnosis') return;
