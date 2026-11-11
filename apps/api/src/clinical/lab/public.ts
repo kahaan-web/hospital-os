@@ -1,12 +1,14 @@
 import type { Tx } from '@hos/db';
-import type { LabResultsReader } from '@hos/shared';
+import type { LabReportListItem, LabResultSummaryDto, LabResultsReader } from '@hos/shared';
+import type { ClinicalCtx } from '@hos/shared';
+import { reportsForPatient as listReportsForPatient, summariesFor } from './service';
 
-/** B8 replaces this. No results until the laboratory task. */
+/** Laboratory results for other modules. Callers pass a ClinicalCtx; this does not open a session. */
 export const labResults: LabResultsReader<Tx> = {
-  async summaries() {
-    return new Map();
+  async summaries(ctx: ClinicalCtx<Tx>, orderItemIds: string[]): Promise<Map<string, LabResultSummaryDto>> {
+    return summariesFor(ctx, orderItemIds);
   },
-  async reportsForPatient() {
-    return [];
+  async reportsForPatient(ctx: ClinicalCtx<Tx>, patientId: string): Promise<LabReportListItem[]> {
+    return listReportsForPatient(ctx, patientId);
   },
 };

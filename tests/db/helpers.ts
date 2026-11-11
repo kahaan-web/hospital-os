@@ -89,13 +89,20 @@ export interface Side {
   pharmacyAdjustmentId: string;
   pharmacyAdjustmentLineId: string;
   pharmacySupplierReturnId: string;
-  pharmacySupplierReturnLineId: string;  wardId: string;
+  pharmacySupplierReturnLineId: string;
+  wardId: string;
   roomId: string;
   bedId: string;
   admissionId: string;
   bedAssignmentId: string;
   admissionRequestId: string;
   summaryId: string;
+  labTestId: string;
+  labParamId: string;
+  labAccessionId: string;
+  labResultId: string;
+  labInterfaceId: string;
+  labSettingsId: string;
 }
 
 export interface FixturePair {
@@ -684,6 +691,42 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, '{"diagnosis":"Sample"}'::jsonb) returning id`,
     [tenant.id, admission.id],
   );
+  const labTest = await one<{ id: string }>(
+    migrator,
+    `insert into lab_tests (tenant_id, service_id, specimen, container, tat_hours, is_sample)
+     values ($1, $2, 'blood', 'EDTA', 4, true) returning id`,
+    [tenant.id, service.id],
+  );
+  const labParam = await one<{ id: string }>(
+    migrator,
+    `insert into lab_test_params (tenant_id, test_id, code, name, unit, value_type, decimals)
+     values ($1, $2, 'HB', 'Haemoglobin', 'g/dL', 'numeric', 1) returning id`,
+    [tenant.id, labTest.id],
+  );
+  const labAccession = await one<{ id: string }>(
+    migrator,
+    `insert into lab_accessions (
+       tenant_id, location_id, patient_id, encounter_id, order_item_id, number, barcode, status, specimen, is_sample
+     ) values ($1, $2, $3, $4, $5, $6, $6, 'collected', 'blood', true) returning id`,
+    [tenant.id, location.id, patient.id, encounter.id, orderItem.id, `ZLA${runId}${mark}`],
+  );
+  const labResult = await one<{ id: string }>(
+    migrator,
+    `insert into lab_results (tenant_id, accession_id, param_id, value_num, value_text, flag, entered_by, version)
+     values ($1, $2, $3, 13.5, 'Sample', 'N', $4, 1) returning id`,
+    [tenant.id, labAccession.id, labParam.id, user.id],
+  );
+  const labInterface = await one<{ id: string }>(
+    migrator,
+    `insert into lab_interfaces (tenant_id, location_id, name, kind, token_hash)
+     values ($1, $2, 'Mock analyser', 'mock_astm', $3) returning id`,
+    [tenant.id, location.id, `tok${runId}${mark}`],
+  );
+  const labSettings = await one<{ id: string }>(
+    migrator,
+    `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false) returning id`,
+    [tenant.id],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -758,6 +801,12 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     bedAssignmentId: bedAssignment.id,
     admissionRequestId: admissionRequest.id,
     summaryId: summary.id,
+    labTestId: labTest.id,
+    labParamId: labParam.id,
+    labAccessionId: labAccession.id,
+    labResultId: labResult.id,
+    labInterfaceId: labInterface.id,
+    labSettingsId: labSettings.id,
   };
 }
 
@@ -804,6 +853,12 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from appointments where tenant_id = any($1::uuid[])`,
     `delete from schedule_exceptions where tenant_id = any($1::uuid[])`,
     `delete from doctor_schedules where tenant_id = any($1::uuid[])`,
+    `delete from lab_results where tenant_id = any($1::uuid[])`,
+    `delete from lab_accessions where tenant_id = any($1::uuid[])`,
+    `delete from lab_test_params where tenant_id = any($1::uuid[])`,
+    `delete from lab_tests where tenant_id = any($1::uuid[])`,
+    `delete from lab_interfaces where tenant_id = any($1::uuid[])`,
+    `delete from lab_settings where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,

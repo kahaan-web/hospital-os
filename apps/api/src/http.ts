@@ -249,6 +249,7 @@ export function routeTemplate(req: FastifyRequest): string {
  * Pharmacy sale, goods receipt, IP issue, return and adjustment replay through the same key
  * instead of a second check inside the handler.
  * OP bill, settlement, concession, refund and deposit posts do the same.
+ * Lab accession create does too.
  */
 const IDEMPOTENT_POSTS = new Set([
   '/api/v1/billing/orders',
@@ -277,6 +278,7 @@ const IDEMPOTENT_POSTS = new Set([
   '/api/v1/tenant/m/pharmacy/ip-issues',
   '/api/v1/tenant/m/pharmacy/ip-issues/:id/return',
   '/api/v1/tenant/m/pharmacy/adjustments',
+  '/api/v1/tenant/m/lab/accessions',
 ]);
 
 export function idempotencyRequired(req: FastifyRequest): boolean {

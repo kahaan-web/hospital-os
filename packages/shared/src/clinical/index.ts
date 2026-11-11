@@ -70,4 +70,5 @@ export * from './pharmacy';
 export * from './contracts';
 export * from './contract-dtos';
 export * from './appointments';
+export * from './lab';
 export { clinicalEn } from './i18n';
