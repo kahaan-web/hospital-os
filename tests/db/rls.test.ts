@@ -61,6 +61,12 @@ const TABLES = [
   'charges',
   'cash_ledger',
   'mlc_cases',
+  'lab_tests',
+  'lab_test_params',
+  'lab_accessions',
+  'lab_results',
+  'lab_interfaces',
+  'lab_settings',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -573,8 +579,11 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
         `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
     case 'users':
-      return row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
-        `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`);
+      return {
+        ...row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
+          `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`),
+        beforeMassDelete: ['delete from lab_results', 'delete from lab_accessions'],
+      };
     case 'user_location_roles':
       return {
         ...common,
@@ -792,7 +801,13 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.serviceId, `name = 'Touched by A'`, 'name',
           `insert into services (tenant_id, code, name, category) values ($1, 'NO${pair.runId}', 'Nope', 'misc')`),
-        beforeMassDelete: ['delete from charges', 'delete from tariffs'],
+        beforeMassDelete: [
+          'delete from lab_results',
+          'delete from lab_test_params',
+          'delete from lab_tests',
+          'delete from charges',
+          'delete from tariffs',
+        ],
       };
     case 'tariffs':
       return {
@@ -808,11 +823,14 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.clinicalOrderId, `notes = 'Touched by A'`, 'notes',
           `insert into clinical_orders (tenant_id, location_id, encounter_id, patient_id, kind, number, source) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'lab', 'ZNOPE${pair.runId}', 'opd')`),
-        beforeMassDelete: ['delete from clinical_order_items'],
+        beforeMassDelete: ['delete from lab_results', 'delete from lab_accessions', 'delete from clinical_order_items'],
       };
     case 'clinical_order_items':
-      return row(common, 'id = $1', b.orderItemId, `drug_name = 'Touched by A'`, 'drug_name',
-        `insert into clinical_order_items (tenant_id, order_id, line_no) values ($1, '${b.clinicalOrderId}', 2)`);
+      return {
+        ...row(common, 'id = $1', b.orderItemId, `drug_name = 'Touched by A'`, 'drug_name',
+          `insert into clinical_order_items (tenant_id, order_id, line_no) values ($1, '${b.clinicalOrderId}', 2)`),
+        beforeMassDelete: ['delete from lab_results', 'delete from lab_accessions'],
+      };
     case 'vital_signs':
       return {
         ...common,
@@ -851,6 +869,40 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(injury_summary = 'Touched by A', false) as touched from mlc_cases where id = $1`,
         insertSql: `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary) values ($1, '${b.patientId}', '${b.encounterId}', 'ZML${pair.runId}', 'Nope')`,
         retargetSql: `update mlc_cases set tenant_id = $1`,
+      };
+    case 'lab_tests':
+      return {
+        ...row(common, 'id = $1', b.labTestId, `container = 'Touched by A'`, 'container',
+          `insert into lab_tests (tenant_id, service_id, specimen, container, tat_hours) values ($1, '${b.serviceId}', 'blood', 'Nope', 4)`),
+        beforeMassDelete: ['delete from lab_results', 'delete from lab_test_params'],
+      };
+    case 'lab_test_params':
+      return {
+        ...row(common, 'id = $1', b.labParamId, `unit = 'Touched by A'`, 'unit',
+          `insert into lab_test_params (tenant_id, test_id, code, name, value_type) values ($1, '${b.labTestId}', 'NO', 'Nope', 'text')`),
+        beforeMassDelete: ['delete from lab_results'],
+      };
+    case 'lab_accessions':
+      return {
+        ...row(common, 'id = $1', b.labAccessionId, `reject_reason = 'Touched by A'`, 'reject_reason',
+          `insert into lab_accessions (tenant_id, location_id, patient_id, encounter_id, order_item_id, number, barcode, specimen) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', '${b.orderItemId}', 'ZLB${pair.runId}', 'ZLB${pair.runId}', 'urine')`),
+        beforeMassDelete: ['delete from lab_results'],
+      };
+    case 'lab_results':
+      return row(common, 'id = $1', b.labResultId, `value_text = 'Touched by A'`, 'value_text',
+        `insert into lab_results (tenant_id, accession_id, param_id, value_text, version) values ($1, '${b.labAccessionId}', '${b.labParamId}', 'Nope', 2)`);
+    case 'lab_interfaces':
+      return row(common, 'id = $1', b.labInterfaceId, `name = 'Touched by A'`, 'name',
+        `insert into lab_interfaces (tenant_id, name, kind, token_hash) values ($1, 'Nope', 'mock_astm', 'nope${pair.runId}')`);
+    case 'lab_settings':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.labSettingsId,
+        setSql: `collect_before_payment = true`,
+        untouched: `select coalesce(collect_before_payment = true, false) as touched from lab_settings where id = $1`,
+        insertSql: `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false)`,
+        retargetSql: `update lab_settings set tenant_id = $1`,
       };
     default:
       return assertNever(table);

@@ -5,6 +5,7 @@ import type pg from 'pg';
 import { seedClinicalFoundation } from './clinical-foundation';
 import { seedCore } from './core';
 import { seedCreditNotes } from './credit-notes';
+import { seedLab } from './lab';
 import { seedRegistration } from './registration';
 import type { FixtureModule, ProbeSpec, TenantFixture } from './types';
 
@@ -14,6 +15,7 @@ export const fixtureModules: FixtureModule[] = [
   // No-op until feat/mt-hardening creates the table. Then it inserts one row per tenant.
   { name: 'credit-notes', seed: seedCreditNotes },
   { name: 'registration', seed: seedRegistration },
+  { name: 'lab', seed: seedLab },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {
