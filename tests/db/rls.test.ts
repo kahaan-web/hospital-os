@@ -61,6 +61,8 @@ const TABLES = [
   'charges',
   'cash_ledger',
   'mlc_cases',
+  'order_sets',
+  'prescription_templates',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -851,6 +853,26 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(injury_summary = 'Touched by A', false) as touched from mlc_cases where id = $1`,
         insertSql: `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary) values ($1, '${b.patientId}', '${b.encounterId}', 'ZML${pair.runId}', 'Nope')`,
         retargetSql: `update mlc_cases set tenant_id = $1`,
+      };
+    case 'order_sets':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.orderSetId,
+        setSql: `name = 'Touched by A'`,
+        untouched: `select coalesce(name = 'Touched by A', false) as touched from order_sets where id = $1`,
+        insertSql: `insert into order_sets (tenant_id, name, kind, items) values ($1, 'Nope', 'lab', '[]'::jsonb)`,
+        retargetSql: `update order_sets set tenant_id = $1`,
+      };
+    case 'prescription_templates':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.prescriptionTemplateId,
+        setSql: `name = 'Touched by A'`,
+        untouched: `select coalesce(name = 'Touched by A', false) as touched from prescription_templates where id = $1`,
+        insertSql: `insert into prescription_templates (tenant_id, name, items) values ($1, 'Nope', '[]'::jsonb)`,
+        retargetSql: `update prescription_templates set tenant_id = $1`,
       };
     default:
       return assertNever(table);

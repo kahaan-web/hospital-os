@@ -57,6 +57,8 @@ export interface Side {
   chargeId: string;
   cashId: string;
   mlcId: string;
+  orderSetId: string;
+  prescriptionTemplateId: string;
 }
 
 export interface FixturePair {
@@ -414,6 +416,18 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, $3, $4, 'Fixture MLC') returning id`,
     [tenant.id, patient.id, encounter.id, `ZML${runId}${mark}`],
   );
+  const orderSet = await one<{ id: string }>(
+    migrator,
+    `insert into order_sets (tenant_id, name, kind, items)
+     values ($1, 'Fixture order set', 'lab', '[]'::jsonb) returning id`,
+    [tenant.id],
+  );
+  const rxTemplate = await one<{ id: string }>(
+    migrator,
+    `insert into prescription_templates (tenant_id, name, items)
+     values ($1, 'Fixture template', '[]'::jsonb) returning id`,
+    [tenant.id],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -450,6 +464,8 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     chargeId: charge.id,
     cashId: cash.id,
     mlcId: mlc.id,
+    orderSetId: orderSet.id,
+    prescriptionTemplateId: rxTemplate.id,
   };
 }
 
@@ -469,6 +485,8 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from patient_alerts where tenant_id = any($1::uuid[])`,
     `delete from patient_documents where tenant_id = any($1::uuid[])`,
     `delete from mlc_cases where tenant_id = any($1::uuid[])`,
+    `delete from order_sets where tenant_id = any($1::uuid[])`,
+    `delete from prescription_templates where tenant_id = any($1::uuid[])`,
     `delete from encounters where tenant_id = any($1::uuid[])`,
     `delete from tariffs where tenant_id = any($1::uuid[])`,
     `delete from services where tenant_id = any($1::uuid[])`,
