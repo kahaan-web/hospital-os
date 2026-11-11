@@ -22,9 +22,10 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { advanceBillingClock } from '../billing';
 import { invoiceListItem, iso, loadCatalog, locationDtos, methodLabel, moduleStates, subscriptionDto, tenantSummary, userDtos } from '../catalog';
 import { openPlatform, openPlatformTenant, verifyChain, type Deps } from '../guard';
-import { ApiError, rows } from '../http';
+import { ApiError, routeTemplate, rows } from '../http';
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -42,7 +43,9 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
   r.get('/api/v1/admin/overview', async (req) =>
     openPlatform(deps, req, async (gate) => {
       const [row] = await rows<{ overview: AdminOverviewDto }>(gate.tx, sql`select hos_admin_overview() as overview`);
-      return row?.overview ?? emptyOverview();
+      const overview = row?.overview ?? emptyOverview();
+      await auditPlatformRead(gate, req, 'overview', null, { tenantTotal: overview.tenants.total });
+      return overview;
     }),
   );
 
@@ -171,6 +174,7 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       const offset = (req.query.page - 1) * req.query.pageSize;
       const listed = await rows<Record<string, unknown>>(gate.tx, sql`select * from hos_admin_tenant_list(${req.query.q ?? ''}, ${req.query.status ?? ''}, ${req.query.pageSize}, ${offset})`);
       const items = listed.map(mapTenant);
+      await auditPlatformRead(gate, req, 'tenants', null, { page: req.query.page, returned: items.length });
       return { items, total: Number(listed[0]?.total_count ?? 0), page: req.query.page, pageSize: req.query.pageSize } satisfies PageDto<AdminTenantListItem>;
     }),
   );
@@ -206,6 +210,14 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         })),
         overrides,
       };
+      await auditPlatformRead(gate, req, 'tenant', hospital.id, {
+        locations: detail.locations.length,
+        users: detail.users.length,
+        invoices: invoices.length,
+        payments: payments.length,
+        orders: orders.length,
+        overrides: overrides.length,
+      });
       return detail;
     }),
   );
@@ -256,6 +268,19 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       await gate.audit('admin.tenant.suspend', 'tenant', hospital.id, { status: hospital.status }, { status: 'suspended', reason: req.body.reason, restore: previous });
       return reply.status(204).send();
     }),
+  );
+
+  r.post(
+    '/api/v1/admin/tenants/:id/dev/advance-clock',
+    { schema: { params: idParam, body: z.object({ days: z.number().int().min(1).max(3660) }) } },
+    async (req) => {
+      if (deps.env.production) throw new ApiError(404, 'not_found', 'Not found');
+      return openPlatformTenant(deps, req, req.params.id, async (gate) => {
+        const result = await advanceBillingClock(gate.tx, gate.actor, req.body.days);
+        await gate.audit('billing.clock.advance', 'subscription', req.params.id, null, { days: req.body.days, renewals: result.renewals.length });
+        return result;
+      });
+    },
   );
 
   r.post('/api/v1/admin/tenants/:id/reactivate', { schema: { params: idParam } }, async (req, reply) =>
@@ -312,11 +337,27 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         hash: row.hash,
         tenantId: row.tenantId,
       }));
+      await auditPlatformRead(gate, req, 'audit', null, { page: req.query.page, returned: items.length });
       return { items, total: Number(n), page: req.query.page, pageSize: req.query.pageSize };
     }),
   );
 
   r.get('/api/v1/admin/audit/verify', async (req) => openPlatform(deps, req, (gate) => verifyChain(gate.tx, 'platform')));
+}
+
+/** One platform-audit row per read. Counts and the route only — no names, emails, or clinical fields. */
+function auditPlatformRead(
+  gate: { audit: (action: string, entityType: string, entityId: string | null, before: unknown, after: unknown) => Promise<void> },
+  req: Parameters<typeof routeTemplate>[0],
+  thing: string,
+  targetTenantId: string | null,
+  facts: Record<string, number | string | null>,
+): Promise<void> {
+  return gate.audit(`platform.read.${thing}`, thing, targetTenantId, null, {
+    route: routeTemplate(req),
+    targetTenantId,
+    ...facts,
+  });
 }
 
 function settingsDto(row: typeof schema.platformSettings.$inferSelect) {

@@ -112,11 +112,17 @@ describe.sequential('audit log', () => {
       const hidden = await app().query<{ n: number }>(`select count(*)::int as n from audit_log where chain_key = $1`, [tenantA]);
       expect(Number(hidden.rows[0]?.n)).toBe(0);
 
-      await scopePlatform(app(), '');
-      const platform = await insertAudit(app(), null, 'platform-1', { chainKey: 'nope' });
-      expect(platform.chain_key).toBe('platform');
     } finally {
       await app().query('ROLLBACK');
+    }
+
+    await platform().query('BEGIN');
+    try {
+      await scopePlatform(platform(), '');
+      const row = await insertAudit(platform(), null, 'platform-1', { chainKey: 'nope' });
+      expect(row.chain_key).toBe('platform');
+    } finally {
+      await platform().query('ROLLBACK');
     }
   });
 
@@ -179,6 +185,10 @@ describe.sequential('audit log', () => {
   function app() {
     if (!roles) throw new Error('database clients were not opened');
     return roles.app;
+  }
+  function platform() {
+    if (!roles) throw new Error('database clients were not opened');
+    return roles.platform;
   }
   function migrator() {
     if (!roles) throw new Error('database clients were not opened');

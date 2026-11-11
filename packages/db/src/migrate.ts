@@ -8,6 +8,8 @@ const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migr
 
 export const MIGRATOR_ROLE = 'hos_migrator';
 export const APP_ROLE = 'hos_app';
+/** Login role for platform scope. Member of hos_app; hos_app is not a member of this role. */
+export const PLATFORM_ROLE = 'hos_platform';
 
 function literal(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
@@ -21,15 +23,18 @@ function credentials(url: string, expectedRole: string): { password: string } {
 }
 
 /**
- * Bootstrap (superuser, once per database): create the database if missing and the two least-privilege roles.
+ * Bootstrap (superuser, once per database): create the database if missing and the least-privilege roles.
  *  - hos_migrator owns the schema and runs migrations. NOSUPERUSER, NOBYPASSRLS.
- *  - hos_app is what the API connects as. NOSUPERUSER, NOBYPASSRLS → always subject to row-level security.
+ *  - hos_app is what the API connects as for tenant traffic. NOSUPERUSER, NOBYPASSRLS, NOINHERIT.
+ *  - hos_platform is the only login that may hold platform scope. It inherits hos_app. hos_app cannot become it.
  * In production this step is done by infrastructure (Terraform / DBA) and the superuser URL is never given to the app.
+ * The platform password comes from DATABASE_PLATFORM_URL (dev default hos_dev_platform).
  */
 export async function bootstrapRoles(log: (m: string) => void = () => {}): Promise<void> {
   const env = dbEnv();
   const migrator = credentials(env.migrationUrl, MIGRATOR_ROLE);
   const app = credentials(env.appUrl, APP_ROLE);
+  const platform = credentials(env.platformUrl, PLATFORM_ROLE);
   if (!/^[a-z_][a-z0-9_]*$/.test(env.database)) throw new Error(`Unsafe database name: ${env.database}`);
 
   // Create the database when it does not exist (connect to the maintenance DB for that).
@@ -43,14 +48,17 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
       await maint.query(`create database ${env.database}`);
       log(`created database ${env.database}`);
     }
-    for (const [role, password] of [
-      [MIGRATOR_ROLE, migrator.password],
-      [APP_ROLE, app.password],
+    for (const [role, password, inherit] of [
+      [MIGRATOR_ROLE, migrator.password, 'noinherit'],
+      [APP_ROLE, app.password, 'noinherit'],
+      [PLATFORM_ROLE, platform.password, 'inherit'],
     ] as const) {
       const found = await maint.query('select 1 from pg_roles where rolname = $1', [role]);
-      const attrs = `login password ${literal(password)} nosuperuser nobypassrls nocreatedb nocreaterole noinherit`;
+      const attrs = `login password ${literal(password)} nosuperuser nobypassrls nocreatedb nocreaterole ${inherit}`;
       await maint.query(found.rowCount === 0 ? `create role ${role} ${attrs}` : `alter role ${role} ${attrs}`);
     }
+    // One direction only. hos_platform inherits hos_app's grants; hos_app cannot SET ROLE hos_platform.
+    await maint.query(`grant ${APP_ROLE} to ${PLATFORM_ROLE}`);
   } finally {
     await closeClient(maint);
   }
@@ -58,7 +66,7 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
   const admin = new pg.Client({ connectionString: env.adminUrl });
   await admin.connect();
   try {
-    await admin.query(`grant connect on database ${env.database} to ${MIGRATOR_ROLE}, ${APP_ROLE}`);
+    await admin.query(`grant connect on database ${env.database} to ${MIGRATOR_ROLE}, ${APP_ROLE}, ${PLATFORM_ROLE}`);
     await admin.query(`grant usage, create on schema public to ${MIGRATOR_ROLE}`);
     await admin.query(`grant usage on schema public to ${APP_ROLE}`);
     // 0001_rls.sql (frozen) creates public.sha256(bytea) on top of pgcrypto.digest.
@@ -66,12 +74,14 @@ export async function bootstrapRoles(log: (m: string) => void = () => {}): Promi
     // that frozen migration can apply on a fresh database. 0003 switches the audit trigger to
     // pg_catalog.sha256 and drops the wrapper; migrate() then drops the extension.
     await admin.query('create extension if not exists pgcrypto');
-    await admin.query(`alter role ${APP_ROLE} set statement_timeout = '10s'`);
-    await admin.query(`alter role ${APP_ROLE} set idle_in_transaction_session_timeout = '15s'`);
+    for (const role of [APP_ROLE, PLATFORM_ROLE]) {
+      await admin.query(`alter role ${role} set statement_timeout = '10s'`);
+      await admin.query(`alter role ${role} set idle_in_transaction_session_timeout = '15s'`);
+    }
   } finally {
     await closeClient(admin);
   }
-  log(`roles ready: ${MIGRATOR_ROLE} (migrations), ${APP_ROLE} (application, RLS enforced)`);
+  log(`roles ready: ${MIGRATOR_ROLE} (migrations), ${APP_ROLE} (application, RLS enforced), ${PLATFORM_ROLE} (platform scope)`);
 }
 
 /** Apply pending SQL migrations as the migration role. Each file runs in its own transaction. */

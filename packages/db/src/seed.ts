@@ -573,6 +573,13 @@ export async function seedDemo(log: (m: string) => void = console.log): Promise<
   const handle = createDb(dbEnv().migrationUrl, { max: 2 });
   try {
     await seedCatalogue(handle.db, log);
+    // Demo checkout still offers success / failure / pending. The API honours that
+    // choice only when this flag is on and NODE_ENV is not production.
+    await handle.db
+      .update(schema.platformSettings)
+      .set({ mockPaymentSimulator: true })
+      .where(eq(schema.platformSettings.id, 1));
+    log('mock payment simulator on for the demo checkout');
     await seedDemoTenant(handle.db, log);
     await seedDemoPeople(handle.db, log);
     await seedClinicalFoundation(handle.db, log);

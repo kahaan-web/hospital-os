@@ -28,9 +28,10 @@
     "start:web": "npm run start -w @hos/web",
     "smoke": "node scripts/smoke.mjs",
     "test": "vitest run",
+    "test:rls": "vitest run tests/db-rls",
     "test:e2e": "npm run e2e -w @hos/web",
     "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tests/db-rls/tsconfig.json"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
