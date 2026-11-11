@@ -42,6 +42,9 @@ async function exec(tx: Tx, query: SqlQuery) {
     if (code === 'payment_not_found') throw new ApiError(404, 'not_found', 'Payment not found');
     if (code === 'no_subscription') throw new ApiError(422, 'no_subscription', 'There is no subscription to change');
     if (code === 'forbidden') throw new ApiError(403, 'forbidden', 'You cannot do that');
+    if (code === 'period_change') throw new ApiError(422, 'period_change', 'This change cannot move the billing period');
+    if (code === 'credit_above') throw new ApiError(422, 'credit_above', 'That credit is higher than the unused value of this subscription');
+    if (code === 'price_increase') throw new ApiError(422, 'payment_required', 'This change needs a payment. Create an order instead.');
     throw error;
   }
 }
@@ -70,6 +73,8 @@ export async function createOrder(
   idempotencyKey: string,
   gateway: PaymentGateway,
 ): Promise<OrderDto> {
+  // Serialise creates for this hospital. The partial unique index is the backstop if the lock is skipped.
+  await tx.execute(sql`select id from tenants where id = hos_tenant_id() for update`);
   const [tenant] = await tx.select().from(schema.tenants);
   if (!tenant) throw new ApiError(404, 'not_found', 'Hospital not found');
   if (purpose === 'onboarding') {
@@ -247,6 +252,8 @@ export async function fulfil(tx: Tx, orderId: string, paymentId: string): Promis
  * Unused pre-tax value is stored on `subscriptions.credit_paise` and consumed by the
  * next charge (upgrade or renewal). Paid upgrades still go through change-quote →
  * order → pay → verify → fulfil, which calls this with the priced quote.
+ * In tenant scope the database keeps the current period, derives the credit, and
+ * rejects a pricier plan. The quote's credit is checked against that derived value.
  */
 export async function applySubscriptionChange(tx: Tx, quote: QuoteDto): Promise<void> {
   const [sub] = await tx.select().from(schema.subscriptions);

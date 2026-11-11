@@ -56,25 +56,49 @@ export async function ensureTenant(owner: pg.Client, spec: ProbeSpec): Promise<T
     await owner.query(
       `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at)
        select 'rls-' || $2 || '-live', 'tenant', u.id, $1::uuid, now() + interval '1 day', now() from users u
-       where u.tenant_id = $1
+       where u.tenant_id = $1 and u.email = $3
        on conflict (token_hash) do update
          set last_seen_at = now(), expires_at = now() + interval '1 day', revoked_at = null`,
-      [id, spec.tag],
+      [id, spec.tag, spec.email],
     );
     await owner.query(
       `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at)
        select 'rls-' || $2 || '-expired', 'tenant', u.id, $1::uuid, now() - interval '1 minute', now() from users u
-       where u.tenant_id = $1
+       where u.tenant_id = $1 and u.email = $3
        on conflict (token_hash) do update
          set expires_at = now() - interval '1 minute', revoked_at = null, last_seen_at = now()`,
-      [id, spec.tag],
+      [id, spec.tag, spec.email],
     );
     await owner.query(
       `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at, revoked_at)
        select 'rls-' || $2 || '-revoked', 'tenant', u.id, $1::uuid, now() + interval '1 day', now(), now() from users u
-       where u.tenant_id = $1
+       where u.tenant_id = $1 and u.email = $3
        on conflict (token_hash) do update
          set revoked_at = now(), expires_at = now() + interval '1 day', last_seen_at = now()`,
+      [id, spec.tag, spec.email],
+    );
+    // hos_invite_tenant resolves only while the invited user is pending. The owner stays active.
+    await owner.query(
+      `insert into users (tenant_id, email, mobile, name, status)
+       select $1::uuid, 'invitee-' || $2 || '@sbx.hospitalos.test', '9000000099', 'Invitee Sample', 'pending'
+       where not exists (
+         select 1 from users where tenant_id = $1 and email = 'invitee-' || $2 || '@sbx.hospitalos.test'
+       )`,
+      [id, spec.tag],
+    );
+    await owner.query(
+      `update invitations i
+          set user_id = u.id, status = 'pending', expires_at = now() + interval '7 days'
+         from users u
+        where i.tenant_id = $1
+          and i.token_hash = 'rls-' || $2 || '-invite'
+          and u.tenant_id = i.tenant_id
+          and u.email = 'invitee-' || $2 || '@sbx.hospitalos.test'`,
+      [id, spec.tag],
+    );
+    await owner.query(
+      `update users set status = 'pending'
+        where tenant_id = $1 and email = 'invitee-' || $2 || '@sbx.hospitalos.test'`,
       [id, spec.tag],
     );
     const handles = await owner.query<{
@@ -88,9 +112,9 @@ export async function ensureTenant(owner: pg.Client, spec: ProbeSpec): Promise<T
          join locations l on l.tenant_id = u.tenant_id and l.is_primary
          join otp_challenges o on o.tenant_id = u.tenant_id
          join invitations i on i.tenant_id = u.tenant_id
-        where u.tenant_id = $1
+        where u.tenant_id = $1 and u.email = $2
         limit 1`,
-      [id],
+      [id, spec.email],
     );
     const row = handles.rows[0];
     if (!row) throw new Error(`probe fixture ${spec.slug} did not produce user, location, otp and invitation rows`);

@@ -120,8 +120,8 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/switch-location', { permission: AUTHENTICATED }),
-  entry('POST', '/api/v1/auth/totp/setup', { permission: 'tenant.manage' }),
-  entry('POST', '/api/v1/auth/totp/enable', { permission: 'tenant.manage' }),
+  entry('POST', '/api/v1/auth/totp/setup', { permission: AUTHENTICATED }),
+  entry('POST', '/api/v1/auth/totp/enable', { permission: AUTHENTICATED }),
 
   view('GET', '/api/v1/onboarding', 'tenant.manage'),
   view('GET', '/api/v1/onboarding/quote', 'tenant.manage'),

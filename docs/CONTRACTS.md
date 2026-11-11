@@ -31,7 +31,7 @@ Cursor workers: ignore the "Model for this project" line in CLAUDE.md; everythin
 - `POST /auth/otp/resend` `otpResendSchema` -> `{ challengeId, devCode? }`
 - `POST /auth/login` `loginSchema` -> `Me`;  `POST /auth/logout` -> 204;  `GET /auth/me` -> `Me`
 - `POST /auth/switch-location` `switchLocationSchema` -> `TenantMe`
-- `POST /auth/totp/setup` -> `{ otpauthUrl, secret }`; `POST /auth/totp/enable` `totpCodeSchema` -> 204 (admins)
+- `POST /auth/totp/setup` -> `{ otpauthUrl, secret }`; `POST /auth/totp/enable` `totpCodeSchema` -> 204 (any signed-in user, for their own account)
 - `POST /auth/accept-invite` `acceptInviteSchema` -> `TenantMe`
 ### Onboarding wizard (tenant session, tenant status `onboarding`)
 - `GET  /onboarding` -> `OnboardingState` (current step + `OnboardingDraft`; resumable)
