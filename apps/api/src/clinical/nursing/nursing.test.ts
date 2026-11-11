@@ -88,7 +88,7 @@ it('cannot record the same dose twice', async () => {
     method: 'POST',
     url: `${PREFIX}/mar/${dose!.id}/administer`,
     headers: headers(cookie),
-    payload: { status: 'given', doseGiven: '500 mg' },
+    payload: { status: 'given', doseGiven: '500 mg', reason: 'Ward round early (sample)' },
   });
   expect(ok.statusCode, ok.body).toBe(200);
   const again = await app.inject({

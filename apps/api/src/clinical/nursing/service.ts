@@ -139,8 +139,7 @@ export async function ensureMarForDay(tx: Tx, tenantId: string, encounterId: str
       if (placed >= dayStart && placed <= dayEnd) slots.push(placed);
     } else {
       for (const hour of DOSE_HOURS[freq] ?? []) {
-        const at = scheduleAtIst(dateKey, hour);
-        if (at >= placed || dateKey > istDateKey(placed)) slots.push(at);
+        slots.push(scheduleAtIst(dateKey, hour));
       }
     }
 
