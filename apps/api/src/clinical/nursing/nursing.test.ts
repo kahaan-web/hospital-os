@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { dbEnv } from '@hos/db';
 import { istDateKey } from '@hos/shared';
+import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../app';
 import { clinicalFixture, closeClinicalPools, expectIsolation, type ClinicalFixture } from '../testkit';
@@ -35,12 +37,26 @@ function headers(cookie: string, extra: Record<string, string> = {}) {
   return { cookie, 'x-hos-csrf': '1', 'idempotency-key': randomUUID(), ...extra };
 }
 
-async function findIpdEncounter(cookie: string): Promise<string> {
+async function wardRows(cookie: string): Promise<{ encounterId: string }[]> {
   const ward = await app.inject({ method: 'GET', url: `${PREFIX}/ward`, headers: { cookie } });
   expect(ward.statusCode, ward.body).toBe(200);
-  const rows = ward.json() as { encounterId: string }[];
-  if (rows[0]?.encounterId) return rows[0].encounterId;
-  throw new Error('no IPD patient on ward board — run db:seed');
+  return ward.json() as { encounterId: string }[];
+}
+
+/** The seeded TDS order sits on GW-1. Other suites leave extra admissions that sort earlier on the board. */
+async function findAmoxEncounter(cookie: string): Promise<string> {
+  const date = istDateKey(new Date());
+  for (const row of await wardRows(cookie)) {
+    const mar = await app.inject({
+      method: 'GET',
+      url: `${PREFIX}/encounters/${row.encounterId}/mar?date=${date}`,
+      headers: { cookie },
+    });
+    expect(mar.statusCode, mar.body).toBe(200);
+    const doses = mar.json() as { drugName: string }[];
+    if (doses.some((d) => d.drugName.toLowerCase().includes('amoxicillin'))) return row.encounterId;
+  }
+  throw new Error('no amoxicillin MAR on the ward — run db:seed');
 }
 
 it('rejects Lotus tenant on ward board', async () => {
@@ -52,7 +68,7 @@ it('rejects Lotus tenant on ward board', async () => {
 
 it('TDS MAR has three slots per day and regeneration is idempotent', async () => {
   const cookie = await login('owner@sunrise.demo');
-  const encounterId = await findIpdEncounter(cookie);
+  const encounterId = await findAmoxEncounter(cookie);
   const date = istDateKey(new Date());
   const first = await app.inject({
     method: 'GET',
@@ -75,14 +91,16 @@ it('TDS MAR has three slots per day and regeneration is idempotent', async () =>
 
 it('cannot record the same dose twice', async () => {
   const cookie = await login('owner@sunrise.demo');
-  const encounterId = await findIpdEncounter(cookie);
+  const encounterId = await findAmoxEncounter(cookie);
   const date = istDateKey(new Date());
   const mar = await app.inject({
     method: 'GET',
     url: `${PREFIX}/encounters/${encounterId}/mar?date=${date}`,
     headers: { cookie },
   });
-  const dose = (mar.json() as { id: string; status: string }[]).find((d) => d.status === 'due');
+  const dose = (mar.json() as { id: string; status: string; drugName: string }[]).find(
+    (d) => d.status === 'due' && d.drugName.toLowerCase().includes('amoxicillin'),
+  );
   expect(dose).toBeTruthy();
   const ok = await app.inject({
     method: 'POST',
@@ -102,7 +120,9 @@ it('cannot record the same dose twice', async () => {
 
 it('voids future MAR slots when the medicine order is cancelled', async () => {
   const cookie = await login('owner@sunrise.demo');
-  const encounterId = await findIpdEncounter(cookie);
+  const rows = await wardRows(cookie);
+  const encounterId = rows[0]?.encounterId;
+  if (!encounterId) throw new Error('no IPD patient on ward board — run db:seed');
   const date = istDateKey(new Date());
   await app.inject({ method: 'GET', url: `${PREFIX}/encounters/${encounterId}/mar?date=${date}`, headers: { cookie } });
 
@@ -148,7 +168,7 @@ it('voids future MAR slots when the medicine order is cancelled', async () => {
 });
 
 it('isolates mar_schedules across tenants', async () => {
-  const admin = await import('pg').then((m) => new m.default.Client({ connectionString: process.env.DATABASE_ADMIN_URL }));
+  const admin = new pg.Client({ connectionString: dbEnv().adminUrl });
   await admin.connect();
   try {
     const row = await admin.query<{ id: string }>(
