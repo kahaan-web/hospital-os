@@ -42,6 +42,15 @@ import { seedDemoPeople } from './seed-demo-people';
 const PLAN_MONTHLY_RUPEES: Record<TierKey, number> = { basic: 12999, medium: 15999, premium: 19999 };
 const SHEET_COUNTS: Record<TierKey, number> = { basic: 66, medium: 82, premium: 112 };
 const DEMO_SLUG = 'sunrise-care';
+/** Demo staff use the reserved sample range (+91 90000 ...). Existing demo tenants are moved onto it by seedDemoTenant. */
+const DEMO_STAFF_MOBILES: Record<string, string> = {
+  'owner@sunrise.demo': '9000010001',
+  'location.admin@sunrise.demo': '9000010002',
+  'frontdesk@sunrise.demo': '9000010003',
+  'doctor@sunrise.demo': '9000010004',
+  'nurse@sunrise.demo': '9000010005',
+  'cashier@sunrise.demo': '9000010006',
+};
 const DEMO_PASSWORD = 'Demo@12345';
 
 const PURPOSES = [
@@ -283,6 +292,12 @@ async function seedDemoTenant(db: ReturnType<typeof createDb>['db'], log: (m: st
   const existing = await db.select({ id: schema.tenants.id }).from(schema.tenants).where(eq(schema.tenants.slug, DEMO_SLUG));
   if (existing.length > 0) {
     log('demo tenant already present');
+    for (const [email, mobile] of Object.entries(DEMO_STAFF_MOBILES)) {
+      await db
+        .update(schema.users)
+        .set({ mobile })
+        .where(and(eq(schema.users.tenantId, existing[0]!.id), eq(schema.users.email, email)));
+    }
     printLogins(log);
     return;
   }
@@ -378,12 +393,12 @@ async function seedDemoTenant(db: ReturnType<typeof createDb>['db'], log: (m: st
     }
 
     const staff = [
-      { email: 'owner@sunrise.demo', name: 'Asha Demo Owner', mobile: '9811111111', role: 'tenant_admin', designation: 'owner' as const, locationId: null },
-      { email: 'location.admin@sunrise.demo', name: 'Rohan Demo Admin', mobile: '9822222222', role: 'location_admin', designation: null, locationId: locs[0]!.id },
-      { email: 'frontdesk@sunrise.demo', name: 'Meera Demo Desk', mobile: '9833333333', role: 'front_desk', designation: null, locationId: locs[0]!.id },
-      { email: 'doctor@sunrise.demo', name: 'Dr. Kabir Fictional', mobile: '9844444444', role: 'doctor', designation: null, locationId: locs[0]!.id },
-      { email: 'nurse@sunrise.demo', name: 'Nurse Lata Sample', mobile: '9855555555', role: 'nurse', designation: null, locationId: locs[0]!.id },
-      { email: 'cashier@sunrise.demo', name: 'Vikram Demo Cashier', mobile: '9866666666', role: 'cashier', designation: null, locationId: locs[0]!.id },
+      { email: 'owner@sunrise.demo', name: 'Asha Demo Owner', mobile: '9000010001', role: 'tenant_admin', designation: 'owner' as const, locationId: null },
+      { email: 'location.admin@sunrise.demo', name: 'Rohan Demo Admin', mobile: '9000010002', role: 'location_admin', designation: null, locationId: locs[0]!.id },
+      { email: 'frontdesk@sunrise.demo', name: 'Meera Demo Desk', mobile: '9000010003', role: 'front_desk', designation: null, locationId: locs[0]!.id },
+      { email: 'doctor@sunrise.demo', name: 'Dr. Kabir Fictional', mobile: '9000010004', role: 'doctor', designation: null, locationId: locs[0]!.id },
+      { email: 'nurse@sunrise.demo', name: 'Nurse Lata Sample', mobile: '9000010005', role: 'nurse', designation: null, locationId: locs[0]!.id },
+      { email: 'cashier@sunrise.demo', name: 'Vikram Demo Cashier', mobile: '9000010006', role: 'cashier', designation: null, locationId: locs[0]!.id },
     ];
     let ownerId: string | null = null;
     for (const person of staff) {

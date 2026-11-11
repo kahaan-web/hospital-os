@@ -240,8 +240,9 @@ it('enforces seat limits and resolves a pending payment only through the mock we
   const locations = await list(basicCookie, '/api/v1/tenant/locations');
   const locationId = locations.json()[0].id as string;
   const handle = createDb(dbEnv().appUrl, { max: 1 });
-  // 0026: hos_scope() is platform only for the hos_platform login. withPlatform on the app
-  // pool updates zero rows, so a pending outcome is captured. Restore in this test so later files stay off.
+  // 0026: hos_scope() is platform only for the hos_platform login. hos_app cannot hold platform
+  // scope, and withPlatform on the app pool updates zero rows, so a pending outcome is captured.
+  // Restore in this test so later files stay off.
   const platform = createDb(dbEnv().platformUrl, { max: 1 });
   try {
     await withTenant(handle.db, basicTenantId, async (tx) => {
@@ -345,7 +346,21 @@ function feature(cookie: string): Promise<LightMyRequestResponse> {
   });
 }
 
+/** Client `outcome: failure` is ignored only while the dev simulator is off. A previous file may have left it on. */
+async function simulatorOff(): Promise<void> {
+  const platform = createDb(dbEnv().platformUrl, { max: 1 });
+  try {
+    const updated = await withPlatform(platform.db, (tx) =>
+      tx.execute(sql`update platform_settings set mock_payment_simulator = false where id = 1`),
+    );
+    expect(updated.rowCount, 'platform login must turn the mock simulator off').toBe(1);
+  } finally {
+    await platform.close();
+  }
+}
+
 async function payChange(cookie: string, planId: string): Promise<void> {
+  await simulatorOff();
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const config = { planId, locationCount: 1, addonModuleIds: [] as string[] };
   const order = await send(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'change', config }, { 'idempotency-key': `chg-${stamp}` });

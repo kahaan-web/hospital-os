@@ -191,12 +191,85 @@ function billingGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+const OPD_DOC = '/api/v1/tenant/m/opd-visit/doctor';
+const CPOE = '/api/v1/tenant/m/cpoe';
+const opdFeat = CLINICAL_FEATURES.opdVisit;
+const cpoeFeat = CLINICAL_FEATURES.cpoe;
+
+/** B3 doctor workspace routes. */
+function doctorGuards(): [string, TenantRouteGuard][] {
+  return [
+    entry('GET', `${OPD_DOC}/my-queue`, {
+      permission: 'clinical.view',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('GET', `${OPD_DOC}/encounters/:id/case-paper`, {
+      permission: 'clinical.view',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('PUT', `${OPD_DOC}/encounters/:id/case-paper`, {
+      permission: 'clinical.order',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('POST', `${OPD_DOC}/encounters/:id/prescription`, {
+      permission: 'clinical.order',
+      module: 'opd-visit',
+      feature: opdFeat.visitRegistration,
+    }),
+    entry('GET', `${OPD_DOC}/encounters/:id/print/:kind/:format`, {
+      permission: 'clinical.view',
+      module: 'opd-visit',
+    }),
+    entry('GET', `${CPOE}/inpatients`, {
+      permission: 'clinical.view',
+      module: 'cpoe',
+    }),
+    entry('POST', `${CPOE}/encounters/:id/orders/diagnostic`, {
+      permission: 'clinical.order',
+      module: ['cpoe', 'lab'],
+      feature: cpoeFeat.diagnosticOrders,
+    }),
+    entry('POST', `${CPOE}/encounters/:id/orders/procedure`, {
+      permission: 'clinical.order',
+      module: 'cpoe',
+      feature: cpoeFeat.procedureOrders,
+    }),
+    entry('GET', `${CPOE}/order-sets`, {
+      permission: 'clinical.view',
+      module: 'cpoe',
+      feature: cpoeFeat.diagnosticOrders,
+    }),
+    entry('POST', `${CPOE}/order-sets`, {
+      permission: 'clinical.order',
+      module: 'cpoe',
+      feature: cpoeFeat.diagnosticOrders,
+    }),
+    entry('POST', `${CPOE}/encounters/:id/admission-request`, {
+      permission: 'clinical.order',
+      module: 'cpoe',
+      feature: cpoeFeat.requestAdmission,
+    }),
+    entry('GET', `${CPOE}/encounters/:id/vitals-graph`, {
+      permission: 'clinical.view',
+      module: 'cpoe',
+      feature: cpoeFeat.vitalsTable,
+    }),
+    entry('GET', `${CPOE}/encounters/:id/print/:kind/:format`, {
+      permission: 'clinical.view',
+      module: ['opd-visit', 'cpoe'],
+    }),
+  ];
+}
+
 const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/switch-location', { permission: AUTHENTICATED }),
-  entry('POST', '/api/v1/auth/totp/setup', { permission: 'tenant.manage' }),
-  entry('POST', '/api/v1/auth/totp/enable', { permission: 'tenant.manage' }),
+  entry('POST', '/api/v1/auth/totp/setup', { permission: AUTHENTICATED }),
+  entry('POST', '/api/v1/auth/totp/enable', { permission: AUTHENTICATED }),
 
   view('GET', '/api/v1/onboarding', 'tenant.manage'),
   view('GET', '/api/v1/onboarding/quote', 'tenant.manage'),
@@ -308,7 +381,32 @@ const ENTRIES: [string, TenantRouteGuard][] = [
 
   // B1. Permission, module and feature match each handler. Photo has no feature gate.
   ...registrationGuards(),
+  ...doctorGuards(),
 
+  // B7 pharmacy. Feature checks that depend on the body or the report key stay in the handler.
+  entry('GET', '/api/v1/tenant/m/pharmacy/items', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/items', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('PATCH', '/api/v1/tenant/m/pharmacy/items/:id', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/suppliers', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/suppliers', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('PATCH', '/api/v1/tenant/m/pharmacy/suppliers/:id', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/grns', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.material-receipts' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/supplier-returns', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.material-returns' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/stock', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.stock-register-summary-details' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/prescriptions/open', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-op-patients' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/sales', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/sales/:id', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/sales/:id/return', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/sales/:id/print', { permission: 'pharmacy.manage', module: 'pharmacy' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/inpatients', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/ip-issues', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/ip-issues', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/ip-issues/:id/return', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.issue-to-ip-patients-returns' }),
+  entry('POST', '/api/v1/tenant/m/pharmacy/adjustments', { permission: 'pharmacy.manage', module: 'pharmacy', feature: 'pharmacy.stock-adjustments' }),
+  entry('GET', '/api/v1/tenant/m/pharmacy/reports/:report', {
+    permission: ['pharmacy.manage', 'reports.view'],
+    module: 'pharmacy',
+  }),
   // B2 appointments and OPD. Feature is set when the handler requires that one key.
   // Routes that accept any of several features keep the check in the handler.
   entry('GET', '/api/v1/tenant/m/appointments/schedules/:doctorId', {

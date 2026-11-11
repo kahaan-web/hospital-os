@@ -37,6 +37,7 @@ export {
 } from './codes';
 export * from './patient';
 export * from './registration';
+export * from './doctor';
 export * from './adt';
 export * from './encounter';
 export {
@@ -65,6 +66,7 @@ export * from './gst-health';
 export * from './numbering';
 export * from './print';
 export * from './features';
+export * from './pharmacy';
 export * from './contracts';
 export * from './contract-dtos';
 export * from './appointments';

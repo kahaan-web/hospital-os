@@ -113,8 +113,22 @@ export function registerTenant(app: FastifyInstance, deps: Deps): void {
       const currentAssignments = await loadAssignments(gate.tx, user.id);
       assertMayEdit(gate, currentAssignments);
       if (req.body.status === 'active' && user.status === 'disabled') await assertSeatAvailable(gate.tx, 1);
+      // Lock invites before the user row, the same order accept-invite uses, so the two cannot deadlock.
+      if (req.body.status === 'disabled') {
+        await gate.tx.execute(sql`
+          select id from invitations
+          where user_id = ${user.id}::uuid and status = 'pending'
+          for update
+        `);
+      }
       if (req.body.status) await gate.tx.update(schema.users).set({ status: req.body.status }).where(eq(schema.users.id, user.id));
-      if (req.body.status === 'disabled') await gate.tx.execute(sql`select hos_session_revoke_user(${user.id}::uuid)`);
+      if (req.body.status === 'disabled') {
+        await gate.tx
+          .update(schema.invitations)
+          .set({ status: 'revoked' })
+          .where(and(eq(schema.invitations.userId, user.id), eq(schema.invitations.status, 'pending')));
+        await gate.tx.execute(sql`select hos_session_revoke_user(${user.id}::uuid)`);
+      }
       if (req.body.roleKey || req.body.locationIds !== undefined) {
         const roles = await roleDtos(gate.tx);
         const current = (await userDtos(gate.tx)).find((u) => u.id === user.id);
