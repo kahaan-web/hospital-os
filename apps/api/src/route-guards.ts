@@ -307,6 +307,76 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   // B1. Permission, module and feature match each handler. Photo has no feature gate.
   ...registrationGuards(),
   ...doctorGuards(),
+
+  // B2 appointments and OPD. Feature is set when the handler requires that one key.
+  // Routes that accept any of several features keep the check in the handler.
+  entry('GET', '/api/v1/tenant/m/appointments/schedules/:doctorId', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+  }),
+  entry('PUT', '/api/v1/tenant/m/appointments/schedules/:doctorId', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.takeAppointment,
+  }),
+  entry('GET', '/api/v1/tenant/m/appointments/slots', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+  }),
+  entry('GET', '/api/v1/tenant/m/appointments/diary', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.diary,
+  }),
+  entry('GET', '/api/v1/tenant/m/appointments/appointments/:id', {
+    permission: ['appointments.manage', 'opd.manage'],
+    module: 'appointments',
+  }),
+  entry('POST', '/api/v1/tenant/m/appointments/appointments', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.takeAppointment,
+  }),
+  entry('POST', '/api/v1/tenant/m/appointments/appointments/:id/reschedule', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.cancelReschedule,
+  }),
+  entry('POST', '/api/v1/tenant/m/appointments/appointments/:id/cancel', {
+    permission: 'appointments.manage',
+    module: 'appointments',
+    feature: CLINICAL_FEATURES.appointments.cancelReschedule,
+  }),
+  entry('POST', '/api/v1/tenant/m/opd-visit/visits', {
+    permission: 'opd.manage',
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegistration,
+  }),
+  entry('GET', '/api/v1/tenant/m/opd-visit/queue', {
+    permission: 'opd.manage',
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegistration,
+  }),
+  entry('POST', '/api/v1/tenant/m/opd-visit/visits/:id/status', {
+    permission: 'opd.manage',
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegistration,
+  }),
+  entry('GET', '/api/v1/tenant/m/opd-visit/reports/visit-register', {
+    permission: ['opd.manage', 'reports.view'],
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/opd-visit/reports/visit-detail-by-doctor', {
+    permission: ['opd.manage', 'reports.view'],
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitDetailByDoctor,
+  }),
+  entry('GET', '/api/v1/tenant/m/opd-visit/reports/visit-statistics', {
+    permission: ['opd.manage', 'reports.view'],
+    module: 'opd-visit',
+    feature: CLINICAL_FEATURES.opdVisit.visitStatistics,
+  }),
 ];
 
 const keys = ENTRIES.map(([key]) => key);

@@ -56,6 +56,12 @@ export interface Side {
   noteId: string;
   chargeId: string;
   cashId: string;
+  scheduleId: string;
+  exceptionId: string;
+  appointmentId: string;
+  queueId: string;
+  /** Second encounter so an opd_queue insert does not collide with the fixture row. */
+  spareEncounterId: string;
   mlcId: string;
   orderSetId: string;
   prescriptionTemplateId: string;
@@ -404,6 +410,41 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      ) values ($1, $2, 'receipt', 'in', 'cash', 100, $3, $4, $5, 'bill', $5) returning id`,
     [tenant.id, location.id, `ZC${runId}${mark}`, patient.id, encounter.id],
   );
+  const spareEncounter = mark === 'b'
+    ? await one<{ id: string }>(
+      migrator,
+      `insert into encounters (tenant_id, location_id, patient_id, kind, number)
+       values ($1, $2, $3, 'opd', $4) returning id`,
+      [tenant.id, location.id, patient.id, `ZS${runId}${mark}`],
+    )
+    : encounter;
+  const schedule = await one<{ id: string }>(
+    migrator,
+    `insert into doctor_schedules (
+       tenant_id, doctor_id, location_id, weekday, start_time, end_time, slot_minutes, max_per_slot, is_sample
+     ) values ($1, $2, $3, 1, '09:00', '12:00', 15, 2, true) returning id`,
+    [tenant.id, doctor.id, location.id],
+  );
+  const exception = await one<{ id: string }>(
+    migrator,
+    `insert into schedule_exceptions (tenant_id, doctor_id, location_id, on_date, kind, reason, is_sample)
+     values ($1, $2, $3, '2026-01-26', 'closed', 'Sample', true) returning id`,
+    [tenant.id, doctor.id, location.id],
+  );
+  const appointment = await one<{ id: string }>(
+    migrator,
+    `insert into appointments (
+       tenant_id, location_id, patient_id, doctor_id, date, slot_start, slot_end, seq, channel, status, reason, is_sample
+     ) values ($1, $2, $3, $4, '2026-06-01', '09:00', '09:15', 1, 'counter', 'booked', 'Sample', true) returning id`,
+    [tenant.id, location.id, patient.id, doctor.id],
+  );
+  const queue = await one<{ id: string }>(
+    migrator,
+    `insert into opd_queue (
+       tenant_id, location_id, encounter_id, patient_id, doctor_id, token, status, visit_date, is_sample
+     ) values ($1, $2, $3, $4, $5, 1, 'waiting', current_date, true) returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, doctor.id],
+  );
   const document = await one<{ id: string }>(
     migrator,
     `insert into patient_documents (tenant_id, patient_id, kind, file_path, mime, size)
@@ -463,6 +504,11 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     noteId: note.id,
     chargeId: charge.id,
     cashId: cash.id,
+    scheduleId: schedule.id,
+    exceptionId: exception.id,
+    appointmentId: appointment.id,
+    queueId: queue.id,
+    spareEncounterId: spareEncounter.id,
     mlcId: mlc.id,
     orderSetId: orderSet.id,
     prescriptionTemplateId: rxTemplate.id,
@@ -476,6 +522,10 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   // transaction, then turn them back on before commit (DDL rolls back with the tx).
   const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes'];
   const steps = [
+    `delete from opd_queue where tenant_id = any($1::uuid[])`,
+    `delete from appointments where tenant_id = any($1::uuid[])`,
+    `delete from schedule_exceptions where tenant_id = any($1::uuid[])`,
+    `delete from doctor_schedules where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,
