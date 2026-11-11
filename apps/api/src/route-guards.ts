@@ -1,3 +1,4 @@
+import { CLINICAL_FEATURES } from '@hos/shared';
 import type { FastifyRequest } from 'fastify';
 import { ApiError } from './http';
 
@@ -37,6 +38,83 @@ function entry(method: string, url: string, guard: TenantRouteGuard): [string, T
 
 const view = (method: string, url: string, permission: string, extra: Partial<TenantRouteGuard> = {}): [string, TenantRouteGuard] =>
   entry(method, url, { permission, ...extra });
+
+const REG = '/api/v1/tenant/m/patient-registration';
+const regFeature = CLINICAL_FEATURES.patientRegistration;
+
+/** B1 routes. Print features depend on :kind and are enforced in the handler. */
+function registrationGuards(): [string, TenantRouteGuard][] {
+  return [
+    entry('POST', `${REG}/patients`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.newRegistration,
+    }),
+    entry('PATCH', `${REG}/patients/:id`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.editRegistration,
+    }),
+    entry('POST', `${REG}/patients/:id/photo`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+    }),
+    entry('GET', `${REG}/patients/:id/documents`, {
+      permission: ['patients.view', 'patients.manage'],
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('POST', `${REG}/patients/:id/documents`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('DELETE', `${REG}/patients/:id/documents/:docId`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('GET', `${REG}/patients/:id/documents/:docId/file`, {
+      permission: ['patients.view', 'patients.manage'],
+      module: 'patient-registration',
+      feature: regFeature.attachPatientDocuments,
+    }),
+    entry('GET', `${REG}/patients/:id/print/:kind/:format`, {
+      permission: ['patients.view', 'patients.manage'],
+      module: 'patient-registration',
+    }),
+    entry('GET', `${REG}/reports/register`, {
+      permission: 'reports.view',
+      module: 'patient-registration',
+      feature: regFeature.printRegister,
+    }),
+    entry('GET', `${REG}/reports/register.csv`, {
+      permission: 'reports.view',
+      module: 'patient-registration',
+      feature: regFeature.patientExcelData,
+    }),
+    entry('POST', `${REG}/patients/:id/mailer`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.sendMailers,
+    }),
+    entry('GET', `${REG}/mlc`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.mlcCaseRegister,
+    }),
+    entry('POST', `${REG}/mlc`, {
+      permission: 'patients.manage',
+      module: 'patient-registration',
+      feature: regFeature.mlcRegistration,
+    }),
+    entry('GET', `${REG}/reports/mlc`, {
+      permission: 'reports.view',
+      module: 'patient-registration',
+      feature: regFeature.mlcCaseRegister,
+    }),
+  ];
+}
 
 const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
@@ -152,6 +230,9 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/tenant/clinical/codes', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/doctors', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/services', { permission: AUTHENTICATED }),
+
+  // B1. Permission, module and feature match each handler. Photo has no feature gate.
+  ...registrationGuards(),
 ];
 
 const keys = ENTRIES.map(([key]) => key);

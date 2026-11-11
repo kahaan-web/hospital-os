@@ -225,6 +225,9 @@ it('enforces seat limits and resolves a pending payment only through the mock we
   const locations = await list(basicCookie, '/api/v1/tenant/locations');
   const locationId = locations.json()[0].id as string;
   const handle = createDb(dbEnv().appUrl, { max: 1 });
+  // 0026: hos_scope() is platform only for the hos_platform login. withPlatform on the app
+  // pool updates zero rows, so a pending outcome is captured. Restore in this test so later files stay off.
+  const platform = createDb(dbEnv().platformUrl, { max: 1 });
   try {
     await withTenant(handle.db, basicTenantId, async (tx) => {
       for (let i = 0; i < 6; i++) {
@@ -252,7 +255,10 @@ it('enforces seat limits and resolves a pending payment only through the mock we
     expect(over.statusCode).toBe(403);
     expect(over.json().error.code).toBe('seat_limit');
 
-    await withPlatform(handle.db, (tx) => tx.execute(sql`update platform_settings set mock_payment_simulator = true where id = 1`));
+    const simulator = await withPlatform(platform.db, (tx) =>
+      tx.execute(sql`update platform_settings set mock_payment_simulator = true where id = 1`),
+    );
+    expect(simulator.rowCount, 'platform login must turn the mock simulator on').toBe(1);
     const stamp = `${Date.now()}-sim`;
     const order = await send(
       basicCookie,
@@ -298,8 +304,12 @@ it('enforces seat limits and resolves a pending payment only through the mock we
     const upgraded = await list(basicCookie, '/api/v1/billing/subscription');
     expect(upgraded.json().planKey).toBe('medium');
   } finally {
-    await withPlatform(handle.db, (tx) => tx.execute(sql`update platform_settings set mock_payment_simulator = false where id = 1`));
-    await handle.close();
+    try {
+      await withPlatform(platform.db, (tx) => tx.execute(sql`update platform_settings set mock_payment_simulator = false where id = 1`));
+    } finally {
+      await platform.close();
+      await handle.close();
+    }
   }
 });
 

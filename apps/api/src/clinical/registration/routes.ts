@@ -35,7 +35,7 @@ import {
   sendMailer,
   updatePatient,
 } from './service';
-import { detectPatientFile, patientPhotoMime } from './uploads';
+import { detectPatientFile } from './uploads';
 
 const MODULE = 'patient-registration';
 const PREFIX = `/api/v1/tenant/m/${MODULE}`;
@@ -129,6 +129,8 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
       }
       if (!fileBuffer) throw new ApiError(400, 'validation', 'Attach a PDF, JPG or PNG up to 5 MB');
       const detected = detectPatientFile(fileBuffer);
+      // Reject an unknown patient before mkdir/write so a bad id leaves no file on disk.
+      await readPatient(gate.tx, req.params.id);
       const name = `${docFileName()}.${detected.ext}`;
       const relative = join('patients', gate.actor.tenantId!, req.params.id, 'docs', name);
       await ensureUploadDir(deps.env.uploadDir, ['patients', gate.actor.tenantId!, req.params.id, 'docs']);
@@ -139,12 +141,12 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.delete(`${PREFIX}/patients/:patientId/documents/:docId`, { schema: { params: z.object({ patientId: z.uuid(), docId: z.uuid() }) } }, async (req, reply) => {
+  r.delete(`${PREFIX}/patients/:id/documents/:docId`, { schema: { params: z.object({ id: z.uuid(), docId: z.uuid() }) } }, async (req, reply) => {
     await run(req, reply, async (gate) => {
       await guardRegistration(gate);
       await gate.requireFeature(registrationFeatures.attachPatientDocuments);
       gate.requirePermission('patients.manage');
-      await deleteDocument({ ...ctx(gate), audit: gate.audit }, req.params.patientId, req.params.docId);
+      await deleteDocument({ ...ctx(gate), audit: gate.audit }, req.params.id, req.params.docId);
       reply.code(204);
       return null;
     });
