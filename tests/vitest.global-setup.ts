@@ -13,6 +13,12 @@ const TEST_DB = process.env.HOS_TEST_DB ?? 'hos_test';
  */
 export default async function globalSetup(): Promise<void> {
   process.env.HOS_DB_NAME = TEST_DB;
+  // Keep DATABASE_* URLs aligned with HOS_DB_NAME for tests that read them directly (e.g. nursing isolation).
+  const urls = dbEnv();
+  process.env.DATABASE_ADMIN_URL = urls.adminUrl;
+  process.env.DATABASE_MIGRATION_URL = urls.migrationUrl;
+  process.env.DATABASE_URL = urls.appUrl;
+  process.env.DATABASE_PLATFORM_URL = urls.platformUrl;
   const log = (m: string) => console.log(`[vitest:globalSetup] ${m}`);
   await migrate(log);
   await seed(log);

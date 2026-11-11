@@ -71,6 +71,9 @@ export interface Side {
   refundId: string;
   /** OP bill credit note (`bill_credit_notes`). `creditNoteId` is the platform invoice note. */
   billCreditNoteId: string;
+  payerId: string;
+  encounterPayerId: string;
+  payerReceivableId: string;
   orderSetId: string;
   prescriptionTemplateId: string;
   pharmacyItemId: string;
@@ -560,6 +563,24 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, $3, $4, 100, 'Sample credit note', 'issued') returning id`,
     [tenant.id, bill.id, refund.id, `CN${runId}${mark}`],
   );
+  const payer = await one<{ id: string }>(
+    migrator,
+    `insert into payers (tenant_id, code, name, kind, gstin, state_code, is_sample)
+     values ($1, $2, 'Fixture Payer (Sample)', 'tpa', '', 'MH', true) returning id`,
+    [tenant.id, `TPA${runId}${mark}`],
+  );
+  const encounterPayer = await one<{ id: string }>(
+    migrator,
+    `insert into encounter_payers (tenant_id, encounter_id, payer_id, policy_no)
+     values ($1, $2, $3, 'FIXTURE-POL') returning id`,
+    [tenant.id, encounter.id, payer.id],
+  );
+  const payerReceivable = await one<{ id: string }>(
+    migrator,
+    `insert into payer_receivables (tenant_id, bill_id, payer_id, amount_paise, status)
+     values ($1, $2, $3, 100, 'open') returning id`,
+    [tenant.id, bill.id, payer.id],
+  );
   const orderSet = await one<{ id: string }>(
     migrator,
     `insert into order_sets (tenant_id, name, kind, items)
@@ -789,6 +810,9 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     concessionId: concession.id,
     refundId: refund.id,
     billCreditNoteId: billCreditNote.id,
+    payerId: payer.id,
+    encounterPayerId: encounterPayer.id,
+    payerReceivableId: payerReceivable.id,
     orderSetId: orderSet.id,
     prescriptionTemplateId: rxTemplate.id,
     pharmacyItemId: pharmacyItem.id,
@@ -833,6 +857,7 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   // transaction, then turn them back on before commit (DDL rolls back with the tx).
   const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes', 'pharmacy_stock_moves'];
   const steps = [
+    `delete from payer_receivables where tenant_id = any($1::uuid[])`,
     `delete from bill_credit_notes where tenant_id = any($1::uuid[])`,
     `delete from refunds where tenant_id = any($1::uuid[])`,
     `delete from concessions where tenant_id = any($1::uuid[])`,
@@ -841,6 +866,8 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `update charges set bill_id = null where tenant_id = any($1::uuid[])`,
     `delete from deposits where tenant_id = any($1::uuid[])`,
     `delete from bills where tenant_id = any($1::uuid[])`,
+    `delete from encounter_payers where tenant_id = any($1::uuid[])`,
+    `delete from payers where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_stock_moves where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_supplier_return_lines where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_supplier_returns where tenant_id = any($1::uuid[])`,

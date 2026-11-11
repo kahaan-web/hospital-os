@@ -62,6 +62,7 @@ export * from './vitals';
 export * from './notes';
 export * from './charges';
 export * from './billing';
+export * from './ipbilling';
 export * from './gst-health';
 export * from './numbering';
 export * from './print';

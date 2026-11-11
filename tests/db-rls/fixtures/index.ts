@@ -9,6 +9,7 @@ import { seedClinicalFoundation } from './clinical-foundation';
 import { seedCore } from './core';
 import { seedCreditNotes } from './credit-notes';
 import { seedDoctor } from './doctor';
+import { seedIpbilling } from './ipbilling';
 import { seedLab } from './lab';
 import { seedNursing } from './nursing';
 import { seedPharmacy } from './pharmacy';
@@ -20,6 +21,7 @@ export const fixtureModules: FixtureModule[] = [
   { name: 'clinical-foundation', seed: seedClinicalFoundation },
   // OP lines need an encounter and a charge from clinical-foundation.
   { name: 'billing-op', seed: seedBillingOp },
+  { name: 'ipbilling', seed: seedIpbilling },
   { name: 'credit-notes', seed: seedCreditNotes },
   { name: 'registration', seed: seedRegistration },
   { name: 'doctor', seed: seedDoctor },

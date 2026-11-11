@@ -119,6 +119,72 @@ function registrationGuards(): [string, TenantRouteGuard][] {
 const OP = '/api/v1/tenant/m/op-billing';
 const opFeature = CLINICAL_FEATURES.opBilling;
 const opPost = 'billing.op.post';
+const IP = '/api/v1/tenant/m/ip-billing';
+const ipFeature = CLINICAL_FEATURES.ipBilling;
+const ipPerm = 'billing.ip.manage';
+
+/** B6 IP billing. Settlements reuse the OP billing permission for refunds where noted. */
+function ipbillingGuards(): [string, TenantRouteGuard][] {
+  const post = (method: string, url: string, feature: string): [string, TenantRouteGuard] =>
+    entry(method, url, { permission: ipPerm, module: 'ip-billing', feature });
+  return [
+    entry('GET', `${IP}/running`, { permission: ipPerm, module: 'ip-billing' }),
+    post('POST', `${IP}/encounters/:encounterId/charges`, ipFeature.postingCharges),
+    post('POST', `${IP}/charges/:id/reverse`, ipFeature.postingReversals),
+    post('GET', `${IP}/encounters/:encounterId/statement`, ipFeature.statement),
+    post('POST', `${IP}/encounters/:encounterId/bills`, ipFeature.billPreparation),
+    post('GET', `${IP}/bills`, ipFeature.billPreparation),
+    post('GET', `${IP}/bills/:id`, ipFeature.billPreparation),
+    post('POST', `${IP}/bills/:id/finalise`, ipFeature.billPreparation),
+    post('POST', `${IP}/bills/:id/split`, ipFeature.billSettlement),
+    post('GET', `${IP}/bills/:id/receivables`, ipFeature.billSettlement),
+    post('POST', `${IP}/bills/:id/settle`, ipFeature.billSettlement),
+    post('POST', `${IP}/bills/:id/concessions`, ipFeature.concessions),
+    post('GET', `${IP}/deposits`, ipFeature.acceptDeposit),
+      post('POST', `${IP}/deposits`, ipFeature.acceptDeposit),
+    post('POST', `${IP}/deposits/:id/refund`, ipFeature.refundDeposit),
+    entry('GET', `${IP}/payers`, { permission: ipPerm, module: 'ip-billing' }),
+    entry('POST', `${IP}/payers`, { permission: ipPerm, module: 'ip-billing' }),
+    entry('PATCH', `${IP}/payers/:id`, { permission: ipPerm, module: 'ip-billing' }),
+    entry('GET', `${IP}/encounters/:encounterId/payer`, { permission: ipPerm, module: 'ip-billing' }),
+    entry('PUT', `${IP}/encounters/:encounterId/payer`, { permission: ipPerm, module: 'ip-billing' }),
+    entry('GET', `${IP}/reports/bill-register`, {
+      permission: [ipPerm, 'reports.view'],
+      module: 'ip-billing',
+      feature: ipFeature.billRegister,
+    }),
+    entry('GET', `${IP}/reports/cash`, {
+      permission: [ipPerm, 'reports.view'],
+      module: 'ip-billing',
+      feature: ipFeature.cashSummary,
+    }),
+    entry('GET', `${IP}/reports/revenue`, {
+      permission: [ipPerm, 'reports.view'],
+      module: 'ip-billing',
+      feature: ipFeature.revenueSummary,
+    }),
+    entry('GET', `${IP}/reports/doctor-sharing`, {
+      permission: [ipPerm, 'reports.view', 'accounts.manage'],
+      module: 'ip-billing',
+      feature: ipFeature.doctorSharing,
+    }),
+    entry('GET', `${IP}/reports/outstanding`, {
+      permission: [ipPerm, 'reports.view'],
+      module: 'ip-billing',
+      feature: ipFeature.patientOutstanding,
+    }),
+    entry('GET', `${IP}/reports/deposits`, {
+      permission: [ipPerm, 'reports.view'],
+      module: 'ip-billing',
+      feature: ipFeature.depositRegister,
+    }),
+    entry('GET', `${IP}/reports/concessions`, {
+      permission: [ipPerm, 'reports.view'],
+      module: 'ip-billing',
+      feature: ipFeature.concessionRegister,
+    }),
+  ];
+}
 
 /** B5 OP billing. Feature matches the handler's requireFeature; service masters have none. */
 function billingGuards(): [string, TenantRouteGuard][] {
@@ -637,6 +703,7 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     feature: CLINICAL_FEATURES.adt.dischargeSummaryReport,
   }),
   ...billingGuards(),
+  ...ipbillingGuards(),
   // B8. Ingest is token-authenticated in the handler; the row keeps the inventory closed.
   ...labGuards(),
   entry('GET', '/api/v1/tenant/m/nurse-station/ward', {

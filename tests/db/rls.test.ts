@@ -72,6 +72,9 @@ const TABLES = [
   'concessions',
   'refunds',
   'bill_credit_notes',
+  'payers',
+  'encounter_payers',
+  'payer_receivables',
   'order_sets',
   'prescription_templates',
   'pharmacy_items',
@@ -967,7 +970,15 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.billId, `cancel_reason = 'Touched by A'`, 'cancel_reason',
           `insert into bills (tenant_id, location_id, patient_id, encounter_id, kind, doc_type, status, pay_class, subtotal_paise, total_paise) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', 'op', 'bill_of_supply', 'draft', 'cash', 100, 100)`),
-        beforeMassDelete: ['delete from bill_credit_notes', 'delete from refunds', 'delete from concessions', 'delete from bill_settlements', 'delete from bill_lines', 'update charges set bill_id = null'],
+        beforeMassDelete: [
+          'delete from payer_receivables',
+          'delete from bill_credit_notes',
+          'delete from refunds',
+          'delete from concessions',
+          'delete from bill_settlements',
+          'delete from bill_lines',
+          'update charges set bill_id = null',
+        ],
       };
     case 'bill_lines':
       return row(common, 'id = $1', b.billLineId, `description = 'Touched by A'`, 'description',
@@ -990,6 +1001,21 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'bill_credit_notes':
       return row(common, 'id = $1', b.billCreditNoteId, `reason = 'Touched by A'`, 'reason',
         `insert into bill_credit_notes (tenant_id, bill_id, number, amount_paise) values ($1, '${b.billId}', 'CNNO${pair.runId}', 100)`);
+    case 'payers':
+      return {
+        ...row(common, 'id = $1', b.payerId, `name = 'Touched by A'`, 'name',
+          `insert into payers (tenant_id, code, name, kind, is_sample) values ($1, 'ZP${pair.runId}', 'Nope', 'tpa', true)`),
+        beforeMassDelete: ['delete from payer_receivables', 'delete from encounter_payers'],
+      };
+    case 'encounter_payers':
+      return row(common, 'id = $1', b.encounterPayerId, `policy_no = 'Touched by A'`, 'policy_no',
+        `insert into encounter_payers (tenant_id, encounter_id, payer_id, policy_no) values ($1, '${b.encounterId}', '${b.payerId}', 'ZNOPE')`);
+    case 'payer_receivables':
+      return {
+        ...row(common, 'id = $1', b.payerReceivableId, `status = 'denied'`, 'status',
+          `insert into payer_receivables (tenant_id, bill_id, payer_id, amount_paise, status) values ($1, '${b.billId}', '${b.payerId}', 100, 'open')`),
+        beforeMassDelete: [],
+      };
     case 'order_sets':
       return {
         ...common,
