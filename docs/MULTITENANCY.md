@@ -81,7 +81,7 @@ Downgrades apply **immediately**, with **no cash refund**. The unused pre-tax am
 
 ### Renewals
 
-`POST /api/v1/admin/tenants/:id/dev/advance-clock` with `{ "days": N }` is App Admin only and returns **404** when `NODE_ENV` is `production`. It pretends the clock moved forward `N` days. Each time the subscription period end falls on or before that horizon, the API:
+`POST /api/v1/admin/tenants/:id/dev/advance-clock` with `{ "days": N }` is App Admin only and returns **404** unless `HOS_DEV_INSECURE=1` (and `NODE_ENV` is not `production`). It pretends the clock moved forward `N` days. Each time the subscription period end falls on or before that horizon, the API:
 
 - starts the next period at the old period end
 - writes a **renewal invoice** for the full next period (plan + add-ons, sample price, GST), marked paid because the invoice table only stores `paid` or `void` and the gateway is mock
@@ -92,11 +92,11 @@ There is no dunning and no real collection. Calling the endpoint does not change
 
 ### Who decides a mock payment
 
-The server captures the payment. A client `outcome` on `POST /billing/orders/:id/pay` is ignored unless both of these are true: `NODE_ENV` is not `production`, and `platform_settings.mock_payment_simulator` is true (default false). That flag is the dev simulator. The checkout screen can still send an outcome; the API does not use it while the flag is off, so the demo Pay button records a capture.
+The server captures the payment. A client `outcome` on `POST /billing/orders/:id/pay` is ignored unless both of these are true: `HOS_DEV_INSECURE=1` (ignored when `NODE_ENV=production`), and `platform_settings.mock_payment_simulator` is true (default false). That flag is the dev simulator. The checkout screen can still send an outcome; the API does not use it while the flag is off, so the demo Pay button records a capture.
 
-A hospital session cannot capture or fail its own pending payment. `POST /billing/payments/:id/resolve` is not a tenant route. The mock gateway calls `POST /api/v1/billing/webhooks/mock` with `Idempotency-Key` and `x-hos-signature` (hex HMAC-SHA256 of the canonical JSON body, keyed with `MOCK_GATEWAY_KEY_SECRET`). The handler looks up the payment’s tenant through `hos_payment_tenant`, then transitions the payment. `hos_app` cannot `SELECT … FOR UPDATE` a payment, because that requires `UPDATE` and those grants were revoked. The lock sits inside `hos_payment_transition`, `hos_order_mark_paid`, and `hos_subscription_apply_order` (`SELECT … FOR UPDATE` as the table owner). Pay still locks the order row directly, which is allowed because `orders` keeps a column `UPDATE` grant. A bad signature is **401 `signature_invalid`**. The route is exempt from the browser CSRF header because the signature is the credential. Verify and fulfil also lock the order and the payment in the request transaction.
+A hospital session cannot capture or fail its own pending payment. `POST /billing/payments/:id/resolve` is not a tenant route. The mock gateway calls `POST /api/v1/billing/webhooks/mock` with `Idempotency-Key`, `x-hos-timestamp` (unix seconds, rejected when more than 5 minutes off), and `x-hos-signature` (hex HMAC-SHA256 of `timestamp` + `.` + the canonical JSON body, keyed with `MOCK_GATEWAY_WEBHOOK_SECRET`). The body includes `eventId`. A second delivery of the same event id is a replay and does not write another audit row. The handler looks up the payment’s tenant through `hos_payment_tenant`, then transitions the payment. `hos_app` cannot `SELECT … FOR UPDATE` a payment, because that requires `UPDATE` and those grants were revoked. The lock sits inside `hos_payment_transition`, `hos_order_mark_paid`, and `hos_subscription_apply_order` (`SELECT … FOR UPDATE` as the table owner). Pay still locks the order row directly, which is allowed because `orders` keeps a column `UPDATE` grant. A bad signature is **401 `signature_invalid`**. The route is exempt from the browser CSRF header because the signature is the credential. Verify and fulfil also lock the order and the payment in the request transaction.
 
-`Idempotency-Key` is required on order create, pay, verify, change-apply, and the mock webhook. Change-quote only prices a change, so it does not require a key.
+`Idempotency-Key` is required on order create, pay, verify, change-apply, and the mock webhook. The stored response is scoped to the signed-in user, so another user in the same hospital who presents the same key does not receive the first response. Change-quote only prices a change, so it does not require a key.
 
 ### Financial grants
 

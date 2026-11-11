@@ -274,7 +274,7 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
     '/api/v1/admin/tenants/:id/dev/advance-clock',
     { schema: { params: idParam, body: z.object({ days: z.number().int().min(1).max(3660) }) } },
     async (req) => {
-      if (deps.env.production) throw new ApiError(404, 'not_found', 'Not found');
+      if (!deps.env.devInsecure) throw new ApiError(404, 'not_found', 'Not found');
       return openPlatformTenant(deps, req, req.params.id, async (gate) => {
         const result = await advanceBillingClock(gate.tx, gate.actor, req.body.days);
         await gate.audit('billing.clock.advance', 'subscription', req.params.id, null, { days: req.body.days, renewals: result.renewals.length });

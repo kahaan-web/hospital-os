@@ -26,7 +26,7 @@ Cursor workers: ignore the "Model for this project" line in CLAUDE.md; everythin
 - `GET  /catalog` -> `Catalog` (active plans with prices, modules incl. status, features, plan-feature matrix)
 - `GET  /privacy-notice/current` -> `PrivacyNoticeDto`
 ### Auth (tenant users + platform admins)
-- `POST /auth/signup` body `signupSchema` -> `{ challengeId, devCode? }` (mock OTP; devCode only if MOCK_EXPOSE_SECRETS)
+- `POST /auth/signup` body `signupSchema` -> `{ challengeId, devCode? }` (mock OTP; devCode only if HOS_DEV_INSECURE=1 and MOCK_EXPOSE_SECRETS is not false)
 - `POST /auth/otp/verify` `otpVerifySchema` -> `TenantMe` (creates session; user + draft tenant in `onboarding` state)
 - `POST /auth/otp/resend` `otpResendSchema` -> `{ challengeId, devCode? }`
 - `POST /auth/login` `loginSchema` -> `Me`;  `POST /auth/logout` -> 204;  `GET /auth/me` -> `Me`

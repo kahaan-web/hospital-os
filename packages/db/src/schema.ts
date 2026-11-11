@@ -67,7 +67,7 @@ export const platformSettings = pgTable(
     defaultSacCode: text('default_sac_code').notNull(),
     defaultGstRateBp: integer('default_gst_rate_bp').notNull().default(1800),
     invoicePrefix: text('invoice_prefix').notNull().default('HOS'),
-    /** When true, and NODE_ENV is not production, pay attempts honour a client outcome. */
+    /** When true, and HOS_DEV_INSECURE=1 (never in production), pay attempts honour a client outcome. */
     mockPaymentSimulator: boolean('mock_payment_simulator').notNull().default(false),
     updatedAt: updatedAt(),
   },

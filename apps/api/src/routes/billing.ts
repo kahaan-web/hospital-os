@@ -8,11 +8,14 @@ import { applySubscriptionChange, createOrder, payOrder, resolvePending, verifyP
 import { invoiceDto, invoiceListItem, quoteFor, subscriptionDto } from '../catalog';
 import { invoiceHtml, invoicePdf } from '../documents';
 import { openTenant, type Deps, type TenantGate } from '../guard';
-import { ApiError, idempotencyKey, requestHash, requestMeta, routeTemplate, tenant, withIdempotency, type Actor } from '../http';
+import { webhookTimestampFresh } from '../crypto';
+import { ApiError, idempotencyKey, idempotencyScope, requestHash, requestMeta, routeTemplate, tenant, withIdempotency, type Actor } from '../http';
 
 const mockWebhookSchema = z.object({
   paymentId: z.string().min(1).max(64),
   outcome: z.enum(['success', 'failure']),
+  /** One id per gateway event. A second delivery with the same id is a replay, not a new capture. */
+  eventId: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/),
 });
 
 export function registerBilling(app: FastifyInstance, deps: Deps): void {
@@ -32,7 +35,7 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
   r.post('/api/v1/billing/orders/:orderId/pay', { schema: { params: z.object({ orderId: z.string().min(1) }), body: payAttemptSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       gate.requirePermission('billing.manage');
-      return payOrder(gate.tx, gate.actor, req.params.orderId, req.body, deps.gateway, deps.env.production);
+      return payOrder(gate.tx, gate.actor, req.params.orderId, req.body, deps.gateway, deps.env.devInsecure);
     }),
   );
 
@@ -51,8 +54,10 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
   r.post('/api/v1/billing/webhooks/mock', { schema: { body: mockWebhookSchema } }, async (req, reply) => {
     const key = idempotencyKey(req);
     if (!key) throw new ApiError(400, 'idempotency_key_required', 'Send an Idempotency-Key header (8–128 letters, numbers, _ or -)');
+    const timestamp = req.headers['x-hos-timestamp'];
     const presented = req.headers['x-hos-signature'];
-    if (!deps.gateway.verifyWebhook(req.body, typeof presented === 'string' ? presented : '')) {
+    const stamp = typeof timestamp === 'string' ? timestamp : '';
+    if (!webhookTimestampFresh(stamp) || !deps.gateway.verifyWebhook(stamp, req.body, typeof presented === 'string' ? presented : '')) {
       return reply.status(401).send({ error: { code: 'signature_invalid', message: 'The webhook signature does not match' } });
     }
     const found = await deps.db.execute<{ tenant_id: string | null }>(sql`select hos_payment_tenant(${req.body.paymentId}) as tenant_id`);
@@ -68,10 +73,18 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
       ip: meta.ip,
       userAgent: meta.userAgent,
     };
+    const hash = requestHash(req);
     return tenant(deps.db, tenantId, (tx) =>
-      withIdempotency(tx, reply, tenantId, routeTemplate(req), key, true, requestHash(req), () =>
-        resolvePending(tx, actor, req.body.paymentId, req.body.outcome, deps.gateway),
-      ),
+      withIdempotency(tx, reply, tenantId, idempotencyScope(routeTemplate(req), actor.actorId), key, true, hash, async () => {
+        const claimed = await tx.execute<{ key: string }>(sql`
+          insert into idempotency_keys (tenant_id, scope, key, request_hash, response_status, expires_at)
+          values (${tenantId}, 'webhook-event', ${req.body.eventId}, ${hash}, 200, now() + interval '10 years')
+          on conflict (tenant_id, scope, key) do nothing
+          returning key
+        `);
+        if (claimed.rows.length === 0) return { replayed: true, eventId: req.body.eventId };
+        return resolvePending(tx, actor, req.body.paymentId, req.body.outcome, deps.gateway);
+      }),
     );
   });
 

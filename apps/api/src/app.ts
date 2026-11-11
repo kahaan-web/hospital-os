@@ -7,6 +7,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import { apiEnv } from './env';
 import { installErrorHandler } from './http';
+import { rememberRouteSchema } from './route-schemas';
 import { mockEmailSender, mockPaymentGateway, mockSmsSender } from './providers';
 import { registerClinical } from './clinical';
 import { registerAdmin } from './routes/admin';
@@ -31,6 +32,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   installErrorHandler(app);
+  app.addHook('onRoute', (opts) => {
+    const methods = Array.isArray(opts.method) ? opts.method : [opts.method];
+    for (const method of methods) {
+      rememberRouteSchema(method, opts.url, opts.schema as { body?: unknown; querystring?: unknown; params?: unknown } | undefined);
+    }
+  });
 
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -47,6 +54,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.addHook('onRequest', async (req, reply) => {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
     // The mock gateway signs this body. It has no browser session, so CSRF does not apply.
+    // Every other state-changing route requires the header, including when HOS_DEV_INSECURE=1.
     if ((req.url ?? '').split('?')[0] === '/api/v1/billing/webhooks/mock') return;
     if (req.headers['x-hos-csrf'] !== '1') {
       return reply.status(403).send({ error: { code: 'csrf', message: 'Send header x-hos-csrf: 1' } });
@@ -57,9 +65,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   const deps = {
     db: handle.db,
     env,
-    sms: mockSmsSender({ logCodes: !env.production, log: logLine }),
+    sms: mockSmsSender({ logCodes: env.exposeSecrets, log: logLine }),
     email: mockEmailSender(),
-    gateway: mockPaymentGateway(env.gatewayKeyId, env.gatewaySecret),
+    gateway: mockPaymentGateway(env.gatewayKeyId, env.gatewaySecret, env.webhookSecret),
   };
   registerPublic(app, deps);
   registerAuth(app, deps);

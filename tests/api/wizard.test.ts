@@ -3,7 +3,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { featureKey, gstinCheckDigit, type InvoiceDto, type QuoteDto, type TenantMe } from '@hos/shared';
-import { webhookSignature } from '../../apps/api/src/crypto';
+import { webhookSignature, webhookTimestamp } from '../../apps/api/src/crypto';
+import { apiEnv } from '../../apps/api/src/env';
 import { dbEnv } from '../../packages/db/src/env';
 
 /**
@@ -451,11 +452,12 @@ describe.sequential('wizard, GST and mock payments', () => {
   }
 
   async function resolvePayment(paymentId: string, outcome: 'success' | 'failure'): Promise<ApiResult> {
-    const body = { paymentId, outcome };
-    const secret = process.env.MOCK_GATEWAY_KEY_SECRET || 'mock_secret_change_me_dev_only';
+    const body = { paymentId, outcome, eventId: idem() };
+    const stamp = webhookTimestamp();
     return call('', 'POST', '/api/v1/billing/webhooks/mock', body, {
       'idempotency-key': idem(),
-      'x-hos-signature': webhookSignature(secret, body),
+      'x-hos-timestamp': stamp,
+      'x-hos-signature': webhookSignature(apiEnv().webhookSecret, stamp, body),
     });
   }
 

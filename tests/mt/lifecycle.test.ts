@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../apps/api/src/app';
-import { webhookSignature } from '../../apps/api/src/crypto';
+import { webhookSignature, webhookTimestamp } from '../../apps/api/src/crypto';
 import { apiEnv } from '../../apps/api/src/env';
 
 const PREMIUM_ONLY = featureKey('patient-registration', 'MLC Registration');
@@ -297,26 +297,75 @@ it('enforces seat limits and resolves a pending payment only through the mock we
     const tenantResolve = await send(basicCookie, 'POST', `/api/v1/billing/payments/${paymentId}/resolve`, { outcome: 'success' });
     expect(tenantResolve.statusCode).toBe(404);
 
-    const body = { paymentId, outcome: 'success' as const };
+    const body = { paymentId, outcome: 'success' as const, eventId: `evt-${stamp}` };
+    const freshStamp = webhookTimestamp();
+    const staleStamp = String(Number(freshStamp) - 10 * 60);
     const bad = await app.inject({
       method: 'POST',
       url: '/api/v1/billing/webhooks/mock',
       payload: body,
-      headers: { 'idempotency-key': `sim-bad-${stamp}`, 'x-hos-signature': '00'.repeat(32) },
+      headers: {
+        'idempotency-key': `sim-bad-${stamp}`,
+        'x-hos-timestamp': freshStamp,
+        'x-hos-signature': '00'.repeat(32),
+      },
     });
     expect(bad.statusCode).toBe(401);
     expect(bad.json().error.code).toBe('signature_invalid');
+    const stale = await app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/webhooks/mock',
+      payload: body,
+      headers: {
+        'idempotency-key': `sim-old-${stamp}`,
+        'x-hos-timestamp': staleStamp,
+        'x-hos-signature': webhookSignature(apiEnv().webhookSecret, staleStamp, body),
+      },
+    });
+    expect(stale.statusCode).toBe(401);
+    expect(stale.json().error.code).toBe('signature_invalid');
     const good = await app.inject({
       method: 'POST',
       url: '/api/v1/billing/webhooks/mock',
       payload: body,
       headers: {
         'idempotency-key': `sim-ok-${stamp}`,
-        'x-hos-signature': webhookSignature(apiEnv().gatewaySecret, body),
+        'x-hos-timestamp': freshStamp,
+        'x-hos-signature': webhookSignature(apiEnv().webhookSecret, freshStamp, body),
       },
     });
     expect(good.statusCode, good.body).toBe(200);
     expect(good.json().status).toBe('captured');
+    const beforeReplay = await withPlatform(platform.db, async (tx) => {
+      await tx.execute(sql`select set_config('app.tenant_id', ${basicTenantId}, true)`);
+      const counted = await tx.execute<{ n: number }>(sql`
+        select count(*)::int as n from audit_log
+        where tenant_id = ${basicTenantId}::uuid and action = 'billing.payment.resolve' and entity_id = ${paymentId}
+      `);
+      return Number(counted.rows[0]?.n ?? 0);
+    });
+    const replayStamp = webhookTimestamp();
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/webhooks/mock',
+      payload: body,
+      headers: {
+        'idempotency-key': `sim-replay-${stamp}`,
+        'x-hos-timestamp': replayStamp,
+        'x-hos-signature': webhookSignature(apiEnv().webhookSecret, replayStamp, body),
+      },
+    });
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json().replayed).toBe(true);
+    const afterReplay = await withPlatform(platform.db, async (tx) => {
+      await tx.execute(sql`select set_config('app.tenant_id', ${basicTenantId}, true)`);
+      const counted = await tx.execute<{ n: number }>(sql`
+        select count(*)::int as n from audit_log
+        where tenant_id = ${basicTenantId}::uuid and action = 'billing.payment.resolve' and entity_id = ${paymentId}
+      `);
+      return Number(counted.rows[0]?.n ?? 0);
+    });
+    expect(afterReplay).toBe(beforeReplay);
     const upgraded = await list(basicCookie, '/api/v1/billing/subscription');
     expect(upgraded.json().planKey).toBe('medium');
   } finally {

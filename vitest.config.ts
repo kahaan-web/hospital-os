@@ -9,8 +9,10 @@ export default defineConfig({
     globalSetup: ['./tests/vitest.global-setup.ts'],
     env: {
       HOS_DB_NAME: process.env.HOS_TEST_DB ?? 'hos_test',
+      HOS_DEV_INSECURE: '1',
       MOCK_EXPOSE_SECRETS: 'true',
       MOCK_GATEWAY_KEY_SECRET: 'mock_secret_change_me_dev_only',
+      MOCK_GATEWAY_WEBHOOK_SECRET: 'mock_webhook_secret_dev_only',
     },
     include: ['packages/**/src/**/*.test.ts', 'apps/api/src/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',

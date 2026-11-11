@@ -84,7 +84,7 @@ Locations: **Mumbai** (MUM, primary), **Indore** (IDR), **Jaipur** (JAI). 40 sam
 
 Created by the Phase B seed (`owner@lotus.demo` / `Demo@12345`, Basic plan). It is there to show that one hospital never sees another's data. Until Phase B lands, `npm run smoke` signs up a throwaway hospital instead.
 
-To try the setup wizard from scratch, sign up a new hospital at http://localhost:3400. The mock OTP is printed in the API log (and echoed in the response while `MOCK_EXPOSE_SECRETS=true`).
+To try the setup wizard from scratch, sign up a new hospital at http://localhost:3400. Copy `.env.example` to `.env` so `HOS_DEV_INSECURE=1` is set. The mock OTP is then printed in the API log and echoed in the response while `MOCK_EXPOSE_SECRETS=true`.
 
 ## Sample data rules
 
