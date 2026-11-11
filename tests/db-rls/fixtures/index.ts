@@ -2,6 +2,7 @@
 // Modules register here. A new area adds `fixtures/<module>.ts` exporting a seed function and one line
 // in `fixtureModules`. every new tenant table must add a fixture here or the suite fails.
 import type pg from 'pg';
+import { seedAdt } from './adt';
 import { seedAppointments } from './appointments';
 import { seedClinicalFoundation } from './clinical-foundation';
 import { seedCore } from './core';
@@ -15,6 +16,7 @@ export const fixtureModules: FixtureModule[] = [
   // No-op until feat/mt-hardening creates the table. Then it inserts one row per tenant.
   { name: 'credit-notes', seed: seedCreditNotes },
   { name: 'registration', seed: seedRegistration },
+  { name: 'adt', seed: seedAdt },
   { name: 'appointments', seed: seedAppointments },
 ];
 
