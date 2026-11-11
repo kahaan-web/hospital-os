@@ -1,3 +1,4 @@
+import { CLINICAL_FEATURES } from '@hos/shared';
 import type { FastifyRequest } from 'fastify';
 import { ApiError } from './http';
 
@@ -152,6 +153,209 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/tenant/clinical/codes', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/doctors', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/services', { permission: AUTHENTICATED }),
+
+  // B1 patient registration. These handlers are already mounted on this branch, so openTenant
+  // fails closed without a row. Print chooses the feature from :kind inside the handler.
+  // The photo upload does not check a feature. B2 appointment handlers are still empty stubs.
+  entry('POST', '/api/v1/tenant/m/patient-registration/patients', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.newRegistration,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/patient-registration/patients/:id', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.editRegistration,
+  }),
+  entry('POST', '/api/v1/tenant/m/patient-registration/patients/:id/photo', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/patients/:id/documents', {
+    permission: ['patients.view', 'patients.manage'],
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  }),
+  entry('POST', '/api/v1/tenant/m/patient-registration/patients/:id/documents', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  }),
+  entry('DELETE', '/api/v1/tenant/m/patient-registration/patients/:id/documents/:docId', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/patients/:id/documents/:docId/file', {
+    permission: ['patients.view', 'patients.manage'],
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.attachPatientDocuments,
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/patients/:id/print/:kind/:format', {
+    permission: ['patients.view', 'patients.manage'],
+    module: 'patient-registration',
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/reports/register', {
+    permission: 'reports.view',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.printRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/reports/register.csv', {
+    permission: 'reports.view',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.patientExcelData,
+  }),
+  entry('POST', '/api/v1/tenant/m/patient-registration/patients/:id/mailer', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.sendMailers,
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/mlc', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.mlcCaseRegister,
+  }),
+  entry('POST', '/api/v1/tenant/m/patient-registration/mlc', {
+    permission: 'patients.manage',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.mlcRegistration,
+  }),
+  entry('GET', '/api/v1/tenant/m/patient-registration/reports/mlc', {
+    permission: 'reports.view',
+    module: 'patient-registration',
+    feature: CLINICAL_FEATURES.patientRegistration.mlcCaseRegister,
+  }),
+
+  // B4 ADT. Stickers and the discharge summary share one print URL; the handler picks the feature.
+  entry('GET', '/api/v1/tenant/m/adt/wards', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/wards', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/adt/wards/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/rooms', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/rooms', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/adt/rooms/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/beds', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/beds', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('PATCH', '/api/v1/tenant/m/adt/beds/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/bed-board', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions/:id', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions/:id/transfer', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.transfer,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions/:id/discharge', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.discharge,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions/:id/summary', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummary,
+  }),
+  entry('PUT', '/api/v1/tenant/m/adt/admissions/:id/summary', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummary,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admissions/:id/summary/finalise', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummary,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/bed-charges/post', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admission-requests', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('POST', '/api/v1/tenant/m/adt/admission-requests', {
+    permission: 'adt.manage',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admission,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/admissions/:id/print/:kind/:format', {
+    permission: 'adt.manage',
+    module: 'adt',
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/admissions', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.admissionRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/transfers', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.transferRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/discharges', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeRegister,
+  }),
+  entry('GET', '/api/v1/tenant/m/adt/reports/discharge-summaries', {
+    permission: 'reports.view',
+    module: 'adt',
+    feature: CLINICAL_FEATURES.adt.dischargeSummaryReport,
+  }),
 ];
 
 const keys = ENTRIES.map(([key]) => key);

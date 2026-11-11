@@ -84,6 +84,8 @@ Sample names, `@sbx` mail, `90000` mobiles, `DEMO-` UHIDs, `00-` ABHA numbers, `
 | `core.ts` | Phase A tenant tables (locations through audit_log) |
 | `clinical-foundation.ts` | B0: number_series, patients, patient_alerts, encounters, services, tariffs, clinical_orders, clinical_order_items, vital_signs, clinical_notes, charges, cash_ledger |
 | `credit-notes.ts` | Inserts one row per tenant only when `credit_notes` exists. The table is added by `feat/mt-hardening` and is not on this branch, so the seed reads the catalogue and fills required columns. Until the table exists, the seed does nothing. |
+| `registration.ts` | B1: `patient_documents` and `mlc_cases` when those tables exist |
+| `adt.ts` | B4: wards, rooms, beds, admissions, bed_assignments, admission_requests, discharge_summaries |
 
 A Phase B module adds `fixtures/<module>.ts` and one line in `fixtureModules`. It does not edit another module's file.
 

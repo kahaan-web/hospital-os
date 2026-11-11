@@ -37,7 +37,7 @@ export function PatientForm(props: { initial?: Partial<PatientCreateInput>; subm
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="First name" error={errors.firstName}>
-          <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} autoFocus />
+          <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
         </Field>
         <Field label="Last name" error={errors.lastName}>
           <Input value={form.lastName ?? ''} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />

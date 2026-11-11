@@ -239,18 +239,29 @@ export function routeTemplate(req: FastifyRequest): string {
   return `${req.method} ${req.routeOptions.url ?? req.url}`;
 }
 
-/** Money routes. Quote is a read of a price, so it does not require a key. */
+/**
+ * Money routes, plus ADT admit / transfer / discharge / bed-day posting.
+ * Quote is a read of a price, so it does not require a key.
+ * Bed-day posting inserts clinical charges (INSERT is still granted). It does not
+ * update invoices, payments, or subscriptions.
+ */
+const IDEMPOTENT_POSTS = new Set([
+  '/api/v1/billing/orders',
+  '/api/v1/billing/orders/:orderId/pay',
+  '/api/v1/billing/verify',
+  '/api/v1/billing/change-apply',
+  '/api/v1/billing/webhooks/mock',
+  '/api/v1/tenant/clinical/encounters/:id/orders',
+  '/api/v1/tenant/m/adt/admissions',
+  '/api/v1/tenant/m/adt/admissions/:id/transfer',
+  '/api/v1/tenant/m/adt/admissions/:id/discharge',
+  '/api/v1/tenant/m/adt/bed-charges/post',
+]);
+
 export function idempotencyRequired(req: FastifyRequest): boolean {
   if (req.method !== 'POST') return false;
   const url = req.routeOptions.url ?? req.url.split('?')[0] ?? '';
-  return (
-    url === '/api/v1/billing/orders' ||
-    url === '/api/v1/billing/orders/:orderId/pay' ||
-    url === '/api/v1/billing/verify' ||
-    url === '/api/v1/billing/change-apply' ||
-    url === '/api/v1/billing/webhooks/mock' ||
-    url === '/api/v1/tenant/clinical/encounters/:id/orders'
-  );
+  return IDEMPOTENT_POSTS.has(url);
 }
 
 /** Platform scope sees no tenant rows. */

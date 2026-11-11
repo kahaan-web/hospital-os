@@ -74,13 +74,6 @@ function ctx(gate: TenantGate) {
   };
 }
 
-function requireKey(req: FastifyRequest): void {
-  const key = req.headers['idempotency-key'];
-  if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(key)) {
-    throw new ApiError(400, 'idempotency_key_required', 'Send an Idempotency-Key header (8–128 letters, numbers, _ or -)');
-  }
-}
-
 function canOverrideBilling(gate: TenantGate): boolean {
   try {
     gate.requirePermission('billing.ip.manage');
@@ -186,7 +179,6 @@ export function registerAdt(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/admissions`, { schema: { body: admitSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate, features.admission);
       const created = await admit(ctx(gate), req.body);
       reply.code(201);
@@ -238,7 +230,6 @@ export function registerAdt(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/bed-charges/post`, { schema: { querystring: bedChargeQuery } }, async (req, reply) =>
     run(req, reply, async (gate) => {
-      requireKey(req);
       await guard(gate, features.admission);
       return postBedCharges(ctx(gate), req.query.date ?? istDateKey(new Date()));
     }),
