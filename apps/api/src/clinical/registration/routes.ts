@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { schema } from '@hos/db';
 import {
@@ -86,16 +86,24 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
     run(req, reply, async (gate) => {
       await guardRegistration(gate);
       gate.requirePermission('patients.manage');
+      await readPatient(gate.tx, req.params.id);
       const file = await req.file({ limits: { fileSize: 1_048_576 } });
       if (!file) throw new ApiError(400, 'validation', 'Choose a photo up to 1 MB');
       const bytes = await file.toBuffer();
       const { ext, mime } = detectPatientFile(bytes);
       if (ext === 'pdf') throw new ApiError(400, 'validation', 'Use a JPG or PNG for the photo');
       const relative = join('patients', gate.actor.tenantId!, req.params.id, `photo.${ext}`);
-      await ensureUploadDir(deps.env.uploadDir, ['patients', gate.actor.tenantId!, req.params.id]);
-      await writeFile(join(deps.env.uploadDir, relative), bytes);
-      const patient = await savePatientPhoto({ ...ctx(gate), audit: gate.audit }, req.params.id, relative);
-      return { patient, mime };
+      const dir = await ensureUploadDir(deps.env.uploadDir, ['patients', gate.actor.tenantId!, req.params.id]);
+      const abs = join(deps.env.uploadDir, relative);
+      try {
+        await writeFile(abs, bytes);
+        const patient = await savePatientPhoto({ ...ctx(gate), audit: gate.audit }, req.params.id, relative);
+        return { patient, mime };
+      } catch (error) {
+        await rm(abs, { force: true });
+        await rm(dir, { recursive: false }).catch(() => undefined);
+        throw error;
+      }
     }),
   );
 

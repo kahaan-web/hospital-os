@@ -93,6 +93,105 @@ export interface Actor {
   userAgent: string | null;
 }
 
+/** Thrown in dev and test when before/after still carries a patient-data key. Production strips those keys instead. */
+export class AuditPhiError extends Error {
+  readonly keys: string[];
+  constructor(keys: string[]) {
+    super(`Audit payload contains patient data keys: ${keys.join(', ')}`);
+    this.name = 'AuditPhiError';
+    this.keys = keys;
+  }
+}
+
+/** Normalised deny-list. `name` is handled separately so plan and module names stay auditable. */
+const PHI_EXACT = new Set([
+  'firstname',
+  'middlename',
+  'lastname',
+  'fullname',
+  'dob',
+  'mobile',
+  'altmobile',
+  'email',
+  'abhanumber',
+  'abhaaddress',
+  'bloodgroup',
+  'idlast4',
+  'filepath',
+  'photopath',
+]);
+
+const PHI_PREFIXES = ['address', 'guardian', 'emergency'];
+
+/** Free text on a clinical note, alert, or vital sign. `reason` on a cancel or void stays — it is an operational field. */
+const NARRATIVE_KEYS = new Set(['note', 'notes', 'text', 'body']);
+
+function normalKey(key: string): string {
+  return key.toLowerCase().replace(/_/g, '');
+}
+
+function isPatientEntity(entityType: string): boolean {
+  return entityType === 'patient' || entityType.startsWith('patient_');
+}
+
+/** Patient and clinical rows. Audit readers without patients.view do not receive these payloads. */
+export function isClinicalAuditEntity(entityType: string): boolean {
+  return (
+    isPatientEntity(entityType) ||
+    entityType.startsWith('clinical_') ||
+    entityType === 'encounter' ||
+    entityType === 'vital_signs' ||
+    entityType === 'mlc_case' ||
+    entityType === 'appointment' ||
+    entityType === 'opd_queue'
+  );
+}
+
+function isNarrativeEntity(entityType: string): boolean {
+  return entityType === 'clinical_note' || entityType === 'patient_alert' || entityType === 'vital_signs';
+}
+
+function isPhiKey(key: string, entityType: string): boolean {
+  const normal = normalKey(key);
+  if (PHI_EXACT.has(normal)) return true;
+  if (PHI_PREFIXES.some((prefix) => normal.startsWith(prefix))) return true;
+  if (normal === 'name' && isPatientEntity(entityType)) return true;
+  if (NARRATIVE_KEYS.has(normal) && isNarrativeEntity(entityType)) return true;
+  return false;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
+}
+
+/** Copy `value` without deny-listed keys. Key names are collected; values are never returned. */
+function scrubPhi(value: unknown, entityType: string, found: string[]): unknown {
+  if (Array.isArray(value)) return value.map((item) => scrubPhi(item, entityType, found));
+  if (!isPlainRecord(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isPhiKey(key, entityType)) {
+      found.push(key);
+      continue;
+    }
+    out[key] = scrubPhi(child, entityType, found);
+  }
+  return out;
+}
+
+function guardAuditPayload(action: string, entityType: string, before: unknown, after: unknown): { before: unknown; after: unknown } {
+  const found: string[] = [];
+  const safeBefore = scrubPhi(before, entityType, found);
+  const safeAfter = scrubPhi(after, entityType, found);
+  if (found.length === 0) return { before, after };
+  const keys = [...new Set(found)];
+  if (process.env.NODE_ENV === 'production') {
+    console.error(`audit PHI keys stripped action=${action} entity=${entityType} keys=${keys.join(',')}`);
+    return { before: safeBefore, after: safeAfter };
+  }
+  throw new AuditPhiError(keys);
+}
+
 export async function writeAudit(
   tx: Tx,
   actor: Actor,
@@ -102,6 +201,7 @@ export async function writeAudit(
   before: unknown,
   after: unknown,
 ): Promise<void> {
+  const payload = guardAuditPayload(action, entityType, before, after);
   await tx.insert(schema.auditLog).values({
     tenantId: actor.tenantId,
     locationId: actor.locationId,
@@ -113,8 +213,8 @@ export async function writeAudit(
     action,
     entityType,
     entityId: entityId,
-    before: (before ?? null) as never,
-    after: (after ?? null) as never,
+    before: (payload.before ?? null) as never,
+    after: (payload.after ?? null) as never,
   });
 }
 

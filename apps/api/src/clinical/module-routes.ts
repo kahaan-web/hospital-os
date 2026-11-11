@@ -98,7 +98,9 @@ export function registerModuleRoutes(app: FastifyInstance, deps: Deps): void {
       await gate.requireModule('patient-registration');
       gate.requireAnyPermission(['clinical.order', 'patients.manage']);
       const c = ctx(gate);
-      return addAlert(gate.tx, c.tenantId, req.params.id, c.userId, req.body, (id) => gate.audit('clinical.alert.create', 'patient_alert', id, null, req.body));
+      return addAlert(gate.tx, c.tenantId, req.params.id, c.userId, req.body, (id) =>
+        gate.audit('clinical.alert.create', 'patient_alert', id, null, { kind: req.body.kind, severity: req.body.severity }),
+      );
     }),
   );
 

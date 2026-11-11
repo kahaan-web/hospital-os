@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createDb, dbEnv, schema, withTenant, type Tx } from '@hos/db';
 import { flagLabValue, type LabAccessionDetailDto, type LabFlag } from '@hos/shared';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../app';
@@ -252,7 +252,14 @@ it('refuses an OPD collect until the bill is settled, unless the lab allows coll
   try {
     await withTenant(handle.db, fx.sunrise.tenantId, async (tx) => {
       const c = ctx(tx);
-      const order = await orders.place(c, fx.sunrise.encounterId, {
+      // The shared fixture encounter is unordered. ADT leaves extra IPD rows, and IPD collection does not wait for payment.
+      const [opd] = await tx
+        .select({ id: schema.encounters.id })
+        .from(schema.encounters)
+        .where(and(eq(schema.encounters.tenantId, fx.sunrise.tenantId), eq(schema.encounters.kind, 'opd'), eq(schema.encounters.status, 'open')))
+        .limit(1);
+      if (!opd) throw new Error('sunrise OPD encounter missing');
+      const order = await orders.place(c, opd.id, {
         kind: 'lab',
         source: 'opd',
         items: [{ serviceId: fx.sunrise.labServiceIds[1] }],

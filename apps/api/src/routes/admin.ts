@@ -85,7 +85,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       const [plan] = await gate.tx.select().from(schema.plans).where(eq(schema.plans.id, req.params.id));
       if (!plan) throw new ApiError(404, 'not_found', 'Plan not found');
       await gate.tx.update(schema.plans).set(req.body).where(eq(schema.plans.id, plan.id));
-      await gate.audit('admin.plan.update', 'plan', plan.id, { name: plan.name, status: plan.status }, req.body);
+      const [updatedPlan] = await gate.tx.select().from(schema.plans).where(eq(schema.plans.id, plan.id));
+      await gate.audit('admin.plan.update', 'plan', plan.id, planSnapshot(plan), planSnapshot(updatedPlan!));
       return (await loadCatalog(gate.tx, { activePlansOnly: false, hideHidden: false })).plans.find((p) => p.id === plan.id)!;
     }),
   );
@@ -104,15 +105,18 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
     openPlatform(deps, req, async (gate) => {
       const [plan] = await gate.tx.select().from(schema.plans).where(eq(schema.plans.id, req.params.id));
       if (!plan) throw new ApiError(404, 'not_found', 'Plan not found');
+      const previous = { monthlyPaise: null as number | null, annualPaise: null as number | null };
       for (const [cycle, amount] of [['monthly', req.body.monthlyPaise], ['annual', req.body.annualPaise]] as const) {
         const [price] = await gate.tx
           .select()
           .from(schema.prices)
           .where(and(eq(schema.prices.targetType, 'plan'), eq(schema.prices.targetId, plan.id), eq(schema.prices.billingCycle, cycle)));
+        if (cycle === 'monthly') previous.monthlyPaise = price?.amountPaise ?? null;
+        else previous.annualPaise = price?.amountPaise ?? null;
         if (price) await gate.tx.update(schema.prices).set({ amountPaise: amount, isPlaceholder: false }).where(eq(schema.prices.id, price.id));
         else await gate.tx.insert(schema.prices).values({ targetType: 'plan', targetId: plan.id, billingCycle: cycle, amountPaise: amount, isPlaceholder: false });
       }
-      await gate.audit('admin.plan.price', 'plan', plan.id, null, req.body);
+      await gate.audit('admin.plan.price', 'plan', plan.id, previous, { monthlyPaise: req.body.monthlyPaise, annualPaise: req.body.annualPaise });
       return (await loadCatalog(gate.tx, { activePlansOnly: false, hideHidden: false })).plans.find((p) => p.id === plan.id)!;
     }),
   );
@@ -130,7 +134,7 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         if (change.included) await gate.tx.insert(schema.planModuleFeatures).values({ planId: change.planId, featureId: change.featureId }).onConflictDoNothing();
         else await gate.tx.delete(schema.planModuleFeatures).where(and(eq(schema.planModuleFeatures.planId, change.planId), eq(schema.planModuleFeatures.featureId, change.featureId)));
       }
-      await gate.audit('admin.matrix.update', 'plan_module_feature', null, null, { changes: req.body.changes.length });
+      await gate.audit('admin.matrix.update', 'plan_module_feature', null, null, { changes: req.body.changes });
       const catalog = await loadCatalog(gate.tx, { activePlansOnly: false, hideHidden: false });
       return { plans: catalog.plans, modules: catalog.modules, features: catalog.modules.flatMap((mod) => mod.features), included: catalog.matrix };
     }),
@@ -247,8 +251,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       if (!row) throw new ApiError(404, 'not_found', 'Override not found');
       await gate.tx.delete(schema.tenantEntitlementOverrides).where(eq(schema.tenantEntitlementOverrides.id, row.id));
       await gate.audit('admin.override.delete', 'entitlement_override', row.id, { effect: row.effect }, null);
-      return reply.status(204).send();
-    }),
+      return null;
+    }).then(() => reply.status(204).send()), // reply only after COMMIT, so the next request sees the change
   );
 
   r.post('/api/v1/admin/tenants/:id/suspend', { schema: { params: idParam, body: suspendSchema } }, async (req, reply) =>
@@ -266,8 +270,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         })
         .where(eq(schema.tenants.id, hospital.id));
       await gate.audit('admin.tenant.suspend', 'tenant', hospital.id, { status: hospital.status }, { status: 'suspended', reason: req.body.reason, restore: previous });
-      return reply.status(204).send();
-    }),
+      return null;
+    }).then(() => reply.status(204).send()), // reply only after COMMIT, so the next request sees the change
   );
 
   r.post(
@@ -294,8 +298,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         .set({ status: restore, statusBeforeSuspend: null, suspendedAt: null, suspendedReason: null })
         .where(eq(schema.tenants.id, hospital.id));
       await gate.audit('admin.tenant.reactivate', 'tenant', hospital.id, { status: 'suspended' }, { status: restore });
-      return reply.status(204).send();
-    }),
+      return null;
+    }).then(() => reply.status(204).send()), // reply only after COMMIT, so the next request sees the change
   );
 
   r.get('/api/v1/admin/settings', async (req) =>
@@ -308,10 +312,12 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
 
   r.put('/api/v1/admin/settings', { schema: { body: platformSettingsSchema } }, async (req) =>
     openPlatform(deps, req, async (gate) => {
+      const [before] = await gate.tx.select().from(schema.platformSettings).where(eq(schema.platformSettings.id, 1));
+      if (!before) throw new ApiError(500, 'internal', 'Platform settings are not seeded');
       await gate.tx.update(schema.platformSettings).set(req.body).where(eq(schema.platformSettings.id, 1));
-      await gate.audit('admin.settings.update', 'platform_settings', '1', null, { invoicePrefix: req.body.invoicePrefix, supplierGstin: req.body.supplierGstin });
-      const [row] = await gate.tx.select().from(schema.platformSettings).where(eq(schema.platformSettings.id, 1));
-      return settingsDto(row!);
+      const [after] = await gate.tx.select().from(schema.platformSettings).where(eq(schema.platformSettings.id, 1));
+      await gate.audit('admin.settings.update', 'platform_settings', '1', settingsAudit(before), settingsAudit(after!));
+      return settingsDto(after!);
     }),
   );
 
@@ -370,6 +376,29 @@ function settingsDto(row: typeof schema.platformSettings.$inferSelect) {
     defaultSacCode: row.defaultSacCode,
     defaultGstRateBp: row.defaultGstRateBp,
     invoicePrefix: row.invoicePrefix,
+  };
+}
+
+function settingsAudit(row: typeof schema.platformSettings.$inferSelect) {
+  return {
+    ...settingsDto(row),
+    mockPaymentSimulator: row.mockPaymentSimulator,
+    updatedAt: iso(row.updatedAt),
+  };
+}
+
+function planSnapshot(plan: typeof schema.plans.$inferSelect) {
+  return {
+    key: plan.key,
+    name: plan.name,
+    tagline: plan.tagline,
+    description: plan.description,
+    highlight: plan.highlight,
+    badge: plan.badge,
+    status: plan.status,
+    sortOrder: plan.sortOrder,
+    createdAt: iso(plan.createdAt),
+    updatedAt: iso(plan.updatedAt),
   };
 }
 
