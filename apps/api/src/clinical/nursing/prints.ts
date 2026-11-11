@@ -26,7 +26,7 @@ export function medicinePrescriptionDoc(patient: PatientDto, orders: ClinicalOrd
       },
       {
         kind: 'table',
-        headers: ['Medicine', 'Dose / frequency', 'Days', 'Instructions'],
+        columns: ['Medicine', 'Dose / frequency', 'Days', 'Instructions'],
         rows: lines.map((line) => [line.drug, line.dose, line.days, line.note]),
       },
       { kind: 'signature', label: 'Doctor' },
@@ -51,7 +51,7 @@ export function investigationPrescriptionDoc(patient: PatientDto, orders: Clinic
       },
       {
         kind: 'table',
-        headers: ['Investigation', 'Note'],
+        columns: ['Investigation', 'Note'],
         rows: lines.map((line) => [line.test, line.note]),
       },
       { kind: 'signature', label: 'Doctor' },
