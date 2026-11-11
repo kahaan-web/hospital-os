@@ -104,6 +104,8 @@ const TABLES = [
   'lab_results',
   'lab_interfaces',
   'lab_settings',
+  'mar_schedules',
+  'medication_administrations',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -632,7 +634,7 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
           `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`),
-        beforeMassDelete: ['delete from lab_results', 'delete from lab_accessions'],
+        beforeMassDelete: ['delete from medication_administrations', 'delete from lab_results', 'delete from lab_accessions'],
       };
     case 'user_location_roles':
       return {
@@ -874,13 +876,24 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.clinicalOrderId, `notes = 'Touched by A'`, 'notes',
           `insert into clinical_orders (tenant_id, location_id, encounter_id, patient_id, kind, number, source) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'lab', 'ZNOPE${pair.runId}', 'opd')`),
-        beforeMassDelete: ['delete from lab_results', 'delete from lab_accessions', 'delete from clinical_order_items'],
+        beforeMassDelete: [
+          'delete from lab_results',
+          'delete from lab_accessions',
+          'delete from medication_administrations',
+          'delete from mar_schedules',
+          'delete from clinical_order_items',
+        ],
       };
     case 'clinical_order_items':
       return {
         ...row(common, 'id = $1', b.orderItemId, `drug_name = 'Touched by A'`, 'drug_name',
           `insert into clinical_order_items (tenant_id, order_id, line_no) values ($1, '${b.clinicalOrderId}', 2)`),
-        beforeMassDelete: ['delete from lab_results', 'delete from lab_accessions'],
+        beforeMassDelete: [
+          'delete from lab_results',
+          'delete from lab_accessions',
+          'delete from medication_administrations',
+          'delete from mar_schedules',
+        ],
       };
     case 'vital_signs':
       return {
@@ -1220,6 +1233,32 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false)`,
         retargetSql: `update lab_settings set tenant_id = $1`,
       };
+    case 'mar_schedules':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.marScheduleId,
+        setSql: `voided_at = now()`,
+        untouched: `select coalesce(voided_at is not null, false) as touched from mar_schedules where id = $1`,
+        insertSql: `insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at) values ($1, '${b.orderItemId}', '${b.encounterId}', now() + interval '3 hours')`,
+        retargetSql: `update mar_schedules set tenant_id = $1`,
+        beforeMassDelete: ['delete from medication_administrations'],
+      };
+    case 'medication_administrations':
+      return row(
+        common,
+        'id = $1',
+        b.medAdminId,
+        `reason = 'Touched by A'`,
+        'reason',
+        `with ins as (
+           insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at)
+           values ($1, '${b.orderItemId}', '${b.encounterId}', now() + interval '4 hours')
+           returning id
+         )
+         insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
+         select $1, ins.id, 'held', '', '${b.userId}' from ins`,
+      );
     default:
       return assertNever(table);
   }
