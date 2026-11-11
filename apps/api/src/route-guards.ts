@@ -116,6 +116,81 @@ function registrationGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+const OP = '/api/v1/tenant/m/op-billing';
+const opFeature = CLINICAL_FEATURES.opBilling;
+const opPost = 'billing.op.post';
+
+/** B5 OP billing. Feature matches the handler's requireFeature; service masters have none. */
+function billingGuards(): [string, TenantRouteGuard][] {
+  const post = (method: string, url: string, feature: string): [string, TenantRouteGuard] =>
+    entry(method, url, { permission: opPost, module: 'op-billing', feature });
+  return [
+    entry('GET', `${OP}/services`, {
+      permission: [opPost, 'tenant.manage', 'accounts.manage'],
+      module: 'op-billing',
+    }),
+    entry('POST', `${OP}/services`, {
+      permission: ['tenant.manage', 'accounts.manage'],
+      module: 'op-billing',
+    }),
+    entry('PATCH', `${OP}/services/:id`, {
+      permission: ['tenant.manage', 'accounts.manage'],
+      module: 'op-billing',
+    }),
+    entry('POST', `${OP}/tariffs`, {
+      permission: ['tenant.manage', 'accounts.manage'],
+      module: 'op-billing',
+    }),
+    entry('PATCH', `${OP}/tariffs/:id`, {
+      permission: ['tenant.manage', 'accounts.manage'],
+      module: 'op-billing',
+    }),
+    post('GET', `${OP}/worklist`, opFeature.voucherPosting),
+    post('GET', `${OP}/bills`, opFeature.voucherPosting),
+    post('POST', `${OP}/bills`, opFeature.voucherPosting),
+    post('GET', `${OP}/bills/:id`, opFeature.voucherPosting),
+    post('POST', `${OP}/bills/:id/finalise`, opFeature.voucherPosting),
+    post('POST', `${OP}/bills/:id/settle`, opFeature.settlements),
+    post('POST', `${OP}/bills/:id/concessions`, opFeature.concessions),
+    post('POST', `${OP}/bills/:id/refund`, opFeature.opRefund),
+    post('GET', `${OP}/bills/:id/print`, opFeature.voucherDocument),
+    post('GET', `${OP}/deposits`, opFeature.acceptDeposit),
+    post('POST', `${OP}/deposits`, opFeature.acceptDeposit),
+    post('POST', `${OP}/deposits/:id/refund`, opFeature.refundDeposit),
+    post('GET', `${OP}/refunds`, opFeature.opRefund),
+    entry('GET', `${OP}/reports/cash`, {
+      permission: [opPost, 'reports.view'],
+      module: 'op-billing',
+      feature: opFeature.cashSummary,
+    }),
+    entry('GET', `${OP}/reports/revenue`, {
+      permission: [opPost, 'reports.view'],
+      module: 'op-billing',
+      feature: opFeature.revenueSummary,
+    }),
+    entry('GET', `${OP}/reports/doctor-sharing`, {
+      permission: [opPost, 'reports.view', 'accounts.manage'],
+      module: 'op-billing',
+      feature: opFeature.doctorSharing,
+    }),
+    entry('GET', `${OP}/reports/outstanding`, {
+      permission: [opPost, 'reports.view'],
+      module: 'op-billing',
+      feature: opFeature.patientOutstanding,
+    }),
+    entry('GET', `${OP}/reports/deposits`, {
+      permission: [opPost, 'reports.view'],
+      module: 'op-billing',
+      feature: opFeature.depositRegister,
+    }),
+    entry('GET', `${OP}/reports/visit-statistics`, {
+      permission: [opPost, 'reports.view'],
+      module: 'op-billing',
+      feature: opFeature.visitStatistics,
+    }),
+  ];
+}
+
 const OPD_DOC = '/api/v1/tenant/m/opd-visit/doctor';
 const CPOE = '/api/v1/tenant/m/cpoe';
 const opdFeat = CLINICAL_FEATURES.opdVisit;
@@ -186,6 +261,35 @@ function doctorGuards(): [string, TenantRouteGuard][] {
       permission: 'clinical.view',
       module: ['opd-visit', 'cpoe'],
     }),
+  ];
+}
+
+const LAB = '/api/v1/tenant/m/lab';
+const labFeature = CLINICAL_FEATURES.lab;
+
+/** B8 laboratory. Feature gates follow Sheet1 (Medium, except email and equipment which are Premium). */
+function labGuards(): [string, TenantRouteGuard][] {
+  const manage = (method: string, url: string, feature: string, permission: string | readonly string[] = 'lab.manage'): [string, TenantRouteGuard] =>
+    entry(method, url, { permission, module: 'lab', feature });
+  return [
+    manage('GET', `${LAB}/tests`, labFeature.masterTemplate),
+    manage('POST', `${LAB}/tests`, labFeature.masterTemplate),
+    manage('PATCH', `${LAB}/tests/:id`, labFeature.masterTemplate),
+    manage('GET', `${LAB}/tests/:id/params`, labFeature.masterTemplate),
+    manage('POST', `${LAB}/tests/:id/params`, labFeature.masterTemplate),
+    manage('PATCH', `${LAB}/tests/:id/params/:paramId`, labFeature.masterTemplate),
+    manage('GET', `${LAB}/worklist`, labFeature.sampleStatus),
+    manage('GET', `${LAB}/accessions/:id`, labFeature.sampleStatus),
+    manage('POST', `${LAB}/accessions`, labFeature.sampleCollection),
+    manage('POST', `${LAB}/accessions/:id/receive`, labFeature.sampleCollection),
+    manage('POST', `${LAB}/accessions/:id/reject`, labFeature.sampleCollection),
+    manage('PUT', `${LAB}/accessions/:id/results`, labFeature.resultEntry),
+    manage('POST', `${LAB}/accessions/:id/verify`, labFeature.resultEntry, 'lab.verify'),
+    manage('GET', `${LAB}/accessions/:id/report`, labFeature.labResultReport),
+    manage('POST', `${LAB}/accessions/:id/email`, labFeature.sendResultOnEmail),
+    manage('GET', `${LAB}/patients/:id/history`, labFeature.patientHistory),
+    manage('GET', `${LAB}/reports/mis`, labFeature.labMis),
+    manage('POST', `${LAB}/interfaces/:id/ingest`, labFeature.labEquipments),
   ];
 }
 
@@ -531,6 +635,54 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     permission: 'reports.view',
     module: 'adt',
     feature: CLINICAL_FEATURES.adt.dischargeSummaryReport,
+  }),
+  ...billingGuards(),
+  // B8. Ingest is token-authenticated in the handler; the row keeps the inventory closed.
+  ...labGuards(),
+  entry('GET', '/api/v1/tenant/m/nurse-station/ward', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.medicineOrders,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/orders', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.labOrders,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/results', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.viewTestResults,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/doctor-notes', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.doctorsNotes,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/vitals-chart', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.vitalsTable,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/mar', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('POST', '/api/v1/tenant/m/nurse-station/mar/:doseId/administer', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/diet', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('POST', '/api/v1/tenant/m/nurse-station/encounters/:id/diet', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/print/:kind/:format', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
   }),
 ];
 

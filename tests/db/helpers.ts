@@ -63,6 +63,14 @@ export interface Side {
   /** Second encounter so an opd_queue insert does not collide with the fixture row. */
   spareEncounterId: string;
   mlcId: string;
+  billId: string;
+  billLineId: string;
+  depositId: string;
+  settlementId: string;
+  concessionId: string;
+  refundId: string;
+  /** OP bill credit note (`bill_credit_notes`). `creditNoteId` is the platform invoice note. */
+  billCreditNoteId: string;
   orderSetId: string;
   prescriptionTemplateId: string;
   pharmacyItemId: string;
@@ -89,6 +97,14 @@ export interface Side {
   bedAssignmentId: string;
   admissionRequestId: string;
   summaryId: string;
+  labTestId: string;
+  labParamId: string;
+  labAccessionId: string;
+  labResultId: string;
+  labInterfaceId: string;
+  labSettingsId: string;
+  marScheduleId: string;
+  medAdminId: string;
 }
 
 export interface FixturePair {
@@ -406,6 +422,18 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into clinical_order_items (tenant_id, order_id, line_no, drug_name) values ($1, $2, 1, 'Sample') returning id`,
     [tenant.id, clinicalOrder.id],
   );
+  const marSchedule = await one<{ id: string }>(
+    migrator,
+    `insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at)
+     values ($1, $2, $3, now() + interval '1 hour') returning id`,
+    [tenant.id, orderItem.id, encounter.id],
+  );
+  const medAdmin = await one<{ id: string }>(
+    migrator,
+    `insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
+     values ($1, $2, 'given', '1 tab', $3) returning id`,
+    [tenant.id, marSchedule.id, user.id],
+  );
   const vital = await one<{ id: string }>(
     migrator,
     `insert into vital_signs (tenant_id, location_id, encounter_id, patient_id, pulse) values ($1, $2, $3, $4, 70) returning id`,
@@ -480,6 +508,57 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary)
      values ($1, $2, $3, $4, 'Fixture MLC') returning id`,
     [tenant.id, patient.id, encounter.id, `ZML${runId}${mark}`],
+  );
+  const bill = await one<{ id: string }>(
+    migrator,
+    `insert into bills (
+       tenant_id, location_id, patient_id, encounter_id, kind, number, doc_type, status, pay_class,
+       subtotal_paise, discount_paise, cgst_paise, sgst_paise, igst_paise, round_off_paise, total_paise, paid_paise
+     ) values (
+       $1, $2, $3, $4, 'op', $5, 'bill_of_supply', 'final', 'cash',
+       100, 0, 0, 0, 0, 0, 100, 100
+     ) returning id`,
+    [tenant.id, location.id, patient.id, encounter.id, `OB${runId}${mark}`],
+  );
+  const billLine = await one<{ id: string }>(
+    migrator,
+    `insert into bill_lines (
+       tenant_id, bill_id, charge_id, line_no, description, qty, unit_price_paise, amount_paise,
+       discount_paise, bill_discount_paise, taxable_paise, gst_treatment, service_date
+     ) values (
+       $1, $2, $3, 1, 'Sample consultation', 1, 100, 100, 0, 0, 100, 'exempt_healthcare', current_date
+     ) returning id`,
+    [tenant.id, bill.id, charge.id],
+  );
+  const deposit = await one<{ id: string }>(
+    migrator,
+    `insert into deposits (tenant_id, location_id, patient_id, number, amount_paise, balance_paise, mode, status)
+     values ($1, $2, $3, $4, 100, 100, 'cash', 'open') returning id`,
+    [tenant.id, location.id, patient.id, `DP${runId}${mark}`],
+  );
+  const settlement = await one<{ id: string }>(
+    migrator,
+    `insert into bill_settlements (tenant_id, bill_id, mode, amount_paise, instrument_ref)
+     values ($1, $2, 'cash', 100, 'Sample') returning id`,
+    [tenant.id, bill.id],
+  );
+  const concession = await one<{ id: string }>(
+    migrator,
+    `insert into concessions (tenant_id, bill_id, amount_paise, reason, status)
+     values ($1, $2, 100, 'Sample concession', 'requested') returning id`,
+    [tenant.id, bill.id],
+  );
+  const refund = await one<{ id: string }>(
+    migrator,
+    `insert into refunds (tenant_id, bill_id, number, amount_paise, reason, mode)
+     values ($1, $2, $3, 100, 'Sample refund', 'cash') returning id`,
+    [tenant.id, bill.id, `RF${runId}${mark}`],
+  );
+  const billCreditNote = await one<{ id: string }>(
+    migrator,
+    `insert into bill_credit_notes (tenant_id, bill_id, refund_id, number, amount_paise, reason, status)
+     values ($1, $2, $3, $4, 100, 'Sample credit note', 'issued') returning id`,
+    [tenant.id, bill.id, refund.id, `CN${runId}${mark}`],
   );
   const orderSet = await one<{ id: string }>(
     migrator,
@@ -626,6 +705,42 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, '{"diagnosis":"Sample"}'::jsonb) returning id`,
     [tenant.id, admission.id],
   );
+  const labTest = await one<{ id: string }>(
+    migrator,
+    `insert into lab_tests (tenant_id, service_id, specimen, container, tat_hours, is_sample)
+     values ($1, $2, 'blood', 'EDTA', 4, true) returning id`,
+    [tenant.id, service.id],
+  );
+  const labParam = await one<{ id: string }>(
+    migrator,
+    `insert into lab_test_params (tenant_id, test_id, code, name, unit, value_type, decimals)
+     values ($1, $2, 'HB', 'Haemoglobin', 'g/dL', 'numeric', 1) returning id`,
+    [tenant.id, labTest.id],
+  );
+  const labAccession = await one<{ id: string }>(
+    migrator,
+    `insert into lab_accessions (
+       tenant_id, location_id, patient_id, encounter_id, order_item_id, number, barcode, status, specimen, is_sample
+     ) values ($1, $2, $3, $4, $5, $6, $6, 'collected', 'blood', true) returning id`,
+    [tenant.id, location.id, patient.id, encounter.id, orderItem.id, `ZLA${runId}${mark}`],
+  );
+  const labResult = await one<{ id: string }>(
+    migrator,
+    `insert into lab_results (tenant_id, accession_id, param_id, value_num, value_text, flag, entered_by, version)
+     values ($1, $2, $3, 13.5, 'Sample', 'N', $4, 1) returning id`,
+    [tenant.id, labAccession.id, labParam.id, user.id],
+  );
+  const labInterface = await one<{ id: string }>(
+    migrator,
+    `insert into lab_interfaces (tenant_id, location_id, name, kind, token_hash)
+     values ($1, $2, 'Mock analyser', 'mock_astm', $3) returning id`,
+    [tenant.id, location.id, `tok${runId}${mark}`],
+  );
+  const labSettings = await one<{ id: string }>(
+    migrator,
+    `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false) returning id`,
+    [tenant.id],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -667,6 +782,13 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     queueId: queue.id,
     spareEncounterId: spareEncounter.id,
     mlcId: mlc.id,
+    billId: bill.id,
+    billLineId: billLine.id,
+    depositId: deposit.id,
+    settlementId: settlement.id,
+    concessionId: concession.id,
+    refundId: refund.id,
+    billCreditNoteId: billCreditNote.id,
     orderSetId: orderSet.id,
     prescriptionTemplateId: rxTemplate.id,
     pharmacyItemId: pharmacyItem.id,
@@ -693,6 +815,14 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     bedAssignmentId: bedAssignment.id,
     admissionRequestId: admissionRequest.id,
     summaryId: summary.id,
+    labTestId: labTest.id,
+    labParamId: labParam.id,
+    labAccessionId: labAccession.id,
+    labResultId: labResult.id,
+    labInterfaceId: labInterface.id,
+    labSettingsId: labSettings.id,
+    marScheduleId: marSchedule.id,
+    medAdminId: medAdmin.id,
   };
 }
 
@@ -703,6 +833,14 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   // transaction, then turn them back on before commit (DDL rolls back with the tx).
   const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes', 'pharmacy_stock_moves'];
   const steps = [
+    `delete from bill_credit_notes where tenant_id = any($1::uuid[])`,
+    `delete from refunds where tenant_id = any($1::uuid[])`,
+    `delete from concessions where tenant_id = any($1::uuid[])`,
+    `delete from bill_settlements where tenant_id = any($1::uuid[])`,
+    `delete from bill_lines where tenant_id = any($1::uuid[])`,
+    `update charges set bill_id = null where tenant_id = any($1::uuid[])`,
+    `delete from deposits where tenant_id = any($1::uuid[])`,
+    `delete from bills where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_stock_moves where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_supplier_return_lines where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_supplier_returns where tenant_id = any($1::uuid[])`,
@@ -731,8 +869,16 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from appointments where tenant_id = any($1::uuid[])`,
     `delete from schedule_exceptions where tenant_id = any($1::uuid[])`,
     `delete from doctor_schedules where tenant_id = any($1::uuid[])`,
+    `delete from lab_results where tenant_id = any($1::uuid[])`,
+    `delete from lab_accessions where tenant_id = any($1::uuid[])`,
+    `delete from lab_test_params where tenant_id = any($1::uuid[])`,
+    `delete from lab_tests where tenant_id = any($1::uuid[])`,
+    `delete from lab_interfaces where tenant_id = any($1::uuid[])`,
+    `delete from lab_settings where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
+    `delete from medication_administrations where tenant_id = any($1::uuid[])`,
+    `delete from mar_schedules where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,
     `delete from clinical_orders where tenant_id = any($1::uuid[])`,
     `delete from vital_signs where tenant_id = any($1::uuid[])`,

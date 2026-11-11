@@ -84,6 +84,13 @@ const KNOWN_TABLES = [
   'schedule_exceptions',
   'appointments',
   'opd_queue',
+  'bills',
+  'bill_lines',
+  'deposits',
+  'bill_settlements',
+  'concessions',
+  'refunds',
+  'bill_credit_notes',
 ] as const;
 
 async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {

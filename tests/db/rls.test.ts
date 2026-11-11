@@ -65,6 +65,13 @@ const TABLES = [
   'appointments',
   'opd_queue',
   'mlc_cases',
+  'bills',
+  'bill_lines',
+  'deposits',
+  'bill_settlements',
+  'concessions',
+  'refunds',
+  'bill_credit_notes',
   'order_sets',
   'prescription_templates',
   'pharmacy_items',
@@ -91,6 +98,14 @@ const TABLES = [
   'bed_assignments',
   'admission_requests',
   'discharge_summaries',
+  'lab_tests',
+  'lab_test_params',
+  'lab_accessions',
+  'lab_results',
+  'lab_interfaces',
+  'lab_settings',
+  'mar_schedules',
+  'medication_administrations',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -197,9 +212,10 @@ describe.sequential('row level security', () => {
       'tenants',
     ].sort();
     const expected = [...TABLES].sort();
+    const known = new Set<string>(expected);
     const missing = expected.filter((name) => !discovered.includes(name));
     expect(missing, 'tenant tables missing from the database').toEqual([]);
-    const extra = discovered.filter((name) => !expected.includes(name));
+    const extra = discovered.filter((name) => !known.has(name));
     if (extra.length === 0) return;
     // A shared hos_test can contain tenant tables from migrations this worktree does not have
     // (other worktrees apply 0100+ clinical migrations to the same database). Those must not
@@ -615,8 +631,11 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         ],
       };
     case 'users':
-      return row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
-        `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`);
+      return {
+        ...row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
+          `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`),
+        beforeMassDelete: ['delete from medication_administrations', 'delete from lab_results', 'delete from lab_accessions'],
+      };
     case 'user_location_roles':
       return {
         ...common,
@@ -834,7 +853,14 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.serviceId, `name = 'Touched by A'`, 'name',
           `insert into services (tenant_id, code, name, category) values ($1, 'NO${pair.runId}', 'Nope', 'misc')`),
-        beforeMassDelete: ['delete from charges', 'delete from tariffs'],
+        beforeMassDelete: [
+          'delete from bill_lines',
+          'delete from lab_results',
+          'delete from lab_test_params',
+          'delete from lab_tests',
+          'delete from charges',
+          'delete from tariffs',
+        ],
       };
     case 'tariffs':
       return {
@@ -850,11 +876,25 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.clinicalOrderId, `notes = 'Touched by A'`, 'notes',
           `insert into clinical_orders (tenant_id, location_id, encounter_id, patient_id, kind, number, source) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'lab', 'ZNOPE${pair.runId}', 'opd')`),
-        beforeMassDelete: ['delete from clinical_order_items'],
+        beforeMassDelete: [
+          'delete from lab_results',
+          'delete from lab_accessions',
+          'delete from medication_administrations',
+          'delete from mar_schedules',
+          'delete from clinical_order_items',
+        ],
       };
     case 'clinical_order_items':
-      return row(common, 'id = $1', b.orderItemId, `drug_name = 'Touched by A'`, 'drug_name',
-        `insert into clinical_order_items (tenant_id, order_id, line_no) values ($1, '${b.clinicalOrderId}', 2)`);
+      return {
+        ...row(common, 'id = $1', b.orderItemId, `drug_name = 'Touched by A'`, 'drug_name',
+          `insert into clinical_order_items (tenant_id, order_id, line_no) values ($1, '${b.clinicalOrderId}', 2)`),
+        beforeMassDelete: [
+          'delete from lab_results',
+          'delete from lab_accessions',
+          'delete from medication_administrations',
+          'delete from mar_schedules',
+        ],
+      };
     case 'vital_signs':
       return {
         ...common,
@@ -879,8 +919,11 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         massDelete: 'forbidden',
       };
     case 'charges':
-      return row(common, 'id = $1', b.chargeId, `description = 'Touched by A'`, 'description',
-        `insert into charges (tenant_id, location_id, encounter_id, patient_id, description, qty, unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id, source_line) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'Nope', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', '${b.encounterId}', 'nope')`);
+      return {
+        ...row(common, 'id = $1', b.chargeId, `description = 'Touched by A'`, 'description',
+          `insert into charges (tenant_id, location_id, encounter_id, patient_id, description, qty, unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id, source_line) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'Nope', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', '${b.encounterId}', 'nope')`),
+        beforeMassDelete: ['delete from bill_lines'],
+      };
     case 'cash_ledger':
       return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
         `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
@@ -920,6 +963,33 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into mlc_cases (tenant_id, patient_id, encounter_id, number, injury_summary) values ($1, '${b.patientId}', '${b.encounterId}', 'ZML${pair.runId}', 'Nope')`,
         retargetSql: `update mlc_cases set tenant_id = $1`,
       };
+    case 'bills':
+      return {
+        ...row(common, 'id = $1', b.billId, `cancel_reason = 'Touched by A'`, 'cancel_reason',
+          `insert into bills (tenant_id, location_id, patient_id, encounter_id, kind, doc_type, status, pay_class, subtotal_paise, total_paise) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', 'op', 'bill_of_supply', 'draft', 'cash', 100, 100)`),
+        beforeMassDelete: ['delete from bill_credit_notes', 'delete from refunds', 'delete from concessions', 'delete from bill_settlements', 'delete from bill_lines', 'update charges set bill_id = null'],
+      };
+    case 'bill_lines':
+      return row(common, 'id = $1', b.billLineId, `description = 'Touched by A'`, 'description',
+        `insert into bill_lines (tenant_id, bill_id, charge_id, line_no, description, qty, unit_price_paise, amount_paise, taxable_paise, gst_treatment, service_date) values ($1, '${b.billId}', gen_random_uuid(), 2, 'Nope', 1, 100, 100, 100, 'exempt_healthcare', current_date)`);
+    case 'deposits':
+      return row(common, 'id = $1', b.depositId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
+        `insert into deposits (tenant_id, location_id, patient_id, number, amount_paise, balance_paise, mode) values ($1, '${b.locationId}', '${b.patientId}', 'DPNO${pair.runId}', 100, 100, 'cash')`);
+    case 'bill_settlements':
+      return row(common, 'id = $1', b.settlementId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
+        `insert into bill_settlements (tenant_id, bill_id, mode, amount_paise) values ($1, '${b.billId}', 'cash', 100)`);
+    case 'concessions':
+      return row(common, 'id = $1', b.concessionId, `reason = 'Touched by A'`, 'reason',
+        `insert into concessions (tenant_id, bill_id, amount_paise, reason) values ($1, '${b.billId}', 100, 'Nope')`);
+    case 'refunds':
+      return {
+        ...row(common, 'id = $1', b.refundId, `reason = 'Touched by A'`, 'reason',
+          `insert into refunds (tenant_id, bill_id, number, amount_paise, reason, mode) values ($1, '${b.billId}', 'RFNO${pair.runId}', 100, 'Nope', 'cash')`),
+        beforeMassDelete: ['delete from bill_credit_notes'],
+      };
+    case 'bill_credit_notes':
+      return row(common, 'id = $1', b.billCreditNoteId, `reason = 'Touched by A'`, 'reason',
+        `insert into bill_credit_notes (tenant_id, bill_id, number, amount_paise) values ($1, '${b.billId}', 'CNNO${pair.runId}', 100)`);
     case 'order_sets':
       return {
         ...common,
@@ -1129,6 +1199,66 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into discharge_summaries (tenant_id, admission_id, sections) values ($1, '${b.admissionId}', '{}'::jsonb)`,
         retargetSql: `update discharge_summaries set tenant_id = $1`,
       };
+    case 'lab_tests':
+      return {
+        ...row(common, 'id = $1', b.labTestId, `container = 'Touched by A'`, 'container',
+          `insert into lab_tests (tenant_id, service_id, specimen, container, tat_hours) values ($1, '${b.serviceId}', 'blood', 'Nope', 4)`),
+        beforeMassDelete: ['delete from lab_results', 'delete from lab_test_params'],
+      };
+    case 'lab_test_params':
+      return {
+        ...row(common, 'id = $1', b.labParamId, `unit = 'Touched by A'`, 'unit',
+          `insert into lab_test_params (tenant_id, test_id, code, name, value_type) values ($1, '${b.labTestId}', 'NO', 'Nope', 'text')`),
+        beforeMassDelete: ['delete from lab_results'],
+      };
+    case 'lab_accessions':
+      return {
+        ...row(common, 'id = $1', b.labAccessionId, `reject_reason = 'Touched by A'`, 'reject_reason',
+          `insert into lab_accessions (tenant_id, location_id, patient_id, encounter_id, order_item_id, number, barcode, specimen) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', '${b.orderItemId}', 'ZLB${pair.runId}', 'ZLB${pair.runId}', 'urine')`),
+        beforeMassDelete: ['delete from lab_results'],
+      };
+    case 'lab_results':
+      return row(common, 'id = $1', b.labResultId, `value_text = 'Touched by A'`, 'value_text',
+        `insert into lab_results (tenant_id, accession_id, param_id, value_text, version) values ($1, '${b.labAccessionId}', '${b.labParamId}', 'Nope', 2)`);
+    case 'lab_interfaces':
+      return row(common, 'id = $1', b.labInterfaceId, `name = 'Touched by A'`, 'name',
+        `insert into lab_interfaces (tenant_id, name, kind, token_hash) values ($1, 'Nope', 'mock_astm', 'nope${pair.runId}')`);
+    case 'lab_settings':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.labSettingsId,
+        setSql: `collect_before_payment = true`,
+        untouched: `select coalesce(collect_before_payment = true, false) as touched from lab_settings where id = $1`,
+        insertSql: `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false)`,
+        retargetSql: `update lab_settings set tenant_id = $1`,
+      };
+    case 'mar_schedules':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.marScheduleId,
+        setSql: `voided_at = now()`,
+        untouched: `select coalesce(voided_at is not null, false) as touched from mar_schedules where id = $1`,
+        insertSql: `insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at) values ($1, '${b.orderItemId}', '${b.encounterId}', now() + interval '3 hours')`,
+        retargetSql: `update mar_schedules set tenant_id = $1`,
+        beforeMassDelete: ['delete from medication_administrations'],
+      };
+    case 'medication_administrations':
+      return row(
+        common,
+        'id = $1',
+        b.medAdminId,
+        `reason = 'Touched by A'`,
+        'reason',
+        `with ins as (
+           insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at)
+           values ($1, '${b.orderItemId}', '${b.encounterId}', now() + interval '4 hours')
+           returning id
+         )
+         insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
+         select $1, ins.id, 'held', '', '${b.userId}' from ins`,
+      );
     default:
       return assertNever(table);
   }

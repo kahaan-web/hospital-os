@@ -251,8 +251,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
       if (!row) throw new ApiError(404, 'not_found', 'Override not found');
       await gate.tx.delete(schema.tenantEntitlementOverrides).where(eq(schema.tenantEntitlementOverrides.id, row.id));
       await gate.audit('admin.override.delete', 'entitlement_override', row.id, { effect: row.effect }, null);
-      return reply.status(204).send();
-    }),
+      return null;
+    }).then(() => reply.status(204).send()), // reply only after COMMIT, so the next request sees the change
   );
 
   r.post('/api/v1/admin/tenants/:id/suspend', { schema: { params: idParam, body: suspendSchema } }, async (req, reply) =>
@@ -270,8 +270,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         })
         .where(eq(schema.tenants.id, hospital.id));
       await gate.audit('admin.tenant.suspend', 'tenant', hospital.id, { status: hospital.status }, { status: 'suspended', reason: req.body.reason, restore: previous });
-      return reply.status(204).send();
-    }),
+      return null;
+    }).then(() => reply.status(204).send()), // reply only after COMMIT, so the next request sees the change
   );
 
   r.post(
@@ -298,8 +298,8 @@ export function registerAdmin(app: FastifyInstance, deps: Deps): void {
         .set({ status: restore, statusBeforeSuspend: null, suspendedAt: null, suspendedReason: null })
         .where(eq(schema.tenants.id, hospital.id));
       await gate.audit('admin.tenant.reactivate', 'tenant', hospital.id, { status: 'suspended' }, { status: restore });
-      return reply.status(204).send();
-    }),
+      return null;
+    }).then(() => reply.status(204).send()), // reply only after COMMIT, so the next request sees the change
   );
 
   r.get('/api/v1/admin/settings', async (req) =>

@@ -4,10 +4,13 @@
 import type pg from 'pg';
 import { seedAdt } from './adt';
 import { seedAppointments } from './appointments';
+import { seedBillingOp } from './billing-op';
 import { seedClinicalFoundation } from './clinical-foundation';
 import { seedCore } from './core';
 import { seedCreditNotes } from './credit-notes';
 import { seedDoctor } from './doctor';
+import { seedLab } from './lab';
+import { seedNursing } from './nursing';
 import { seedPharmacy } from './pharmacy';
 import { seedRegistration } from './registration';
 import type { FixtureModule, ProbeSpec, TenantFixture } from './types';
@@ -15,13 +18,16 @@ import type { FixtureModule, ProbeSpec, TenantFixture } from './types';
 export const fixtureModules: FixtureModule[] = [
   { name: 'core', seed: seedCore },
   { name: 'clinical-foundation', seed: seedClinicalFoundation },
-  // No-op until feat/mt-hardening creates the table. Then it inserts one row per tenant.
+  // OP lines need an encounter and a charge from clinical-foundation.
+  { name: 'billing-op', seed: seedBillingOp },
   { name: 'credit-notes', seed: seedCreditNotes },
   { name: 'registration', seed: seedRegistration },
   { name: 'doctor', seed: seedDoctor },
   { name: 'pharmacy', seed: seedPharmacy },
   { name: 'adt', seed: seedAdt },
   { name: 'appointments', seed: seedAppointments },
+  { name: 'lab', seed: seedLab },
+  { name: 'nursing', seed: seedNursing },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

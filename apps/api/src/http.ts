@@ -353,6 +353,8 @@ export function routeTemplate(req: FastifyRequest): string {
  * Cancel, reschedule and queue status are not creates, so they stay optional.
  * Pharmacy sale, goods receipt, IP issue, return and adjustment replay through the same key
  * instead of a second check inside the handler.
+ * OP bill, settlement, concession, refund and deposit posts do the same.
+ * Lab accession create does too.
  */
 const IDEMPOTENT_POSTS = new Set([
   '/api/v1/billing/orders',
@@ -367,6 +369,13 @@ const IDEMPOTENT_POSTS = new Set([
   '/api/v1/tenant/m/adt/bed-charges/post',
   '/api/v1/tenant/m/appointments/appointments',
   '/api/v1/tenant/m/opd-visit/visits',
+  '/api/v1/tenant/m/op-billing/bills',
+  '/api/v1/tenant/m/op-billing/bills/:id/finalise',
+  '/api/v1/tenant/m/op-billing/bills/:id/settle',
+  '/api/v1/tenant/m/op-billing/bills/:id/refund',
+  '/api/v1/tenant/m/op-billing/bills/:id/concessions',
+  '/api/v1/tenant/m/op-billing/deposits',
+  '/api/v1/tenant/m/op-billing/deposits/:id/refund',
   '/api/v1/tenant/m/pharmacy/sales',
   '/api/v1/tenant/m/pharmacy/sales/:id/return',
   '/api/v1/tenant/m/pharmacy/grns',
@@ -374,6 +383,7 @@ const IDEMPOTENT_POSTS = new Set([
   '/api/v1/tenant/m/pharmacy/ip-issues',
   '/api/v1/tenant/m/pharmacy/ip-issues/:id/return',
   '/api/v1/tenant/m/pharmacy/adjustments',
+  '/api/v1/tenant/m/lab/accessions',
 ]);
 
 export function idempotencyRequired(req: FastifyRequest): boolean {
