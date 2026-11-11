@@ -73,7 +73,7 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
         .returning();
       challengeId = challenge!.id;
       await deps.sms.send(tx, { tenantId, to: mobile, template: 'signup_otp', body: `Hospital OS code ${code}` });
-      await writeAudit(tx, { actorType: 'user', actorId: user!.id, actorLabel: email, tenantId, locationId: null, ...meta }, 'auth.user.signup', 'user', user!.id, null, { email });
+      await writeAudit(tx, { actorType: 'user', actorId: user!.id, actorLabel: email, tenantId, locationId: null, ...meta }, 'auth.user.signup', 'user', user!.id, null, {});
     });
     return { challengeId, ...(deps.env.exposeSecrets ? { devCode: code } : {}) };
   });
@@ -100,7 +100,7 @@ export function registerAuth(app: FastifyInstance, deps: Deps): void {
       await tx.update(schema.users).set({ status: 'active', mobileVerifiedAt: new Date() }).where(eq(schema.users.id, user.id));
       const token = randomToken();
       await tx.execute(sql`select hos_session_create(${sha256Hex(token)}, 'tenant', ${user.id}::uuid, null, null, ${meta.ip}, ${meta.userAgent})`);
-      await writeAudit(tx, actor, 'auth.otp.verify', 'user', user.id, null, { email: user.email });
+      await writeAudit(tx, actor, 'auth.otp.verify', 'user', user.id, null, {});
       return { kind: 'ok' as const, token, userId: user.id };
     });
     if (outcome.kind === 'expired') throw new ApiError(400, 'otp_expired', 'That code has expired. Request a new one.');

@@ -59,6 +59,8 @@ export async function ensureTenant(owner: pg.Client, spec: ProbeSpec): Promise<T
       `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at)
        select 'rls-' || $2 || '-live', 'tenant', u.id, $1::uuid, now() + interval '1 day', now() from users u
        where u.tenant_id = $1
+       order by u.created_at
+       limit 1
        on conflict (token_hash) do update
          set last_seen_at = now(), expires_at = now() + interval '1 day', revoked_at = null`,
       [id, spec.tag],
@@ -67,6 +69,8 @@ export async function ensureTenant(owner: pg.Client, spec: ProbeSpec): Promise<T
       `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at)
        select 'rls-' || $2 || '-expired', 'tenant', u.id, $1::uuid, now() - interval '1 minute', now() from users u
        where u.tenant_id = $1
+       order by u.created_at
+       limit 1
        on conflict (token_hash) do update
          set expires_at = now() - interval '1 minute', revoked_at = null, last_seen_at = now()`,
       [id, spec.tag],
@@ -75,6 +79,8 @@ export async function ensureTenant(owner: pg.Client, spec: ProbeSpec): Promise<T
       `insert into sessions (token_hash, kind, user_id, tenant_id, expires_at, last_seen_at, revoked_at)
        select 'rls-' || $2 || '-revoked', 'tenant', u.id, $1::uuid, now() + interval '1 day', now(), now() from users u
        where u.tenant_id = $1
+       order by u.created_at
+       limit 1
        on conflict (token_hash) do update
          set revoked_at = now(), expires_at = now() + interval '1 day', last_seen_at = now()`,
       [id, spec.tag],
