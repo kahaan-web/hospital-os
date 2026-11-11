@@ -51,7 +51,22 @@ beforeAll(async () => {
   sunriseTenantId = sunrise.json().tenant.id as string;
   deskCookie = await login('frontdesk@sunrise.demo', 'Demo@12345');
   adminCookie = await login(process.env.SEED_ADMIN_EMAIL || 'admin@hospitalos.test', process.env.SEED_ADMIN_PASSWORD || 'Admin@12345');
+  // Seed leaves the dev simulator on. This file's upgrade test needs the server to capture
+  // even when the client asks for a failure, so the flag starts off. The platform login is the one that can write it.
+  await setSimulator(false);
 }, 180_000);
+
+async function setSimulator(enabled: boolean): Promise<void> {
+  const platform = createDb(dbEnv().platformUrl, { max: 1 });
+  try {
+    const updated = await withPlatform(platform.db, (tx) =>
+      tx.execute(sql`update platform_settings set mock_payment_simulator = ${enabled} where id = 1`),
+    );
+    if ((updated.rowCount ?? 0) !== 1) throw new Error('platform_settings simulator flag was not updated');
+  } finally {
+    await platform.close();
+  }
+}
 
 afterAll(async () => {
   await app.close();

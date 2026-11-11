@@ -33,6 +33,18 @@ export interface AppointmentDto {
   slotEnd: string | null;
   status: string;
   channel: string;
+  locationId?: string;
+  encounterId?: string | null;
+  reason?: string;
+  walkinName?: string | null;
+  walkinMobile?: string | null;
+  seq?: number;
+  counterKind?: 'new' | 'repeat' | null;
+  patientName?: string | null;
+  uhid?: string | null;
+  doctorName?: string | null;
+  cancelReason?: string | null;
+  token?: number | null;
 }
 
 export interface SlotDto {
@@ -41,6 +53,10 @@ export interface SlotDto {
   start: string;
   end: string;
   available: boolean;
+  /** Seats still open in this slot. */
+  remaining?: number;
+  /** Why the slot cannot be booked, when available is false. */
+  note?: string | null;
 }
 
 export interface LabResultSummaryDto {

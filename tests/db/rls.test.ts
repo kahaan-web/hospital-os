@@ -60,6 +60,10 @@ const TABLES = [
   'clinical_notes',
   'charges',
   'cash_ledger',
+  'doctor_schedules',
+  'schedule_exceptions',
+  'appointments',
+  'opd_queue',
   'mlc_cases',
   'pharmacy_items',
   'pharmacy_suppliers',
@@ -78,6 +82,13 @@ const TABLES = [
   'pharmacy_adjustment_lines',
   'pharmacy_supplier_returns',
   'pharmacy_supplier_return_lines',
+  'wards',
+  'rooms',
+  'beds',
+  'admissions',
+  'bed_assignments',
+  'admission_requests',
+  'discharge_summaries',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -587,8 +598,20 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return row(common, 'id = $1', b.departmentId, `name = 'Touched by A'`, 'name',
         `insert into departments (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
     case 'doctors':
-      return row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
-        `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
+      return {
+        ...row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
+          `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`),
+        beforeMassDelete: [
+          'delete from discharge_summaries',
+          'delete from bed_assignments',
+          'delete from admission_requests',
+          'delete from admissions',
+          'delete from opd_queue',
+          'delete from appointments',
+          'delete from schedule_exceptions',
+          'delete from doctor_schedules',
+        ],
+      };
     case 'users':
       return row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
         `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`);
@@ -859,6 +882,32 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'cash_ledger':
       return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
         `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
+    case 'doctor_schedules':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.scheduleId,
+        setSql: 'slot_minutes = 20',
+        untouched: 'select coalesce(slot_minutes = 20, false) as touched from doctor_schedules where id = $1',
+        insertSql: `insert into doctor_schedules (tenant_id, doctor_id, location_id, weekday, start_time, end_time, slot_minutes, max_per_slot) values ($1, '${b.doctorId}', '${b.locationId}', 1, '14:00', '15:00', 15, 1)`,
+        retargetSql: 'update doctor_schedules set tenant_id = $1',
+      };
+    case 'schedule_exceptions':
+      return row(common, 'id = $1', b.exceptionId, `reason = 'Touched by A'`, 'reason',
+        `insert into schedule_exceptions (tenant_id, doctor_id, location_id, on_date, kind, reason) values ($1, '${b.doctorId}', '${b.locationId}', '2026-02-02', 'closed', 'Nope')`);
+    case 'appointments':
+      return row(common, 'id = $1', b.appointmentId, `reason = 'Touched by A'`, 'reason',
+        `insert into appointments (tenant_id, location_id, patient_id, doctor_id, date, slot_start, slot_end, seq, channel, reason) values ($1, '${b.locationId}', '${b.patientId}', '${b.doctorId}', '2026-06-02', '10:00', '10:15', 1, 'counter', 'Nope')`);
+    case 'opd_queue':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.queueId,
+        setSql: 'token = 9',
+        untouched: 'select coalesce(token = 9, false) as touched from opd_queue where id = $1',
+        insertSql: `insert into opd_queue (tenant_id, location_id, encounter_id, patient_id, doctor_id, token, visit_date) values ($1, '${b.locationId}', '${b.spareEncounterId}', '${b.patientId}', '${b.doctorId}', 2, current_date)`,
+        retargetSql: 'update opd_queue set tenant_id = $1',
+      };
     case 'mlc_cases':
       return {
         ...common,
@@ -1005,6 +1054,58 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(qty = 9, false) as touched from pharmacy_supplier_return_lines where id = $1`,
         insertSql: `insert into pharmacy_supplier_return_lines (tenant_id, return_id, line_no, batch_id, qty) values ($1, '${b.pharmacySupplierReturnId}', 2, '${b.pharmacyBatchId}', 1)`,
         retargetSql: `update pharmacy_supplier_return_lines set tenant_id = $1`,
+      };
+    case 'wards':
+      return {
+        ...row(common, 'id = $1', b.wardId, `name = 'Touched by A'`, 'name',
+          `insert into wards (tenant_id, location_id, code, name, ward_type) values ($1, '${b.locationId}', 'ZZ', 'Nope', 'general')`),
+        beforeMassDelete: ['delete from bed_assignments', 'delete from beds', 'delete from rooms'],
+      };
+    case 'rooms':
+      return {
+        ...row(common, 'id = $1', b.roomId, `name = 'Touched by A'`, 'name',
+          `insert into rooms (tenant_id, ward_id, code, name) values ($1, '${b.wardId}', 'ZZ', 'Nope')`),
+        beforeMassDelete: ['delete from bed_assignments', 'delete from beds'],
+      };
+    case 'beds':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.bedId,
+        setSql: `status = 'maintenance'`,
+        untouched: `select coalesce(status = 'maintenance', false) as touched from beds where id = $1`,
+        insertSql: `insert into beds (tenant_id, room_id, label, ward_class) values ($1, '${b.roomId}', 'ZZ', 'general')`,
+        retargetSql: `update beds set tenant_id = $1`,
+        beforeMassDelete: ['delete from bed_assignments'],
+      };
+    case 'admissions':
+      return {
+        ...row(common, 'id = $1', b.admissionId, `attendant = 'Touched by A'`, 'attendant',
+          `insert into admissions (tenant_id, location_id, encounter_id, patient_id, number, admission_type) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'ZN${pair.runId}', 'elective')`),
+        beforeMassDelete: ['delete from discharge_summaries', 'delete from bed_assignments', 'delete from admission_requests'],
+      };
+    case 'bed_assignments':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.bedAssignmentId,
+        setSql: `from_at = timestamptz '2020-01-01+00'`,
+        untouched: `select coalesce(from_at = timestamptz '2020-01-01+00', false) as touched from bed_assignments where id = $1`,
+        insertSql: `insert into bed_assignments (tenant_id, admission_id, bed_id, to_at) values ($1, '${b.admissionId}', '${b.bedId}', now())`,
+        retargetSql: `update bed_assignments set tenant_id = $1`,
+      };
+    case 'admission_requests':
+      return row(common, 'id = $1', b.admissionRequestId, `reason = 'Touched by A'`, 'reason',
+        `insert into admission_requests (tenant_id, location_id, patient_id, from_encounter_id, doctor_id, reason, planned_on) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', '${b.doctorId}', 'Nope', current_date)`);
+    case 'discharge_summaries':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.summaryId,
+        setSql: `sections = '{"diagnosis":"Touched by A"}'::jsonb`,
+        untouched: `select coalesce(sections->>'diagnosis' = 'Touched by A', false) as touched from discharge_summaries where id = $1`,
+        insertSql: `insert into discharge_summaries (tenant_id, admission_id, sections) values ($1, '${b.admissionId}', '{}'::jsonb)`,
+        retargetSql: `update discharge_summaries set tenant_id = $1`,
       };
     default:
       return assertNever(table);
