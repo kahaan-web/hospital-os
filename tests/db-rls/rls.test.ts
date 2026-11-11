@@ -80,6 +80,17 @@ const KNOWN_TABLES = [
   'clinical_notes',
   'charges',
   'cash_ledger',
+  'doctor_schedules',
+  'schedule_exceptions',
+  'appointments',
+  'opd_queue',
+  'bills',
+  'bill_lines',
+  'deposits',
+  'bill_settlements',
+  'concessions',
+  'refunds',
+  'bill_credit_notes',
 ] as const;
 
 async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {
@@ -510,7 +521,7 @@ async function runSuite(ready: Extract<RlsReady, { ok: true }>): Promise<void> {
 
     // PLATFORM_SCOPE.md (option C, migration 0023) is not in this branch. hos_scope() still returns the GUC,
     // so hos_app can set app.scope=platform and the admin definers then return every tenant. Not fixed here.
-    it.fails('hos_app cannot self-assert platform scope and read every tenant via hos_admin_overview', async () => {
+    it('hos_app cannot self-assert platform scope and read every tenant via hos_admin_overview', async () => {
       await inTx(app, { scope: 'platform', tenantId: null }, async () => {
         const scope = await app.query<{ s: string }>('select hos_scope() as s');
         const got = scope.rows[0]?.s;

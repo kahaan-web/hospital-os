@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { featureKey, gstinCheckDigit, type InvoiceDto, type QuoteDto, type TenantMe } from '@hos/shared';
+import { webhookSignature } from '../../apps/api/src/crypto';
 import { dbEnv } from '../../packages/db/src/env';
 
 /**
@@ -48,9 +49,12 @@ describe.sequential('wizard, GST and mock payments', () => {
     await app.ready();
     admin = new pg.Client({ connectionString: dbEnv().adminUrl, connectionTimeoutMillis: 4_000 });
     await admin.connect();
-  }, 120_000);
+    // Non-production only. The failure/pending examples need the dev simulator.
+    await setSimulator(true);
+  }, 300_000);
 
   afterAll(async () => {
+    await setSimulator(false).catch(() => undefined);
     await admin?.end().catch(() => undefined);
     await app?.close();
   });
@@ -143,7 +147,7 @@ describe.sequential('wizard, GST and mock payments', () => {
     const replacement = await call(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'onboarding' }, { 'idempotency-key': idem() });
     expectStatus(replacement, 200);
     const replacementId = (replacement.json as { id: string }).id;
-    const closed = await call(cookie, 'POST', `/api/v1/billing/payments/${pendingBody.payment.id}/resolve`, { outcome: 'success' });
+    const closed = await resolvePayment(pendingBody.payment.id, 'success');
     expectStatus(closed, 200);
     expect((closed.json as { status: string }).status).toBe('failed');
     const failure = await admin!.query<{ failure_code: string | null }>(
@@ -164,26 +168,40 @@ describe.sequential('wizard, GST and mock payments', () => {
     expect(captured.payment.status).toBe('captured');
     expect(captured.checkout.signature).toBe(sign(captured.checkout.orderId, captured.checkout.paymentId));
 
-    const tampered = await call(cookie, 'POST', '/api/v1/billing/verify', {
-      orderId: captured.checkout.orderId,
-      paymentId: captured.checkout.paymentId,
-      signature: 'ab'.repeat(32),
-    });
+    const tampered = await call(
+      cookie,
+      'POST',
+      '/api/v1/billing/verify',
+      {
+        orderId: captured.checkout.orderId,
+        paymentId: captured.checkout.paymentId,
+        signature: 'ab'.repeat(32),
+      },
+      { 'idempotency-key': idem() },
+    );
     expectStatus(tampered, 400);
     expect((tampered.json as { error?: { code?: string } }).error?.code).toBe('signature_invalid');
-    const shortSig = await call(cookie, 'POST', '/api/v1/billing/verify', {
-      orderId: captured.checkout.orderId,
-      paymentId: captured.checkout.paymentId,
-      signature: 'abc',
-    });
+    const shortSig = await call(
+      cookie,
+      'POST',
+      '/api/v1/billing/verify',
+      {
+        orderId: captured.checkout.orderId,
+        paymentId: captured.checkout.paymentId,
+        signature: 'abc',
+      },
+      { 'idempotency-key': idem() },
+    );
     expectStatus(shortSig, 400);
     expect((shortSig.json as { error?: { code?: string } }).error?.code).toBe('signature_invalid');
 
-    const verified = await call(cookie, 'POST', '/api/v1/billing/verify', captured.checkout);
+    const verifyKey = idem();
+    const verified = await call(cookie, 'POST', '/api/v1/billing/verify', captured.checkout, { 'idempotency-key': verifyKey });
     expectStatus(verified, 200);
     expect((verified.json as { status: string }).status).toBe('paid');
-    const verifiedAgain = await call(cookie, 'POST', '/api/v1/billing/verify', captured.checkout);
+    const verifiedAgain = await call(cookie, 'POST', '/api/v1/billing/verify', captured.checkout, { 'idempotency-key': verifyKey });
     expectStatus(verifiedAgain, 200);
+    expect(header(verifiedAgain, 'idempotent-replayed')).toBe('true');
 
     const provision = await call(cookie, 'POST', '/api/v1/onboarding/provision');
     expectStatus(provision, 200);
@@ -299,7 +317,7 @@ describe.sequential('wizard, GST and mock payments', () => {
     );
     expectStatus(pending, 200);
     const pendingId = (pending.json as { payment: { id: string } }).payment.id;
-    const declined = await call(cookie, 'POST', `/api/v1/billing/payments/${pendingId}/resolve`, { outcome: 'failure' });
+    const declined = await resolvePayment(pendingId, 'failure');
     expectStatus(declined, 200);
     expect((declined.json as { status: string }).status).toBe('failed');
 
@@ -312,7 +330,7 @@ describe.sequential('wizard, GST and mock payments', () => {
     );
     expectStatus(pendingAgain, 200);
     const pendingAgainId = (pendingAgain.json as { payment: { id: string } }).payment.id;
-    const resolved = await call(cookie, 'POST', `/api/v1/billing/payments/${pendingAgainId}/resolve`, { outcome: 'success' });
+    const resolved = await resolvePayment(pendingAgainId, 'success');
     expectStatus(resolved, 200);
     expect((resolved.json as { status: string }).status).toBe('captured');
 
@@ -336,6 +354,37 @@ describe.sequential('wizard, GST and mock payments', () => {
     expectStatus(hidden, 404);
     const hiddenBack = await call(intraCookie, 'GET', `/api/v1/billing/invoices/${list[0]!.id}`);
     expectStatus(hiddenBack, 404);
+  });
+
+  it('ignores a client failure when the simulator is off and replays the pay key once', async () => {
+    await setSimulator(false);
+    try {
+      const cookie = await signUp('Fictional Simulator Off Nursing Home', 'Simulator Off', '27', 'Pune', '411001');
+      const basicId = await basicPlan();
+      expectStatus(await call(cookie, 'PUT', '/api/v1/onboarding/plan', { planId: basicId, cycle: 'monthly', locationCount: 1 }), 200);
+      expectStatus(await call(cookie, 'PUT', '/api/v1/onboarding/addons', { moduleIds: [] }), 200);
+      const order = await call(cookie, 'POST', '/api/v1/billing/orders', { purpose: 'onboarding' }, { 'idempotency-key': idem() });
+      expectStatus(order, 200);
+      const orderId = (order.json as { id: string }).id;
+      const payKey = idem();
+      const body = { method: 'upi', outcome: 'failure', details: { vpa: 'asha.demo@upi' } };
+      const paid = await call(cookie, 'POST', `/api/v1/billing/orders/${orderId}/pay`, body, { 'idempotency-key': payKey });
+      expectStatus(paid, 200);
+      const captured = paid.json as { order: { status: string }; payment: { status: string; id: string }; checkout: unknown };
+      expect(captured.payment.status).toBe('captured');
+      expect(captured.order.status).toBe('paid');
+      expect(captured.checkout).not.toBeNull();
+      expect(await countPayments(orderId)).toBe(1);
+
+      const replay = await call(cookie, 'POST', `/api/v1/billing/orders/${orderId}/pay`, body, { 'idempotency-key': payKey });
+      expectStatus(replay, 200);
+      expect(header(replay, 'idempotent-replayed')).toBe('true');
+      expect((replay.json as { payment: { id: string; status: string } }).payment.id).toBe(captured.payment.id);
+      expect((replay.json as { payment: { status: string } }).payment.status).toBe('captured');
+      expect(await countPayments(orderId)).toBe(1);
+    } finally {
+      await setSimulator(true);
+    }
   });
 
   async function signUp(legalName: string, displayName: string, stateCode: string, city: string, pincode: string): Promise<string> {
@@ -393,6 +442,29 @@ describe.sequential('wizard, GST and mock payments', () => {
     const res = await call(cookie, 'GET', '/api/v1/tenant/audit');
     expectStatus(res, 200);
     return (res.json as { total: number }).total;
+  }
+
+  async function setSimulator(enabled: boolean): Promise<void> {
+    if (!admin) return;
+    const updated = await admin.query('update platform_settings set mock_payment_simulator = $1 where id = 1', [enabled]);
+    if (updated.rowCount !== 1) throw new Error('platform_settings row is missing');
+  }
+
+  async function resolvePayment(paymentId: string, outcome: 'success' | 'failure'): Promise<ApiResult> {
+    const body = { paymentId, outcome };
+    const secret = process.env.MOCK_GATEWAY_KEY_SECRET || 'mock_secret_change_me_dev_only';
+    return call('', 'POST', '/api/v1/billing/webhooks/mock', body, {
+      'idempotency-key': idem(),
+      'x-hos-signature': webhookSignature(secret, body),
+    });
+  }
+
+  async function countPayments(publicOrderId: string): Promise<number> {
+    const row = await admin!.query<{ n: number }>(
+      `select count(*)::int as n from payments where order_id = (select id from orders where public_id = $1)`,
+      [publicOrderId],
+    );
+    return Number(row.rows[0]?.n);
   }
 
   async function countOpenOrders(publicId: string): Promise<number> {

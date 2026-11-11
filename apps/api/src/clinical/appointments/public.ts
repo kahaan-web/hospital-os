@@ -1,19 +1,27 @@
 import type { Tx } from '@hos/db';
 import type { DiaryReader } from '@hos/shared';
-import { ApiError } from '../../http';
+import { bookAppointment, cancelAppointment, listSlots, loadDiary } from './service';
 
-/** B2 replaces this. The diary is empty until appointments are built. */
+/** DiaryReader for other clinical tasks. Routes in this folder call the same service. */
 export const diary: DiaryReader<Tx> = {
-  async diary() {
-    return [];
+  async diary(ctx, q) {
+    const view = await loadDiary(ctx, q);
+    return view.columns.flatMap((column) => column.appointments);
   },
-  async slots() {
-    return [];
+  slots(ctx, q) {
+    return listSlots(ctx, q);
   },
-  async book() {
-    throw new ApiError(422, 'not_available', 'Appointment booking is not available yet');
+  book(ctx, input) {
+    return bookAppointment(ctx, {
+      doctorId: input.doctorId,
+      date: input.date,
+      slotStart: input.slotStart,
+      reason: input.reason,
+      patientId: input.patientId,
+      channel: input.channel,
+    });
   },
-  async cancel() {
-    throw new ApiError(422, 'not_available', 'Appointment booking is not available yet');
+  cancel(ctx, appointmentId, reason) {
+    return cancelAppointment(ctx, appointmentId, reason);
   },
 };

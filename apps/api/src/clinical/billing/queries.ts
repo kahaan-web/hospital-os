@@ -10,7 +10,7 @@ import type {
   RefundDto,
   RevenueReportDto,
   UnbilledEncounterDto,
-  VisitStatisticsDto,
+  OpBillingVisitStatisticsDto,
 } from '@hos/shared';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { billDto, depositDto } from './map';
@@ -242,7 +242,7 @@ export async function depositRegister(ctx: ClinicalCtx<Tx>): Promise<DepositRegi
   };
 }
 
-export async function visitStatistics(ctx: ClinicalCtx<Tx>, from: string, to: string): Promise<VisitStatisticsDto> {
+export async function visitStatistics(ctx: ClinicalCtx<Tx>, from: string, to: string): Promise<OpBillingVisitStatisticsDto> {
   const visits = await ctx.tx.execute<{ n: number }>(sql`
     select count(*)::int as n
       from encounters

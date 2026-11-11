@@ -313,7 +313,8 @@ export interface DepositRegisterDto {
   rows: DepositRegisterRow[];
 }
 
-export interface VisitStatisticsDto {
+/** OP billing visit counts. OPD's diary report uses `VisitStatisticsDto` in appointments.ts. */
+export interface OpBillingVisitStatisticsDto {
   from: string;
   to: string;
   opdVisits: number;

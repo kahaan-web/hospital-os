@@ -194,7 +194,8 @@ export const refunds = pgTable(
   ],
 );
 
-export const creditNotes = pgTable(
+/** OP bill credit notes. `creditNotes` in schema.ts is the platform invoice credit note. */
+export const billCreditNotes = pgTable(
   'bill_credit_notes',
   {
     id: id(),
@@ -212,12 +213,12 @@ export const creditNotes = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    unique('credit_notes_tenant_id_uq').on(t.tenantId, t.id),
-    unique('credit_notes_number_uq').on(t.tenantId, t.number),
-    index('credit_notes_bill_idx').on(t.tenantId, t.billId),
-    foreignKey({ columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id], name: 'credit_notes_bill_fk' }),
-    foreignKey({ columns: [t.tenantId, t.refundId], foreignColumns: [refunds.tenantId, refunds.id], name: 'credit_notes_refund_fk' }),
-    check('credit_notes_status_chk', sql`status in ('issued', 'cancelled')`),
-    check('credit_notes_money_chk', sql`amount_paise > 0 and char_length(number) <= 16`),
+    unique('bill_credit_notes_tenant_id_uq').on(t.tenantId, t.id),
+    unique('bill_credit_notes_number_uq').on(t.tenantId, t.number),
+    index('bill_credit_notes_bill_idx').on(t.tenantId, t.billId),
+    foreignKey({ columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id], name: 'bill_credit_notes_bill_fk' }),
+    foreignKey({ columns: [t.tenantId, t.refundId], foreignColumns: [refunds.tenantId, refunds.id], name: 'bill_credit_notes_refund_fk' }),
+    check('bill_credit_notes_status_chk', sql`status in ('issued', 'cancelled')`),
+    check('bill_credit_notes_money_chk', sql`amount_paise > 0 and char_length(number) <= 16`),
   ],
 );

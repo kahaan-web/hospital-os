@@ -15,6 +15,8 @@ import { dbEnv } from '../../packages/db/src/env';
 
 export interface DbRoles {
   app: pg.Client;
+  /** Login that may hold platform scope. Successful platform writes use this client. */
+  platform: pg.Client;
   migrator: pg.Client;
   admin: pg.Client;
 }
@@ -34,6 +36,7 @@ export interface Side {
   paymentId: string;
   invoiceId: string;
   lineId: string;
+  creditNoteId: string;
   overrideId: string;
   consentId: string;
   requestId: string;
@@ -53,6 +56,12 @@ export interface Side {
   noteId: string;
   chargeId: string;
   cashId: string;
+  scheduleId: string;
+  exceptionId: string;
+  appointmentId: string;
+  queueId: string;
+  /** Second encounter so an opd_queue insert does not collide with the fixture row. */
+  spareEncounterId: string;
   mlcId: string;
   billId: string;
   billLineId: string;
@@ -60,7 +69,15 @@ export interface Side {
   settlementId: string;
   concessionId: string;
   refundId: string;
-  creditNoteId: string;
+  /** OP bill credit note (`bill_credit_notes`). `creditNoteId` is the platform invoice note. */
+  billCreditNoteId: string;
+  wardId: string;
+  roomId: string;
+  bedId: string;
+  admissionId: string;
+  bedAssignmentId: string;
+  admissionRequestId: string;
+  summaryId: string;
 }
 
 export interface FixturePair {
@@ -99,24 +116,23 @@ export async function connectRoles(): Promise<DbRoles> {
 
 async function openRoles(env: ReturnType<typeof dbEnv>): Promise<DbRoles> {
   const app = new pg.Client({ connectionString: env.appUrl, connectionTimeoutMillis: CONNECT_MS });
+  const platform = new pg.Client({ connectionString: env.platformUrl, connectionTimeoutMillis: CONNECT_MS });
   const migrator = new pg.Client({ connectionString: env.migrationUrl, connectionTimeoutMillis: CONNECT_MS });
   const admin = new pg.Client({ connectionString: env.adminUrl, connectionTimeoutMillis: CONNECT_MS });
-  await app.connect();
+  const clients = [app, platform, migrator, admin];
   try {
-    await migrator.connect();
-    await admin.connect();
+    for (const client of clients) await client.connect();
   } catch (err) {
-    await app.end().catch(() => undefined);
-    await migrator.end().catch(() => undefined);
-    await admin.end().catch(() => undefined);
+    await Promise.all(clients.map((client) => client.end().catch(() => undefined)));
     throw err;
   }
-  return { app, migrator, admin };
+  return { app, platform, migrator, admin };
 }
 
 export async function disconnectRoles(roles: DbRoles | null): Promise<void> {
   if (!roles) return;
   await roles.app.end().catch(() => undefined);
+  await roles.platform.end().catch(() => undefined);
   await roles.migrator.end().catch(() => undefined);
   await roles.admin.end().catch(() => undefined);
 }
@@ -146,6 +162,30 @@ export async function expectSqlState(client: pg.Client, text: string, params: un
   }
   await client.query(`ROLLBACK TO SAVEPOINT ${mark}`);
   throw new Error(`expected SQLSTATE ${code} but the statement succeeded: ${text}`);
+}
+
+/**
+ * Cross-tenant UPDATE/DELETE. RLS hiding the row (0 rows) is a pass.
+ * Permission denied or the immutability trigger (both SQLSTATE 42501) is also a pass.
+ * A write that touches a row is not.
+ */
+export async function expectHiddenWrite(client: pg.Client, text: string, params: unknown[]): Promise<void> {
+  const mark = `sp_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  await client.query(`SAVEPOINT ${mark}`);
+  try {
+    const result = await client.query(text, params);
+    await client.query(`RELEASE SAVEPOINT ${mark}`);
+    if ((result.rowCount ?? 0) !== 0) {
+      throw new Error(`expected 0 rows or SQLSTATE 42501 for [${text}], updated ${result.rowCount}`);
+    }
+  } catch (err) {
+    const actual = (err as { code?: string }).code;
+    if (!actual) throw err;
+    await client.query(`ROLLBACK TO SAVEPOINT ${mark}`);
+    if (actual !== '42501') {
+      throw new Error(`expected 0 rows or SQLSTATE 42501 for [${text}], got ${actual}: ${(err as Error).message}`);
+    }
+  }
 }
 
 export async function insertPair(migrator: pg.Client): Promise<FixturePair> {
@@ -274,6 +314,12 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, 'Sample line', 100, 100, 1800, 9, 9, 0) returning id`,
     [tenant.id, invoice.id],
   );
+  const creditNote = await one<{ id: string }>(
+    migrator,
+    `insert into credit_notes (tenant_id, invoice_id, number, reason, taxable_paise, cgst_paise, sgst_paise, igst_paise, total_paise)
+     values ($1, $2, $3, 'Sample credit', 100, 9, 9, 0, 118) returning id`,
+    [tenant.id, invoice.id, `C${runId}${mark}`],
+  );
   const override = await one<{ id: string }>(
     migrator,
     `insert into tenant_entitlement_overrides (tenant_id, target, module_id, effect)
@@ -377,6 +423,41 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      ) values ($1, $2, 'receipt', 'in', 'cash', 100, $3, $4, $5, 'bill', $5) returning id`,
     [tenant.id, location.id, `ZC${runId}${mark}`, patient.id, encounter.id],
   );
+  const spareEncounter = mark === 'b'
+    ? await one<{ id: string }>(
+      migrator,
+      `insert into encounters (tenant_id, location_id, patient_id, kind, number)
+       values ($1, $2, $3, 'opd', $4) returning id`,
+      [tenant.id, location.id, patient.id, `ZS${runId}${mark}`],
+    )
+    : encounter;
+  const schedule = await one<{ id: string }>(
+    migrator,
+    `insert into doctor_schedules (
+       tenant_id, doctor_id, location_id, weekday, start_time, end_time, slot_minutes, max_per_slot, is_sample
+     ) values ($1, $2, $3, 1, '09:00', '12:00', 15, 2, true) returning id`,
+    [tenant.id, doctor.id, location.id],
+  );
+  const exception = await one<{ id: string }>(
+    migrator,
+    `insert into schedule_exceptions (tenant_id, doctor_id, location_id, on_date, kind, reason, is_sample)
+     values ($1, $2, $3, '2026-01-26', 'closed', 'Sample', true) returning id`,
+    [tenant.id, doctor.id, location.id],
+  );
+  const appointment = await one<{ id: string }>(
+    migrator,
+    `insert into appointments (
+       tenant_id, location_id, patient_id, doctor_id, date, slot_start, slot_end, seq, channel, status, reason, is_sample
+     ) values ($1, $2, $3, $4, '2026-06-01', '09:00', '09:15', 1, 'counter', 'booked', 'Sample', true) returning id`,
+    [tenant.id, location.id, patient.id, doctor.id],
+  );
+  const queue = await one<{ id: string }>(
+    migrator,
+    `insert into opd_queue (
+       tenant_id, location_id, encounter_id, patient_id, doctor_id, token, status, visit_date, is_sample
+     ) values ($1, $2, $3, $4, $5, 1, 'waiting', current_date, true) returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, doctor.id],
+  );
   const document = await one<{ id: string }>(
     migrator,
     `insert into patient_documents (tenant_id, patient_id, kind, file_path, mime, size)
@@ -434,11 +515,50 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, $3, 100, 'Sample refund', 'cash') returning id`,
     [tenant.id, bill.id, `RF${runId}${mark}`],
   );
-  const creditNote = await one<{ id: string }>(
+  const billCreditNote = await one<{ id: string }>(
     migrator,
     `insert into bill_credit_notes (tenant_id, bill_id, refund_id, number, amount_paise, reason, status)
      values ($1, $2, $3, $4, 100, 'Sample credit note', 'issued') returning id`,
     [tenant.id, bill.id, refund.id, `CN${runId}${mark}`],
+  );
+  const ward = await one<{ id: string }>(
+    migrator,
+    `insert into wards (tenant_id, location_id, code, name, ward_type)
+     values ($1, $2, $3, 'Sample ward', 'general') returning id`,
+    [tenant.id, location.id, `W${mark}`],
+  );
+  const room = await one<{ id: string }>(
+    migrator,
+    `insert into rooms (tenant_id, ward_id, code, name) values ($1, $2, 'R1', 'Sample room') returning id`,
+    [tenant.id, ward.id],
+  );
+  const bed = await one<{ id: string }>(
+    migrator,
+    `insert into beds (tenant_id, room_id, label, ward_class) values ($1, $2, 'B1', 'general') returning id`,
+    [tenant.id, room.id],
+  );
+  const admission = await one<{ id: string }>(
+    migrator,
+    `insert into admissions (tenant_id, location_id, encounter_id, patient_id, doctor_id, number, admission_type, attendant)
+     values ($1, $2, $3, $4, $5, $6, 'elective', 'Sample') returning id`,
+    [tenant.id, location.id, encounter.id, patient.id, doctor.id, `ZA${runId}${mark}`],
+  );
+  const bedAssignment = await one<{ id: string }>(
+    migrator,
+    `insert into bed_assignments (tenant_id, admission_id, bed_id) values ($1, $2, $3) returning id`,
+    [tenant.id, admission.id, bed.id],
+  );
+  const admissionRequest = await one<{ id: string }>(
+    migrator,
+    `insert into admission_requests (tenant_id, location_id, patient_id, from_encounter_id, doctor_id, reason, planned_on)
+     values ($1, $2, $3, $4, $5, 'Sample request', current_date) returning id`,
+    [tenant.id, location.id, patient.id, encounter.id, doctor.id],
+  );
+  const summary = await one<{ id: string }>(
+    migrator,
+    `insert into discharge_summaries (tenant_id, admission_id, sections)
+     values ($1, $2, '{"diagnosis":"Sample"}'::jsonb) returning id`,
+    [tenant.id, admission.id],
   );
   return {
     id: tenant.id,
@@ -455,6 +575,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     paymentId: payment.id,
     invoiceId: invoice.id,
     lineId: line.id,
+    creditNoteId: creditNote.id,
     overrideId: override.id,
     consentId: consent.id,
     requestId: request.id,
@@ -474,6 +595,11 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     noteId: note.id,
     chargeId: charge.id,
     cashId: cash.id,
+    scheduleId: schedule.id,
+    exceptionId: exception.id,
+    appointmentId: appointment.id,
+    queueId: queue.id,
+    spareEncounterId: spareEncounter.id,
     mlcId: mlc.id,
     billId: bill.id,
     billLineId: billLine.id,
@@ -481,21 +607,43 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     settlementId: settlement.id,
     concessionId: concession.id,
     refundId: refund.id,
-    creditNoteId: creditNote.id,
+    billCreditNoteId: billCreditNote.id,
+    wardId: ward.id,
+    roomId: room.id,
+    bedId: bed.id,
+    admissionId: admission.id,
+    bedAssignmentId: bedAssignment.id,
+    admissionRequestId: admissionRequest.id,
+    summaryId: summary.id,
   };
 }
 
 export async function deletePair(admin: pg.Client, pair: FixturePair | null): Promise<void> {
   if (!pair) return;
   const ids = [pair.a.id, pair.b.id];
+  // Immutability triggers fire for the superuser too. Disable them only for this
+  // transaction, then turn them back on before commit (DDL rolls back with the tx).
+  const guarded = ['credit_notes', 'invoice_lines', 'invoices', 'vital_signs', 'clinical_notes'];
   const steps = [
     `delete from bill_credit_notes where tenant_id = any($1::uuid[])`,
     `delete from refunds where tenant_id = any($1::uuid[])`,
     `delete from concessions where tenant_id = any($1::uuid[])`,
     `delete from bill_settlements where tenant_id = any($1::uuid[])`,
     `delete from bill_lines where tenant_id = any($1::uuid[])`,
+    `update charges set bill_id = null where tenant_id = any($1::uuid[])`,
     `delete from deposits where tenant_id = any($1::uuid[])`,
     `delete from bills where tenant_id = any($1::uuid[])`,
+    `delete from discharge_summaries where tenant_id = any($1::uuid[])`,
+    `delete from admission_requests where tenant_id = any($1::uuid[])`,
+    `delete from bed_assignments where tenant_id = any($1::uuid[])`,
+    `delete from admissions where tenant_id = any($1::uuid[])`,
+    `delete from beds where tenant_id = any($1::uuid[])`,
+    `delete from rooms where tenant_id = any($1::uuid[])`,
+    `delete from wards where tenant_id = any($1::uuid[])`,
+    `delete from opd_queue where tenant_id = any($1::uuid[])`,
+    `delete from appointments where tenant_id = any($1::uuid[])`,
+    `delete from schedule_exceptions where tenant_id = any($1::uuid[])`,
+    `delete from doctor_schedules where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,
@@ -511,6 +659,7 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from patients where tenant_id = any($1::uuid[])`,
     `delete from number_series where tenant_id = any($1::uuid[])`,
     `delete from sessions where tenant_id = any($1::uuid[]) or user_id in (select id from users where tenant_id = any($1::uuid[]))`,
+    `delete from credit_notes where tenant_id = any($1::uuid[])`,
     `delete from invoice_lines where tenant_id = any($1::uuid[])`,
     `delete from invoices where tenant_id = any($1::uuid[])`,
     `delete from payments where tenant_id = any($1::uuid[])`,
@@ -534,12 +683,11 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
   ];
   await admin.query('BEGIN');
   try {
-    // Append-only guards block even the superuser. Disable them only for this cleanup transaction.
-    await admin.query('alter table vital_signs disable trigger vital_signs_guard');
-    await admin.query('alter table clinical_notes disable trigger clinical_notes_guard');
+    // Immutability and append-only guards fire for the superuser too. Disable user triggers
+    // (credit notes, invoices, vitals, clinical notes) only for this cleanup transaction.
+    for (const table of guarded) await admin.query(`alter table ${table} disable trigger user`);
     for (const text of steps) await admin.query(text, [ids]);
-    await admin.query('alter table vital_signs enable trigger vital_signs_guard');
-    await admin.query('alter table clinical_notes enable trigger clinical_notes_guard');
+    for (const table of guarded) await admin.query(`alter table ${table} enable trigger user`);
     await admin.query('COMMIT');
   } catch (err) {
     await admin.query('ROLLBACK').catch(() => undefined);

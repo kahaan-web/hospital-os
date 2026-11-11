@@ -214,7 +214,7 @@ async function seedSunrise(db: ReturnType<typeof createDb>['db'], tenantId: stri
         })
         .returning();
       if (refundRow) {
-        await tx.insert(schema.creditNotes).values({
+        await tx.insert(schema.billCreditNotes).values({
           tenantId,
           billId: bill.id,
           refundId: refundRow.id,
@@ -358,7 +358,7 @@ async function seedLotus(db: ReturnType<typeof createDb>['db'], tenantId: string
         approvedBy: owner?.id ?? null,
       })
       .returning();
-    await tx.insert(schema.creditNotes).values({
+    await tx.insert(schema.billCreditNotes).values({
       tenantId,
       billId: bill.id,
       refundId: refundRow?.id ?? null,

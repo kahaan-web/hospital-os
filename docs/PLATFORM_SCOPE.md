@@ -1,7 +1,21 @@
 # Platform scope at the database layer (audit P0-2)
 
-Status: design. The implementation (migration 0023, `packages/db`, `apps/api/src/app.ts`) is tracked in the
-feat/claude-mt progress log.
+Status: **implemented** (option C).
+
+Migration is `0026_platform_scope.sql`, not 0023: 0023 is taken on main by mt-hardening. Tests live in
+`tests/platform/scope.test.ts` (this branch does not edit `tests/db-rls`, which another branch owns). Existing
+`tests/db` cases that need a real platform scope connect as `hos_platform`. `hos_platform` gets the same
+`statement_timeout` (10s) and `idle_in_transaction_session_timeout` (15s) as `hos_app`, because it is a runtime login.
+
+Platform read audit (the P1 gap: App Admin reads of tenant data were not logged) is included:
+
+- `GET /admin/overview`, `GET /admin/tenants` and `GET /admin/audit` each append one `platform.read.*` row on the
+  platform chain (one row per request, not per tenant). `tenant_id` is null.
+- `GET /admin/tenants/:id` appends one `platform.read.tenant` row on that tenant's chain (`tenant_id` = the target),
+  the same place other App Admin actions on a hospital already go. The payload is the route plus counts of locations,
+  users, invoices, payments, orders and overrides. No names, emails, mobiles or clinical fields.
+- Catalogue reads (`/admin/plans` and the rest) and tenant-scope reads do not write `platform.read.*` rows.
+- `GET /admin/audit/verify` is an integrity check of the platform chain, not a read of tenant rows, so it is not logged.
 
 ## Problem
 
@@ -90,7 +104,7 @@ SET search_path = pg_catalog, public AS $$
 - **`apps/api/src/app.ts`:** creates the second pool with `max: 2`, since admin traffic is small, calls
   `attachPlatformDb`, and closes the pool on shutdown.
 
-### Tests (tests/db-rls)
+### Tests (implemented in tests/platform/scope.test.ts)
 
 - As `hos_app`, `set_config('app.scope','platform')` makes `hos_scope()` return `'none'`. Platform writes to
   plans / prices / platform_settings / roles (system) / overrides fail. `platform_admins` returns 0 rows.

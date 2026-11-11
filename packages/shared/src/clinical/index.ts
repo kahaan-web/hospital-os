@@ -37,6 +37,7 @@ export {
 } from './codes';
 export * from './patient';
 export * from './registration';
+export * from './adt';
 export * from './encounter';
 export {
   ORDER_ITEM_STATUSES,
@@ -66,4 +67,5 @@ export * from './print';
 export * from './features';
 export * from './contracts';
 export * from './contract-dtos';
+export * from './appointments';
 export { clinicalEn } from './i18n';

@@ -2,7 +2,9 @@
 // Modules register here. A new area adds `fixtures/<module>.ts` exporting a seed function and one line
 // in `fixtureModules`. every new tenant table must add a fixture here or the suite fails.
 import type pg from 'pg';
-import { seedBilling } from './billing';
+import { seedAdt } from './adt';
+import { seedAppointments } from './appointments';
+import { seedBillingOp } from './billing-op';
 import { seedClinicalFoundation } from './clinical-foundation';
 import { seedCore } from './core';
 import { seedCreditNotes } from './credit-notes';
@@ -12,10 +14,12 @@ import type { FixtureModule, ProbeSpec, TenantFixture } from './types';
 export const fixtureModules: FixtureModule[] = [
   { name: 'core', seed: seedCore },
   { name: 'clinical-foundation', seed: seedClinicalFoundation },
-  // Before credit-notes: that fixture inserts only when the table is still empty, and a note needs a bill.
-  { name: 'billing', seed: seedBilling },
+  // OP lines need an encounter and a charge from clinical-foundation.
+  { name: 'billing-op', seed: seedBillingOp },
   { name: 'credit-notes', seed: seedCreditNotes },
   { name: 'registration', seed: seedRegistration },
+  { name: 'adt', seed: seedAdt },
+  { name: 'appointments', seed: seedAppointments },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

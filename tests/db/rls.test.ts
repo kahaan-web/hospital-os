@@ -10,6 +10,7 @@ import {
   connectRoles,
   deletePair,
   disconnectRoles,
+  expectHiddenWrite,
   expectSqlState,
   insertPair,
   scopePlatform,
@@ -39,6 +40,7 @@ const TABLES = [
   'payments',
   'invoices',
   'invoice_lines',
+  'credit_notes',
   'tenant_entitlement_overrides',
   'consents',
   'data_principal_requests',
@@ -58,6 +60,10 @@ const TABLES = [
   'clinical_notes',
   'charges',
   'cash_ledger',
+  'doctor_schedules',
+  'schedule_exceptions',
+  'appointments',
+  'opd_queue',
   'mlc_cases',
   'bills',
   'bill_lines',
@@ -66,6 +72,13 @@ const TABLES = [
   'concessions',
   'refunds',
   'bill_credit_notes',
+  'wards',
+  'rooms',
+  'beds',
+  'admissions',
+  'bed_assignments',
+  'admission_requests',
+  'discharge_summaries',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -81,8 +94,10 @@ interface IsoSpec {
   insertParams: unknown[];
   retargetSql: string;
   retargetParams: unknown[];
-  /** tenants has no DELETE grant. */
+  /** No DELETE grant, or a trigger rejects the delete. Cross-tenant and mass DELETE must be 42501. */
   denyDelete: boolean;
+  /** No UPDATE grant on the column this check writes. Own-row UPDATE must be 42501. */
+  denyUpdate: boolean;
   /** T-ro overrides: tenant scope can read but not write. */
   writes: 'own' | 'none';
   /** Append-only trigger rejects UPDATE of a visible row (clinical_notes). */
@@ -107,13 +122,15 @@ describe.sequential('row level security', () => {
 
   afterEach(async () => {
     await roles?.app.query('ROLLBACK').catch(() => undefined);
+    await roles?.platform.query('ROLLBACK').catch(() => undefined);
   });
 
   afterAll(async () => {
-    if (roles && pair) await deletePair(roles.admin, pair).catch((err: Error) => {
-      console.error(`fixture cleanup failed for ${pair?.runId}: ${err.message}`);
-    });
-    await disconnectRoles(roles);
+    try {
+      if (roles && pair) await deletePair(roles.admin, pair);
+    } finally {
+      await disconnectRoles(roles);
+    }
   });
 
   it('hos_app and hos_migrator are not superusers and cannot bypass RLS', async () => {
@@ -244,21 +261,18 @@ describe.sequential('row level security', () => {
       );
       expect(Number(hidden.rows[0]?.n)).toBe(0);
 
-      const updated = spec.updateGuard
-        ? null
-        : await app().query(`update ${spec.table} set ${spec.setSql}`);
-      if (spec.updateGuard) {
+      if (spec.denyUpdate || spec.updateGuard) {
         await expectSqlState(app(), `update ${spec.table} set ${spec.setSql}`, [], '42501');
       } else {
-        expect(updated?.rowCount).toBe(spec.writes === 'none' ? 0 : 1);
+        const updated = await app().query(`update ${spec.table} set ${spec.setSql}`);
+        expect(updated.rowCount).toBe(spec.writes === 'none' ? 0 : 1);
       }
-      const updatedB = await app().query(`update ${spec.table} set ${spec.setSql} where ${spec.hidden}`, [spec.bParam]);
-      expect(updatedB.rowCount).toBe(0);
+      // B is invisible. 0 rows (RLS) or 42501 (no privilege, or the immutability trigger) both pass.
+      await expectHiddenWrite(app(), `update ${spec.table} set ${spec.setSql} where ${spec.hidden}`, [spec.bParam]);
       if (spec.denyDelete) {
         await expectSqlState(app(), `delete from ${spec.table} where ${spec.hidden}`, [spec.bParam], '42501');
       } else {
-        const deletedB = await app().query(`delete from ${spec.table} where ${spec.hidden}`, [spec.bParam]);
-        expect(deletedB.rowCount).toBe(0);
+        await expectHiddenWrite(app(), `delete from ${spec.table} where ${spec.hidden}`, [spec.bParam]);
       }
       await expectSqlState(app(), spec.insertSql, spec.insertParams, '42501');
       if (spec.writes === 'none') {
@@ -432,23 +446,23 @@ describe.sequential('row level security', () => {
       await app().query('ROLLBACK');
     }
 
-    await app().query('BEGIN');
+    await platform().query('BEGIN');
     try {
-      await scopePlatform(app(), pair!.a.id);
-      const other = await app().query<{ id: string }>(`select id from modules where id <> $1 limit 1`, [pair!.moduleId]);
+      await scopePlatform(platform(), pair!.a.id);
+      const other = await platform().query<{ id: string }>(`select id from modules where id <> $1 limit 1`, [pair!.moduleId]);
       const moduleId = other.rows[0]?.id;
       expect(moduleId, 'catalogue has a second module').toBeTruthy();
-      await app().query(
+      await platform().query(
         `insert into tenant_entitlement_overrides (tenant_id, target, module_id, effect, reason)
          values ($1, 'module', $2, 'revoke', 'platform on tenant')`,
         [pair!.a.id, moduleId],
       );
-      const seen = await app().query<{ n: number }>(
+      const seen = await platform().query<{ n: number }>(
         `select count(*)::int as n from tenant_entitlement_overrides where reason = 'platform on tenant'`,
       );
       expect(Number(seen.rows[0]?.n)).toBe(1);
     } finally {
-      await app().query('ROLLBACK');
+      await platform().query('ROLLBACK');
     }
   });
 
@@ -468,12 +482,12 @@ describe.sequential('row level security', () => {
       await app().query('ROLLBACK');
     }
 
-    await app().query('BEGIN');
+    await platform().query('BEGIN');
     try {
-      await scopePlatform(app(), pair!.a.id);
-      await expectSqlState(app(), 'select hos_admin_overview()', [], '42501');
+      await scopePlatform(platform(), pair!.a.id);
+      await expectSqlState(platform(), 'select hos_admin_overview()', [], '42501');
     } finally {
-      await app().query('ROLLBACK');
+      await platform().query('ROLLBACK');
     }
 
     const live = randomUUID().replace(/-/g, '');
@@ -529,6 +543,10 @@ describe.sequential('row level security', () => {
     if (!roles) throw new Error('database clients were not opened');
     return roles.app;
   }
+  function platform() {
+    if (!roles) throw new Error('database clients were not opened');
+    return roles.platform;
+  }
   function admin() {
     if (!roles) throw new Error('database clients were not opened');
     return roles.admin;
@@ -542,6 +560,7 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     insertParams: [b.id] as unknown[],
     retargetParams: [b.id] as unknown[],
     denyDelete: false,
+    denyUpdate: false,
     writes: 'own' as const,
     beforeMassDelete: [] as string[],
   };
@@ -570,8 +589,20 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return row(common, 'id = $1', b.departmentId, `name = 'Touched by A'`, 'name',
         `insert into departments (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
     case 'doctors':
-      return row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
-        `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`);
+      return {
+        ...row(common, 'id = $1', b.doctorId, `name = 'Touched by A'`, 'name',
+          `insert into doctors (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope')`),
+        beforeMassDelete: [
+          'delete from discharge_summaries',
+          'delete from bed_assignments',
+          'delete from admission_requests',
+          'delete from admissions',
+          'delete from opd_queue',
+          'delete from appointments',
+          'delete from schedule_exceptions',
+          'delete from doctor_schedules',
+        ],
+      };
     case 'users':
       return row(common, 'id = $1', b.userId, `name = 'Touched by A'`, 'name',
         `insert into users (tenant_id, email, name) values ($1, 'nope.${pair.runId}@zz-test.example', 'Nope')`);
@@ -614,6 +645,8 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(location_count = 9, false) as touched from subscriptions where id = $1`,
         insertSql: `insert into subscriptions (tenant_id, plan_id, billing_cycle, current_period_start, current_period_end) values ($1, '${pair.planId}', 'annual', now(), now() + interval '1 year')`,
         retargetSql: `update subscriptions set tenant_id = $1`,
+        denyUpdate: true,
+        denyDelete: true,
       };
     case 'subscription_items':
       return {
@@ -624,6 +657,8 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(quantity = 9, false) as touched from subscription_items where id = $1`,
         insertSql: `insert into subscription_items (tenant_id, subscription_id, kind, unit_amount_paise) values ($1, '${b.subscriptionId}', 'plan', 100)`,
         retargetSql: `update subscription_items set tenant_id = $1`,
+        denyUpdate: true,
+        denyDelete: true,
       };
     case 'orders':
       return {
@@ -634,7 +669,7 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(paid_at is not null, false) as touched from orders where id = $1`,
         insertSql: `insert into orders (tenant_id, public_id, purpose, amount_paise, quote, idempotency_key) values ($1, 'order_nope${pair.runId}', 'onboarding', 100, '{}'::jsonb, 'zz${pair.runId}nopeord')`,
         retargetSql: `update orders set tenant_id = $1`,
-        beforeMassDelete: ['delete from invoice_lines', 'delete from invoices', 'delete from payments'],
+        denyDelete: true,
       };
     case 'payments':
       return {
@@ -645,7 +680,8 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(failure_reason = 'Touched by A', false) as touched from payments where id = $1`,
         insertSql: `insert into payments (tenant_id, order_id, public_id, method, amount_paise) values ($1, '${b.orderId}', 'pay_nope${pair.runId}', 'upi', 100)`,
         retargetSql: `update payments set tenant_id = $1`,
-        beforeMassDelete: ['delete from invoice_lines', 'delete from invoices'],
+        denyUpdate: true,
+        denyDelete: true,
       };
     case 'invoices':
       return {
@@ -656,10 +692,28 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(notes = 'Touched by A', false) as touched from invoices where id = $1`,
         insertSql: `insert into invoices (tenant_id, number, fy, issue_date, supplier, customer, place_of_supply_state_code, inter_state, taxable_paise, cgst_paise, sgst_paise, igst_paise, total_paise) values ($1, 'N${pair.runId}X', '2026-27', current_date, '{}'::jsonb, '{}'::jsonb, '27', false, 100, 9, 9, 0, 118)`,
         retargetSql: `update invoices set tenant_id = $1`,
+        denyUpdate: true,
+        denyDelete: true,
       };
     case 'invoice_lines':
-      return row(common, 'id = $1', b.lineId, `description = 'Touched by A'`, 'description',
-        `insert into invoice_lines (tenant_id, invoice_id, description, unit_paise, amount_paise, gst_rate_bp) values ($1, '${b.invoiceId}', 'Nope', 100, 100, 1800)`);
+      return {
+        ...row(common, 'id = $1', b.lineId, `description = 'Touched by A'`, 'description',
+          `insert into invoice_lines (tenant_id, invoice_id, description, unit_paise, amount_paise, gst_rate_bp) values ($1, '${b.invoiceId}', 'Nope', 100, 100, 1800)`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
+    case 'credit_notes':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.creditNoteId,
+        setSql: `reason = 'Touched by A'`,
+        untouched: `select coalesce(reason = 'Touched by A', false) as touched from credit_notes where id = $1`,
+        insertSql: `insert into credit_notes (tenant_id, invoice_id, number, taxable_paise, total_paise) values ($1, '${b.invoiceId}', 'N${pair.runId}C', 100, 118)`,
+        retargetSql: `update credit_notes set tenant_id = $1`,
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'tenant_entitlement_overrides':
       return {
         ...common,
@@ -680,6 +734,7 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         untouched: `select coalesce(withdrawn_at is not null, false) as touched from consents where id = $1`,
         insertSql: `insert into consents (tenant_id, user_id, notice_id, notice_version, purposes) values ($1, '${b.userId}', '${pair.noticeId}', 'v', '[]'::jsonb)`,
         retargetSql: `update consents set tenant_id = $1`,
+        denyDelete: true,
       };
     case 'data_principal_requests':
       return {
@@ -821,6 +876,32 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'cash_ledger':
       return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
         `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
+    case 'doctor_schedules':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.scheduleId,
+        setSql: 'slot_minutes = 20',
+        untouched: 'select coalesce(slot_minutes = 20, false) as touched from doctor_schedules where id = $1',
+        insertSql: `insert into doctor_schedules (tenant_id, doctor_id, location_id, weekday, start_time, end_time, slot_minutes, max_per_slot) values ($1, '${b.doctorId}', '${b.locationId}', 1, '14:00', '15:00', 15, 1)`,
+        retargetSql: 'update doctor_schedules set tenant_id = $1',
+      };
+    case 'schedule_exceptions':
+      return row(common, 'id = $1', b.exceptionId, `reason = 'Touched by A'`, 'reason',
+        `insert into schedule_exceptions (tenant_id, doctor_id, location_id, on_date, kind, reason) values ($1, '${b.doctorId}', '${b.locationId}', '2026-02-02', 'closed', 'Nope')`);
+    case 'appointments':
+      return row(common, 'id = $1', b.appointmentId, `reason = 'Touched by A'`, 'reason',
+        `insert into appointments (tenant_id, location_id, patient_id, doctor_id, date, slot_start, slot_end, seq, channel, reason) values ($1, '${b.locationId}', '${b.patientId}', '${b.doctorId}', '2026-06-02', '10:00', '10:15', 1, 'counter', 'Nope')`);
+    case 'opd_queue':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.queueId,
+        setSql: 'token = 9',
+        untouched: 'select coalesce(token = 9, false) as touched from opd_queue where id = $1',
+        insertSql: `insert into opd_queue (tenant_id, location_id, encounter_id, patient_id, doctor_id, token, visit_date) values ($1, '${b.locationId}', '${b.spareEncounterId}', '${b.patientId}', '${b.doctorId}', 2, current_date)`,
+        retargetSql: 'update opd_queue set tenant_id = $1',
+      };
     case 'mlc_cases':
       return {
         ...common,
@@ -835,7 +916,7 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.billId, `cancel_reason = 'Touched by A'`, 'cancel_reason',
           `insert into bills (tenant_id, location_id, patient_id, encounter_id, kind, doc_type, status, pay_class, subtotal_paise, total_paise) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', 'op', 'bill_of_supply', 'draft', 'cash', 100, 100)`),
-        beforeMassDelete: ['delete from bill_credit_notes', 'delete from refunds', 'delete from concessions', 'delete from bill_settlements', 'delete from bill_lines'],
+        beforeMassDelete: ['delete from bill_credit_notes', 'delete from refunds', 'delete from concessions', 'delete from bill_settlements', 'delete from bill_lines', 'update charges set bill_id = null'],
       };
     case 'bill_lines':
       return row(common, 'id = $1', b.billLineId, `description = 'Touched by A'`, 'description',
@@ -856,15 +937,67 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         beforeMassDelete: ['delete from bill_credit_notes'],
       };
     case 'bill_credit_notes':
-      return row(common, 'id = $1', b.creditNoteId, `reason = 'Touched by A'`, 'reason',
+      return row(common, 'id = $1', b.billCreditNoteId, `reason = 'Touched by A'`, 'reason',
         `insert into bill_credit_notes (tenant_id, bill_id, number, amount_paise) values ($1, '${b.billId}', 'CNNO${pair.runId}', 100)`);
+    case 'wards':
+      return {
+        ...row(common, 'id = $1', b.wardId, `name = 'Touched by A'`, 'name',
+          `insert into wards (tenant_id, location_id, code, name, ward_type) values ($1, '${b.locationId}', 'ZZ', 'Nope', 'general')`),
+        beforeMassDelete: ['delete from bed_assignments', 'delete from beds', 'delete from rooms'],
+      };
+    case 'rooms':
+      return {
+        ...row(common, 'id = $1', b.roomId, `name = 'Touched by A'`, 'name',
+          `insert into rooms (tenant_id, ward_id, code, name) values ($1, '${b.wardId}', 'ZZ', 'Nope')`),
+        beforeMassDelete: ['delete from bed_assignments', 'delete from beds'],
+      };
+    case 'beds':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.bedId,
+        setSql: `status = 'maintenance'`,
+        untouched: `select coalesce(status = 'maintenance', false) as touched from beds where id = $1`,
+        insertSql: `insert into beds (tenant_id, room_id, label, ward_class) values ($1, '${b.roomId}', 'ZZ', 'general')`,
+        retargetSql: `update beds set tenant_id = $1`,
+        beforeMassDelete: ['delete from bed_assignments'],
+      };
+    case 'admissions':
+      return {
+        ...row(common, 'id = $1', b.admissionId, `attendant = 'Touched by A'`, 'attendant',
+          `insert into admissions (tenant_id, location_id, encounter_id, patient_id, number, admission_type) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'ZN${pair.runId}', 'elective')`),
+        beforeMassDelete: ['delete from discharge_summaries', 'delete from bed_assignments', 'delete from admission_requests'],
+      };
+    case 'bed_assignments':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.bedAssignmentId,
+        setSql: `from_at = timestamptz '2020-01-01+00'`,
+        untouched: `select coalesce(from_at = timestamptz '2020-01-01+00', false) as touched from bed_assignments where id = $1`,
+        insertSql: `insert into bed_assignments (tenant_id, admission_id, bed_id, to_at) values ($1, '${b.admissionId}', '${b.bedId}', now())`,
+        retargetSql: `update bed_assignments set tenant_id = $1`,
+      };
+    case 'admission_requests':
+      return row(common, 'id = $1', b.admissionRequestId, `reason = 'Touched by A'`, 'reason',
+        `insert into admission_requests (tenant_id, location_id, patient_id, from_encounter_id, doctor_id, reason, planned_on) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', '${b.doctorId}', 'Nope', current_date)`);
+    case 'discharge_summaries':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.summaryId,
+        setSql: `sections = '{"diagnosis":"Touched by A"}'::jsonb`,
+        untouched: `select coalesce(sections->>'diagnosis' = 'Touched by A', false) as touched from discharge_summaries where id = $1`,
+        insertSql: `insert into discharge_summaries (tenant_id, admission_id, sections) values ($1, '${b.admissionId}', '{}'::jsonb)`,
+        retargetSql: `update discharge_summaries set tenant_id = $1`,
+      };
     default:
       return assertNever(table);
   }
 }
 
 function row(
-  common: Pick<IsoSpec, 'table' | 'insertParams' | 'retargetParams' | 'denyDelete' | 'writes' | 'beforeMassDelete'>,
+  common: Pick<IsoSpec, 'table' | 'insertParams' | 'retargetParams' | 'denyDelete' | 'denyUpdate' | 'writes' | 'beforeMassDelete'>,
   hidden: string,
   bParam: string,
   setSql: string,

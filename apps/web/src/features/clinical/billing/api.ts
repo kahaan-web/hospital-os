@@ -13,7 +13,7 @@ import type {
   ServiceCreateInput,
   ServiceMasterDto,
   UnbilledEncounterDto,
-  VisitStatisticsDto,
+  OpBillingVisitStatisticsDto,
 } from '@hos/shared';
 import { apiGet, apiPost } from '@/lib/api';
 
@@ -88,7 +88,7 @@ export const billingApi = {
   depositRegister(): Promise<DepositRegisterDto> {
     return apiGet(`${BASE}/reports/deposits`);
   },
-  visitStatistics(from: string, to: string): Promise<VisitStatisticsDto> {
+  visitStatistics(from: string, to: string): Promise<OpBillingVisitStatisticsDto> {
     return apiGet(`${BASE}/reports/visit-statistics?from=${from}&to=${to}`);
   },
 };

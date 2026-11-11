@@ -381,7 +381,7 @@ export async function refund(ctx: ClinicalCtx<Tx>, billId: string, input: BillRe
     .returning();
   const share = (tax: number) => (bill.totalPaise <= 0 ? 0 : Math.round((tax * input.amountPaise) / bill.totalPaise));
   const noteNumber = await numbering.next(ctx, 'credit_note');
-  await ctx.tx.insert(schema.creditNotes).values({
+  await ctx.tx.insert(schema.billCreditNotes).values({
     tenantId: ctx.tenantId,
     billId: bill.id,
     refundId: refundRow?.id ?? null,

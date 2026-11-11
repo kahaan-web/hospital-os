@@ -21,7 +21,7 @@ export async function billingIsolationIds(): Promise<{
     const [settlement] = await handle.db.select({ id: schema.billSettlements.id }).from(schema.billSettlements).where(eq(schema.billSettlements.tenantId, tenantId));
     const [concession] = await handle.db.select({ id: schema.concessions.id }).from(schema.concessions).where(eq(schema.concessions.tenantId, tenantId));
     const [refund] = await handle.db.select({ id: schema.refunds.id }).from(schema.refunds).where(eq(schema.refunds.tenantId, tenantId));
-    const [note] = await handle.db.select({ id: schema.creditNotes.id }).from(schema.creditNotes).where(eq(schema.creditNotes.tenantId, tenantId));
+    const [note] = await handle.db.select({ id: schema.billCreditNotes.id }).from(schema.billCreditNotes).where(eq(schema.billCreditNotes.tenantId, tenantId));
     if (!bill || !line || !deposit || !settlement || !concession || !refund || !note) {
       throw new Error('billing seed rows missing; run db:seed:demo after migrations');
     }

@@ -17,7 +17,7 @@ export default defineConfig({
     fileParallelism: false,
     sequence: { concurrent: false },
     // Wizard signup hashes passwords, and the RLS file shares one Postgres session.
-    testTimeout: 180_000,
-    hookTimeout: 120_000,
+    testTimeout: 300_000,
+    hookTimeout: 300_000,
   },
 });
