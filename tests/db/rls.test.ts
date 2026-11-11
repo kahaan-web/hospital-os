@@ -72,6 +72,8 @@ const TABLES = [
   'bed_assignments',
   'admission_requests',
   'discharge_summaries',
+  'mar_schedules',
+  'medication_administrations',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -953,6 +955,32 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into discharge_summaries (tenant_id, admission_id, sections) values ($1, '${b.admissionId}', '{}'::jsonb)`,
         retargetSql: `update discharge_summaries set tenant_id = $1`,
       };
+    case 'mar_schedules':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.marScheduleId,
+        setSql: `voided_at = now()`,
+        untouched: `select coalesce(voided_at is not null, false) as touched from mar_schedules where id = $1`,
+        insertSql: `insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at) values ($1, '${b.orderItemId}', '${b.encounterId}', now() + interval '3 hours')`,
+        retargetSql: `update mar_schedules set tenant_id = $1`,
+        beforeMassDelete: ['delete from medication_administrations'],
+      };
+    case 'medication_administrations':
+      return row(
+        common,
+        'id = $1',
+        b.medAdminId,
+        `reason = 'Touched by A'`,
+        'reason',
+        `with ins as (
+           insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at)
+           values ($1, '${b.orderItemId}', '${b.encounterId}', now() + interval '4 hours')
+           returning id
+         )
+         insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
+         select $1, ins.id, 'held', '', '${b.userId}' from ins`,
+      );
     default:
       return assertNever(table);
   }

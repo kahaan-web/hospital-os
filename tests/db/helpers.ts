@@ -70,6 +70,8 @@ export interface Side {
   bedAssignmentId: string;
   admissionRequestId: string;
   summaryId: string;
+  marScheduleId: string;
+  medAdminId: string;
 }
 
 export interface FixturePair {
@@ -387,6 +389,18 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into clinical_order_items (tenant_id, order_id, line_no, drug_name) values ($1, $2, 1, 'Sample') returning id`,
     [tenant.id, clinicalOrder.id],
   );
+  const marSchedule = await one<{ id: string }>(
+    migrator,
+    `insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at)
+     values ($1, $2, $3, now() + interval '1 hour') returning id`,
+    [tenant.id, orderItem.id, encounter.id],
+  );
+  const medAdmin = await one<{ id: string }>(
+    migrator,
+    `insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
+     values ($1, $2, 'given', '1 tab', $3) returning id`,
+    [tenant.id, marSchedule.id, user.id],
+  );
   const vital = await one<{ id: string }>(
     migrator,
     `insert into vital_signs (tenant_id, location_id, encounter_id, patient_id, pulse) values ($1, $2, $3, $4, 70) returning id`,
@@ -549,6 +563,8 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     bedAssignmentId: bedAssignment.id,
     admissionRequestId: admissionRequest.id,
     summaryId: summary.id,
+    marScheduleId: marSchedule.id,
+    medAdminId: medAdmin.id,
   };
 }
 
@@ -572,6 +588,8 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from doctor_schedules where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
+    `delete from medication_administrations where tenant_id = any($1::uuid[])`,
+    `delete from mar_schedules where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,
     `delete from clinical_orders where tenant_id = any($1::uuid[])`,
     `delete from vital_signs where tenant_id = any($1::uuid[])`,

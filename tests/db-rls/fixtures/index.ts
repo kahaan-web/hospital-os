@@ -3,6 +3,7 @@
 // in `fixtureModules`. every new tenant table must add a fixture here or the suite fails.
 import type pg from 'pg';
 import { seedAdt } from './adt';
+import { seedNursing } from './nursing';
 import { seedAppointments } from './appointments';
 import { seedClinicalFoundation } from './clinical-foundation';
 import { seedCore } from './core';
@@ -18,6 +19,7 @@ export const fixtureModules: FixtureModule[] = [
   { name: 'registration', seed: seedRegistration },
   { name: 'adt', seed: seedAdt },
   { name: 'appointments', seed: seedAppointments },
+  { name: 'nursing', seed: seedNursing },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

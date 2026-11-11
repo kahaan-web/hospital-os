@@ -1,19 +1,23 @@
 import type { Tx } from '@hos/db';
-import type { NursingService } from '@hos/shared';
-import { ApiError } from '../../http';
+import type { ClinicalCtx, NursingService } from '@hos/shared';
+import {
+  dietOrders as dietOrdersSvc,
+  giveDose as giveDoseSvc,
+  marForEncounter,
+  wardPatients as wardPatientsSvc,
+} from './service';
 
-/** B9 replaces this. The ward board is empty until the nursing task. */
 export const nursing: NursingService<Tx> = {
-  async wardPatients() {
-    return [];
+  wardPatients(ctx, q) {
+    return wardPatientsSvc(ctx as ClinicalCtx<Tx>, q);
   },
-  async marFor() {
-    return [];
+  marFor(ctx, encounterId, date) {
+    return marForEncounter(ctx as ClinicalCtx<Tx>, encounterId, date);
   },
-  async giveDose() {
-    throw new ApiError(422, 'not_available', 'Medicine administration is not available yet');
+  giveDose(ctx, doseId, input) {
+    return giveDoseSvc(ctx as ClinicalCtx<Tx>, doseId, input);
   },
-  async dietOrders() {
-    return [];
+  dietOrders(ctx, q) {
+    return dietOrdersSvc(ctx as ClinicalCtx<Tx>, q);
   },
 };

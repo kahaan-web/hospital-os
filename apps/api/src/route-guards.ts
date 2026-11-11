@@ -434,6 +434,51 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     module: 'adt',
     feature: CLINICAL_FEATURES.adt.dischargeSummaryReport,
   }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/ward', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.medicineOrders,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/orders', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.labOrders,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/results', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.viewTestResults,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/doctor-notes', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.doctorsNotes,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/vitals-chart', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.vitalsTable,
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/mar', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('POST', '/api/v1/tenant/m/nurse-station/mar/:doseId/administer', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/diet', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('POST', '/api/v1/tenant/m/nurse-station/encounters/:id/diet', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/print/:kind/:format', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+  }),
 ];
 
 const keys = ENTRIES.map(([key]) => key);
