@@ -561,6 +561,7 @@ export const orders = pgTable(
     unique('orders_tenant_idem_uq').on(t.tenantId, t.idempotencyKey),
     unique('orders_tenant_id_uq').on(t.tenantId, t.id),
     index('orders_tenant_idx').on(t.tenantId),
+    uniqueIndex('orders_one_open_purpose_uq').on(t.tenantId, t.purpose).where(sql`${t.status} in ('created', 'attempted')`),
     check('orders_purpose_chk', sql`purpose in ('onboarding', 'change')`),
     check('orders_status_chk', sql`status in ('created', 'attempted', 'paid', 'cancelled')`),
     check('orders_amount_chk', sql`amount_paise > 0`),

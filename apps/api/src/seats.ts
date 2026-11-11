@@ -15,6 +15,9 @@ export const SEATS_PER_LOCATION: Record<string, number> = {
 
 export async function assertSeatAvailable(tx: Tx, adding: number): Promise<void> {
   if (adding <= 0) return;
+  // Held to commit. hos_app cannot SELECT … FOR UPDATE subscriptions (no UPDATE grant), so the
+  // seat check takes its own transaction lock instead of the subscription row.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('hos_seats'), hashtext(hos_tenant_id()::text))`);
   const [sub] = await tx.select().from(schema.subscriptions);
   if (!sub) throw new ApiError(422, 'no_subscription', 'There is no subscription yet');
   const [plan] = await tx.select().from(schema.plans).where(eq(schema.plans.id, sub.planId));

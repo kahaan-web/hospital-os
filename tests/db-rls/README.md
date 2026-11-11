@@ -96,7 +96,7 @@ Documented in `docs/CONTRACTS.md` §4 and `docs/PLATFORM_SCOPE.md`. The tests as
 | Function | What hos_app gets |
 |---|---|
 | `hos_login_lookup(email)` | One row `(tenant_id, user_id)` for that exact email, or no row. Not a wildcard, not the rest of the user. |
-| `hos_otp_tenant(id)` / `hos_invite_tenant(token)` | The `tenant_id` for that exact unexpired secret, or null. |
+| `hos_otp_tenant(id)` / `hos_invite_tenant(token)` | The `tenant_id` for that exact unexpired secret, or null. An invite also requires the invited user to still be `pending`. |
 | `hos_session_resolve(token_hash)` | One session's documented columns when the hash is exact, unexpired and unrevoked. A prefix, an unknown hash, an expired session or a revoked session returns no row. |
 | `hos_session_create` | Creates a session for the current tenant's user. The other tenant's user is `42501`. |
 | `hos_session_set_location` | A location in the current tenant only. |
