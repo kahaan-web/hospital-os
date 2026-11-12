@@ -16,6 +16,18 @@ import { apiBlob, apiGet, apiPatch, apiPost, apiPut, apiRequest, apiText } from 
 
 const base = '/tenant/m/lab';
 
+export type LabTatRow = { testName: string; samples: number; avgHours: number; targetHours: number; breaches: number };
+export type LabCriticalRow = {
+  accessionId: string;
+  accessionNumber: string;
+  patientName: string;
+  uhid: string;
+  parameter: string;
+  value: string;
+  flag: string;
+  verifiedAt: string | null;
+};
+
 export const labApi = {
   worklist(status?: string): Promise<LabWorklistItemDto[]> {
     const query = status ? `?status=${encodeURIComponent(status)}` : '';
@@ -68,6 +80,12 @@ export const labApi = {
   },
   mis(from: string, to: string): Promise<LabMisDto> {
     return apiGet(`${base}/reports/mis?from=${from}&to=${to}`);
+  },
+  tat(from: string, to: string): Promise<LabTatRow[]> {
+    return apiGet(`${base}/reports/tat?from=${from}&to=${to}`);
+  },
+  critical(from: string, to: string): Promise<LabCriticalRow[]> {
+    return apiGet(`${base}/reports/critical?from=${from}&to=${to}`);
   },
   labServices(): Promise<ServiceDto[]> {
     return apiGet('/tenant/clinical/services?category=lab');

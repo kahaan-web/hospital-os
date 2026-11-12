@@ -4,6 +4,7 @@ const links = [
   { href: '/app/lab', label: 'Worklist' },
   { href: '/app/lab/tests', label: 'Test master' },
   { href: '/app/lab/reports', label: 'Reports' },
+  { href: '/app/lab/tat', label: 'TAT & critical' },
 ];
 
 export function LabNav() {

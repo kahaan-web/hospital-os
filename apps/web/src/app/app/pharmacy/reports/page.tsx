@@ -16,6 +16,7 @@ const LABELS: Record<PharmacyReportKey, string> = {
   'ip-statement': 'Patient issue / return statement (IP)',
   expiry: 'Expiry item report',
   purchases: 'Purchase register',
+  'h1-register': 'Schedule H1 / X register',
 };
 
 export default function PharmacyReportsPage() {

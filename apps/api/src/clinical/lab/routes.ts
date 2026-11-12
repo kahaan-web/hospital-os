@@ -28,6 +28,7 @@ import { labReportPrint } from './prints';
 import {
   accessionDetail,
   applyAnalyzer,
+  criticalLog,
   collectSample,
   createParam,
   createTest,
@@ -40,6 +41,7 @@ import {
   reportFor,
   reportsForPatient,
   saveResults,
+  tatReport,
   updateParam,
   updateTest,
   verifyAccession,
@@ -255,6 +257,24 @@ export function registerLab(app: FastifyInstance, deps: Deps): void {
       await gate.requireFeature(features.labMis);
       gate.requirePermission('lab.manage');
       return misReport(ctx(gate), req.query.from, req.query.to);
+    }),
+  );
+
+  r.get(`${PREFIX}/reports/tat`, { schema: { querystring: labMisQuery } }, async (req, reply) =>
+    run(req, reply, async (gate) => {
+      await gate.requireModule(MODULE);
+      await gate.requireFeature(features.labMis);
+      gate.requirePermission('lab.manage');
+      return tatReport(ctx(gate), req.query.from, req.query.to);
+    }),
+  );
+
+  r.get(`${PREFIX}/reports/critical`, { schema: { querystring: labMisQuery } }, async (req, reply) =>
+    run(req, reply, async (gate) => {
+      await gate.requireModule(MODULE);
+      await gate.requireFeature(features.labMis);
+      gate.requirePermission('lab.manage');
+      return criticalLog(ctx(gate), req.query.from, req.query.to);
     }),
   );
 

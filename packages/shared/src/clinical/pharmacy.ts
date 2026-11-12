@@ -19,6 +19,7 @@ export const PHARMACY_REPORTS = [
   'ip-statement',
   'expiry',
   'purchases',
+  'h1-register',
 ] as const;
 export type PharmacyReportKey = (typeof PHARMACY_REPORTS)[number];
 

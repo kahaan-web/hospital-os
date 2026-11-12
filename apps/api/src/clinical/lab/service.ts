@@ -684,6 +684,85 @@ export async function misReport(ctx: Ctx, from: string, to: string): Promise<Lab
   };
 }
 
+export type LabTatRow = { testName: string; samples: number; avgHours: number; targetHours: number; breaches: number };
+export type LabCriticalRow = {
+  accessionId: string;
+  accessionNumber: string;
+  patientName: string;
+  uhid: string;
+  parameter: string;
+  value: string;
+  flag: string;
+  verifiedAt: string | null;
+};
+
+/** Read-only TAT by test (collected to verified) for the date range, with breaches against the test target. */
+export async function tatReport(ctx: Ctx, from: string, to: string): Promise<LabTatRow[]> {
+  if (from > to) throw new ApiError(422, 'validation', 'From date must be on or before the to date');
+  const res = await ctx.tx.execute<{ name: string; samples: number; avg_hours: string | null; target: number; breaches: number }>(sql`
+    select s.name as name,
+           count(*)::int as samples,
+           avg(extract(epoch from (a.verified_at - a.collected_at)) / 3600.0) as avg_hours,
+           t.tat_hours as target,
+           (count(*) filter (where a.verified_at > a.collected_at + (t.tat_hours || ' hours')::interval))::int as breaches
+      from lab_accessions a
+      join clinical_order_items i on i.id = a.order_item_id and i.tenant_id = a.tenant_id
+      join lab_tests t on t.service_id = i.service_id and t.tenant_id = a.tenant_id
+      join services s on s.id = t.service_id and s.tenant_id = t.tenant_id
+     where a.verified_at is not null
+       and a.collected_at is not null
+       and a.collected_at >= ${from}::date
+       and a.collected_at < (${to}::date + interval '1 day')
+     group by s.name, t.tat_hours
+     order by s.name
+  `);
+  return res.rows.map((row) => ({
+    testName: row.name,
+    samples: Number(row.samples),
+    avgHours: Math.round(Number(row.avg_hours ?? 0) * 10) / 10,
+    targetHours: Number(row.target),
+    breaches: Number(row.breaches),
+  }));
+}
+
+/** Read-only log of critical (LL/HH) results for the date range, newest first. */
+export async function criticalLog(ctx: Ctx, from: string, to: string): Promise<LabCriticalRow[]> {
+  if (from > to) throw new ApiError(422, 'validation', 'From date must be on or before the to date');
+  const res = await ctx.tx.execute<{
+    accession_id: string;
+    number: string;
+    patient_name: string;
+    uhid: string;
+    parameter: string;
+    value_num: string | null;
+    value_text: string | null;
+    flag: string;
+    verified_at: Date | string | null;
+  }>(sql`
+    select a.id as accession_id, a.number, p.full_name as patient_name, p.uhid, tp.name as parameter,
+           r.value_num, r.value_text, r.flag, a.verified_at
+      from lab_results r
+      join lab_accessions a on a.id = r.accession_id and a.tenant_id = r.tenant_id
+      join patients p on p.id = a.patient_id and p.tenant_id = a.tenant_id
+      join lab_test_params tp on tp.id = r.param_id and tp.tenant_id = r.tenant_id
+     where r.flag in ('LL', 'HH')
+       and coalesce(a.collected_at, a.created_at) >= ${from}::date
+       and coalesce(a.collected_at, a.created_at) < (${to}::date + interval '1 day')
+     order by coalesce(a.collected_at, a.created_at) desc, a.number
+     limit 200
+  `);
+  return res.rows.map((row) => ({
+    accessionId: row.accession_id,
+    accessionNumber: row.number,
+    patientName: row.patient_name,
+    uhid: row.uhid,
+    parameter: row.parameter,
+    value: row.value_num !== null && row.value_num !== undefined ? String(Number(row.value_num)) : (row.value_text ?? ''),
+    flag: row.flag,
+    verifiedAt: row.verified_at ? new Date(row.verified_at).toISOString() : null,
+  }));
+}
+
 export async function applyAnalyzer(ctx: Ctx, input: AnalyzerResultInput, deps: LabDeps): Promise<{ accessionId: string; version: number }> {
   const [accession] = await ctx.tx.select().from(schema.labAccessions).where(eq(schema.labAccessions.number, input.accessionNumber));
   if (!accession) throw new ApiError(404, 'not_found', 'Accession not found');

@@ -258,6 +258,7 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
         'ip-statement': pharmacyFeatures.ipStatement,
         expiry: pharmacyFeatures.expiry,
         purchases: pharmacyFeatures.purchaseRegister,
+        'h1-register': pharmacyFeatures.issueRegister,
       }[req.params.report];
       await gate.requireFeature(feature);
       return pharmacyReport(ctx(gate), req.params.report, req.query);

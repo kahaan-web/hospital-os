@@ -67,6 +67,9 @@ export default function PatientDetailPage() {
           <a className="hos-link" href={registrationApi.printUrl(patient.id, 'case-paper', 'pdf')}>
             Case paper PDF
           </a>
+          <Link className="hos-link" href={`/app/patients/${patient.id}/allergies`}>
+            Allergies and alerts
+          </Link>
           <a className="hos-link" href={registrationApi.printUrl(patient.id, 'sticker', 'pdf')}>
             Sticker PDF
           </a>

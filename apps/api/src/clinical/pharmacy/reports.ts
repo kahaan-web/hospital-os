@@ -1,6 +1,6 @@
 import { schema } from '@hos/db';
 import { PHARMACY_GST_NOTE, formatDate, formatINR, type PharmacyReportDto, type PharmacyReportKey, type PharmacyReportQuery } from '@hos/shared';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { listStock, withinDates, type PharmacyCtx } from './service';
 
 function money(paise: number): string {
@@ -39,6 +39,43 @@ async function build(ctx: PharmacyCtx, key: PharmacyReportKey, query: PharmacyRe
       title: 'Expiry item report',
       columns: ['Item', 'Batch', 'Expiry', 'Qty', 'Status'],
       rows: stock.map((row) => [`${row.brand} ${row.strength}`.trim(), row.batchNo, formatDate(row.expiry), String(row.qty), row.expired ? 'Expired' : 'Expiring']),
+    };
+  }
+  if (key === 'h1-register') {
+    const lines = await ctx.tx
+      .select({
+        number: schema.pharmacySales.number,
+        createdAt: schema.pharmacySales.createdAt,
+        patientId: schema.pharmacySales.patientId,
+        walkinName: schema.pharmacySales.walkinName,
+        brand: schema.pharmacyItems.brand,
+        strength: schema.pharmacyItems.strength,
+        schedule: schema.pharmacyItems.schedule,
+        batchNo: schema.pharmacyBatches.batchNo,
+        qty: schema.pharmacySaleLines.qty,
+        returnedQty: schema.pharmacySaleLines.returnedQty,
+      })
+      .from(schema.pharmacySaleLines)
+      .innerJoin(schema.pharmacySales, eq(schema.pharmacySales.id, schema.pharmacySaleLines.saleId))
+      .innerJoin(schema.pharmacyItems, eq(schema.pharmacyItems.id, schema.pharmacySaleLines.itemId))
+      .innerJoin(schema.pharmacyBatches, eq(schema.pharmacyBatches.id, schema.pharmacySaleLines.batchId))
+      .where(and(eq(schema.pharmacySales.locationId, ctx.locationId), inArray(schema.pharmacyItems.schedule, ['H1', 'X'])))
+      .orderBy(asc(schema.pharmacySales.createdAt));
+    return {
+      title: 'Schedule H1 / X register',
+      columns: ['Bill', 'Date', 'Patient', 'Drug', 'Schedule', 'Batch', 'Qty sold', 'Qty returned'],
+      rows: lines
+        .filter((row) => withinDates(row.createdAt, query.from, query.to))
+        .map((row) => [
+          row.number,
+          formatDate(row.createdAt),
+          row.walkinName || row.patientId || '',
+          `${row.brand} ${row.strength}`.trim(),
+          row.schedule,
+          row.batchNo,
+          String(row.qty),
+          String(row.returnedQty),
+        ]),
     };
   }
   if (key === 'receipts' || key === 'purchases') {

@@ -289,6 +289,8 @@ function labGuards(): [string, TenantRouteGuard][] {
     manage('POST', `${LAB}/accessions/:id/email`, labFeature.sendResultOnEmail),
     manage('GET', `${LAB}/patients/:id/history`, labFeature.patientHistory),
     manage('GET', `${LAB}/reports/mis`, labFeature.labMis),
+    manage('GET', `${LAB}/reports/tat`, labFeature.labMis),
+    manage('GET', `${LAB}/reports/critical`, labFeature.labMis),
     manage('POST', `${LAB}/interfaces/:id/ingest`, labFeature.labEquipments),
   ];
 }
