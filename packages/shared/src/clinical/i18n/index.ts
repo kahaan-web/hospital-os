@@ -5,8 +5,10 @@ import { doctorEn } from './doctor';
 import { ipbillingEn } from './ipbilling';
 import { labEn } from './lab';
 import { nursingEn } from './nursing';
+import { otEn } from './ot';
 import { pharmacyEn } from './pharmacy';
 import { portalEn } from './portal';
+import { radiologyEn } from './radiology';
 import { registrationEn } from './registration';
 
 export const clinicalEn = {
@@ -20,4 +22,6 @@ export const clinicalEn = {
   lab: labEn,
   nursing: nursingEn,
   portal: portalEn,
+  ot: otEn,
+  radiology: radiologyEn,
 } as const;

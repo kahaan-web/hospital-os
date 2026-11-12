@@ -9,3 +9,4 @@ export * from './pharmacy';
 export * from './lab';
 export * from './nursing';
 export * from './portal';
+export * from './ot-rad';

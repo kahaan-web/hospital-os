@@ -105,6 +105,9 @@ export interface Side {
   labSettingsId: string;
   marScheduleId: string;
   medAdminId: string;
+  otCaseId: string;
+  radOrderId: string;
+  radReportId: string;
 }
 
 export interface FixturePair {
@@ -433,6 +436,25 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
      values ($1, $2, 'given', '1 tab', $3) returning id`,
     [tenant.id, marSchedule.id, user.id],
+  );
+  const otCase = await one<{ id: string }>(
+    migrator,
+    `insert into ot_cases (tenant_id, location_id, patient_id, number, procedure_name, surgeon_name, room_code,
+                          scheduled_start, scheduled_end, is_sample)
+     values ($1, $2, $3, $4, 'Sample procedure', 'Dr. Sample', 'OT-1', now() + interval '1 day', now() + interval '1 day 1 hour', true)
+     returning id`,
+    [tenant.id, location.id, patient.id, `ZOT${runId}${mark}`],
+  );
+  const radOrder = await one<{ id: string }>(
+    migrator,
+    `insert into rad_orders (tenant_id, location_id, patient_id, number, modality, study_name, is_sample)
+     values ($1, $2, $3, $4, 'xray', 'Chest PA (Sample)', true) returning id`,
+    [tenant.id, location.id, patient.id, `ZRD${runId}${mark}`],
+  );
+  const radReport = await one<{ id: string }>(
+    migrator,
+    `insert into rad_reports (tenant_id, order_id, findings, is_sample) values ($1, $2, 'Sample', true) returning id`,
+    [tenant.id, radOrder.id],
   );
   const vital = await one<{ id: string }>(
     migrator,
@@ -823,6 +845,9 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     labSettingsId: labSettings.id,
     marScheduleId: marSchedule.id,
     medAdminId: medAdmin.id,
+    otCaseId: otCase.id,
+    radOrderId: radOrder.id,
+    radReportId: radReport.id,
   };
 }
 
@@ -877,6 +902,9 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from lab_settings where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
+    `delete from rad_reports where tenant_id = any($1::uuid[])`,
+    `delete from rad_orders where tenant_id = any($1::uuid[])`,
+    `delete from ot_cases where tenant_id = any($1::uuid[])`,
     `delete from medication_administrations where tenant_id = any($1::uuid[])`,
     `delete from mar_schedules where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,

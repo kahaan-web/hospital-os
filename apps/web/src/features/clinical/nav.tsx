@@ -10,6 +10,8 @@ import {
   HeartPulse,
   Pill,
   Receipt,
+  ScanLine,
+  Scissors,
   Stethoscope,
   UserRound,
   Wallet,
@@ -76,6 +78,10 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'nursing', labelKey: 'clinical.nursing.nav', href: '/app/nursing', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: true },
   { id: 'nursing-encounter', labelKey: 'clinical.nursing.encounter', href: '/app/nursing/encounters/[id]', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
   { id: 'nursing-diet', labelKey: 'clinical.nursing.diet', href: '/app/nursing/diet', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
+  { id: 'ot', labelKey: 'clinical.ot.nav', href: '/app/ot', moduleKey: 'ot-scheduling', permission: 'ot.manage', nav: true },
+  { id: 'ot-new', labelKey: 'clinical.ot.new', href: '/app/ot/new', moduleKey: 'ot-scheduling', permission: 'ot.manage', nav: false },
+  { id: 'radiology', labelKey: 'clinical.radiology.nav', href: '/app/radiology', moduleKey: 'radiology', permission: 'radiology.manage', nav: true },
+  { id: 'radiology-new', labelKey: 'clinical.radiology.new', href: '/app/radiology/new', moduleKey: 'radiology', permission: 'radiology.manage', nav: false },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -89,6 +95,8 @@ const ICONS: Record<string, ReactNode> = {
   pharmacy: <Pill size={18} aria-hidden strokeWidth={1.5} />,
   lab: <FlaskConical size={18} aria-hidden strokeWidth={1.5} />,
   nursing: <HeartPulse size={18} aria-hidden strokeWidth={1.5} />,
+  ot: <Scissors size={18} aria-hidden strokeWidth={1.5} />,
+  radiology: <ScanLine size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

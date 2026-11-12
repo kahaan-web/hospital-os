@@ -293,6 +293,10 @@ function labGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+function mvpGuards(module: string, permission: string, routes: [string, string][]): [string, TenantRouteGuard][] {
+  return routes.map(([method, path]) => entry(method, `/api/v1/tenant/m/${module}/${path}`, { permission, module }));
+}
+
 const ENTRIES: [string, TenantRouteGuard][] = [
   entry('GET', '/api/v1/auth/me', { permission: null, allowWhenSuspended: true }),
   entry('POST', '/api/v1/auth/logout', { permission: null, allowWhenSuspended: true }),
@@ -684,9 +688,27 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     permission: 'nursing.manage',
     module: 'nurse-station',
   }),
+  // MVP demo slice: OT scheduling and radiology.
+  ...mvpGuards('ot-scheduling', 'ot.manage', [
+    ['GET', 'cases'],
+    ['GET', 'cases/:id'],
+    ['POST', 'cases'],
+    ['POST', 'cases/:id/start'],
+    ['POST', 'cases/:id/complete'],
+    ['POST', 'cases/:id/cancel'],
+  ]),
+  ...mvpGuards('radiology', 'radiology.manage', [
+    ['GET', 'orders'],
+    ['GET', 'orders/:id'],
+    ['POST', 'orders'],
+    ['POST', 'orders/:id/start'],
+    ['POST', 'orders/:id/done'],
+    ['PUT', 'orders/:id/report'],
+    ['POST', 'orders/:id/report/sign'],
+  ]),
 ];
 
-const keys = ENTRIES.map(([key]) => key);
+const keys =ENTRIES.map(([key]) => key);
 if (new Set(keys).size !== keys.length) {
   throw new Error('Duplicate tenant route guard');
 }

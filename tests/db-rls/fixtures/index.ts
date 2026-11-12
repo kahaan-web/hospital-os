@@ -11,6 +11,7 @@ import { seedCreditNotes } from './credit-notes';
 import { seedDoctor } from './doctor';
 import { seedLab } from './lab';
 import { seedNursing } from './nursing';
+import { seedOtRad } from './ot-rad';
 import { seedPharmacy } from './pharmacy';
 import { seedRegistration } from './registration';
 import type { FixtureModule, ProbeSpec, TenantFixture } from './types';
@@ -28,6 +29,7 @@ export const fixtureModules: FixtureModule[] = [
   { name: 'appointments', seed: seedAppointments },
   { name: 'lab', seed: seedLab },
   { name: 'nursing', seed: seedNursing },
+  { name: 'ot-rad', seed: seedOtRad },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

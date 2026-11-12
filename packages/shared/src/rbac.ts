@@ -23,6 +23,8 @@ export const PERMISSIONS = {
   'lab.manage': 'Lab samples and results',
   'nursing.manage': 'Nurse station orders and vitals',
   'clinical.order': 'Clinical orders and notes (CPOE)',
+  'ot.manage': 'Schedule and complete operation theatre cases',
+  'radiology.manage': 'Radiology worklist, reporting and signing',
   'accounts.manage': 'Doctor accounting and finance reports',
   'reports.view': 'Run registers and MIS reports',
 } as const;
