@@ -5,6 +5,7 @@ import { createTranslator } from '@hos/shared';
 import type { ShellNavItem } from '@hos/ui';
 import {
   BedDouble,
+  Calculator,
   CalendarClock,
   FlaskConical,
   HeartPulse,
@@ -12,6 +13,7 @@ import {
   Receipt,
   ScanLine,
   Scissors,
+  ShieldCheck,
   Stethoscope,
   UserRound,
   Wallet,
@@ -82,6 +84,12 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'ot-new', labelKey: 'clinical.ot.new', href: '/app/ot/new', moduleKey: 'ot-scheduling', permission: 'ot.manage', nav: false },
   { id: 'radiology', labelKey: 'clinical.radiology.nav', href: '/app/radiology', moduleKey: 'radiology', permission: 'radiology.manage', nav: true },
   { id: 'radiology-new', labelKey: 'clinical.radiology.new', href: '/app/radiology/new', moduleKey: 'radiology', permission: 'radiology.manage', nav: false },
+  { id: 'insurance', labelKey: 'clinical.insurance.nav', href: '/app/insurance', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: true },
+  { id: 'insurance-new', labelKey: 'clinical.insurance.newRequest', href: '/app/insurance/new', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
+  { id: 'insurance-request', labelKey: 'clinical.insurance.request', href: '/app/insurance/[id]', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
+  { id: 'insurance-payers', labelKey: 'clinical.insurance.payers', href: '/app/insurance/payers', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
+  { id: 'doctor-accounting', labelKey: 'clinical.doctorAccounting.nav', href: '/app/doctor-accounting', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: true },
+  { id: 'doctor-accounting-payouts', labelKey: 'clinical.doctorAccounting.payouts', href: '/app/doctor-accounting/payouts', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: false },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -97,6 +105,8 @@ const ICONS: Record<string, ReactNode> = {
   nursing: <HeartPulse size={18} aria-hidden strokeWidth={1.5} />,
   ot: <Scissors size={18} aria-hidden strokeWidth={1.5} />,
   radiology: <ScanLine size={18} aria-hidden strokeWidth={1.5} />,
+  insurance: <ShieldCheck size={18} aria-hidden strokeWidth={1.5} />,
+  'doctor-accounting': <Calculator size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

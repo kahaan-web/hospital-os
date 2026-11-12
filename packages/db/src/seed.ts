@@ -31,6 +31,7 @@ import { seedBilling } from './seed-clinical/billing';
 import { seedClinicalFoundation } from './seed-clinical/foundation';
 import { seedDoctor } from './seed-clinical/doctor';
 import { seedIpbilling } from './seed-clinical/ipbilling';
+import { seedInsuranceDa } from './seed-clinical/insurance-da';
 import { seedLab } from './seed-clinical/lab';
 import { seedNursing } from './seed-clinical/nursing';
 import { seedOtRad } from './seed-clinical/ot-rad';
@@ -610,6 +611,7 @@ export async function seedDemo(log: (m: string) => void = console.log): Promise<
     await seedNursing(log);
     await seedOtRad(log);
     await seedPortal(log);
+    await seedInsuranceDa(log);
   } finally {
     await Promise.race([handle.close(), new Promise((resolve) => setTimeout(resolve, 2000))]);
   }

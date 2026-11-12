@@ -2,6 +2,7 @@ import { adtEn } from './adt';
 import { appointmentsEn } from './appointments';
 import { billingEn } from './billing';
 import { doctorEn } from './doctor';
+import { doctorAccountingEn, insuranceEn } from './insurance';
 import { ipbillingEn } from './ipbilling';
 import { labEn } from './lab';
 import { nursingEn } from './nursing';
@@ -24,4 +25,6 @@ export const clinicalEn = {
   portal: portalEn,
   ot: otEn,
   radiology: radiologyEn,
+  insurance: insuranceEn,
+  doctorAccounting: doctorAccountingEn,
 } as const;

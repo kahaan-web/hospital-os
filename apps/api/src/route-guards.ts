@@ -264,6 +264,31 @@ function doctorGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+const INS = '/api/v1/tenant/m/insurance';
+const DA = '/api/v1/tenant/m/doctor-accounting';
+
+/** MVP demo slice: Insurance/TPA and Doctors Accounting. No feature gates yet; tiers are not assigned here. */
+function insuranceDoctorAccountingGuards(): [string, TenantRouteGuard][] {
+  const ins = (method: string, url: string) => entry(method, `${INS}${url}`, { permission: 'billing.ip.manage', module: 'insurance' });
+  const da = (method: string, url: string) => entry(method, `${DA}${url}`, { permission: 'accounts.manage', module: 'doctor-accounting' });
+  return [
+    ins('GET', '/payers'),
+    ins('POST', '/payers'),
+    ins('GET', '/requests'),
+    ins('POST', '/requests'),
+    ins('GET', '/requests/:id'),
+    ins('POST', '/requests/:id/approve'),
+    ins('POST', '/requests/:id/reject'),
+    da('GET', '/doctors'),
+    da('GET', '/rules'),
+    da('POST', '/rules'),
+    da('GET', '/payouts'),
+    da('POST', '/payouts'),
+    da('GET', '/payouts/:id'),
+    da('POST', '/payouts/:id/pay'),
+  ];
+}
+
 const LAB = '/api/v1/tenant/m/lab';
 const labFeature = CLINICAL_FEATURES.lab;
 
@@ -643,6 +668,7 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   ...billingGuards(),
   // B8. Ingest is token-authenticated in the handler; the row keeps the inventory closed.
   ...labGuards(),
+  ...insuranceDoctorAccountingGuards(),
   entry('GET', '/api/v1/tenant/m/nurse-station/ward', {
     permission: 'nursing.manage',
     module: 'nurse-station',
