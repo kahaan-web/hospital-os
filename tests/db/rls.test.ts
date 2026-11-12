@@ -106,6 +106,10 @@ const TABLES = [
   'lab_settings',
   'mar_schedules',
   'medication_administrations',
+  'insurance_payers',
+  'insurance_requests',
+  'doctor_share_rules',
+  'doctor_payouts',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -628,6 +632,8 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
           'delete from appointments',
           'delete from schedule_exceptions',
           'delete from doctor_schedules',
+          'delete from doctor_share_rules',
+          'delete from doctor_payouts',
         ],
       };
     case 'users':
@@ -1259,6 +1265,25 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
          insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
          select $1, ins.id, 'held', '', '${b.userId}' from ins`,
       );
+    case 'insurance_payers':
+      return {
+        ...row(common, 'id = $1', b.insPayerId, `name = 'Touched by A'`, 'name',
+          `insert into insurance_payers (tenant_id, name, payer_type) values ($1, 'Nope ${pair.runId}', 'insurer')`),
+        beforeMassDelete: ['delete from insurance_requests'],
+      };
+    case 'insurance_requests':
+      return row(common, 'id = $1', b.insRequestId, `reject_reason = 'Touched by A'`, 'reject_reason',
+        `with ins as (
+           insert into insurance_payers (tenant_id, name, payer_type) values ($1, 'Req ${pair.runId}', 'insurer') returning id
+         )
+         insert into insurance_requests (tenant_id, payer_id, patient_name, estimated_paise)
+         select $1, ins.id, 'Nope', 1 from ins`);
+    case 'doctor_share_rules':
+      return row(common, 'id = $1', b.daRuleId, `service_category = 'Touched by A'`, 'service_category',
+        `insert into doctor_share_rules (tenant_id, doctor_id, share_type, share_value) values ($1, '${b.doctorId}', 'pct_net', 10)`);
+    case 'doctor_payouts':
+      return row(common, 'id = $1', b.daPayoutId, `pay_ref = 'Touched by A'`, 'pay_ref',
+        `insert into doctor_payouts (tenant_id, doctor_id, period_from, period_to) values ($1, '${b.doctorId}', current_date, current_date)`);
     default:
       return assertNever(table);
   }

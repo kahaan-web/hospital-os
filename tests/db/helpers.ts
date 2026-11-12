@@ -105,6 +105,10 @@ export interface Side {
   labSettingsId: string;
   marScheduleId: string;
   medAdminId: string;
+  insPayerId: string;
+  insRequestId: string;
+  daRuleId: string;
+  daPayoutId: string;
 }
 
 export interface FixturePair {
@@ -741,6 +745,29 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false) returning id`,
     [tenant.id],
   );
+  const insPayer = await one<{ id: string }>(
+    migrator,
+    `insert into insurance_payers (tenant_id, name, payer_type, is_sample) values ($1, $2, 'insurer', true) returning id`,
+    [tenant.id, `Sample Payer ${runId}${mark}`],
+  );
+  const insRequest = await one<{ id: string }>(
+    migrator,
+    `insert into insurance_requests (tenant_id, payer_id, patient_name, estimated_paise, is_sample)
+     values ($1, $2, 'Sample Patient', 100000, true) returning id`,
+    [tenant.id, insPayer.id],
+  );
+  const daRule = await one<{ id: string }>(
+    migrator,
+    `insert into doctor_share_rules (tenant_id, doctor_id, share_type, share_value, is_sample)
+     values ($1, $2, 'pct_net', 50, true) returning id`,
+    [tenant.id, doctor.id],
+  );
+  const daPayout = await one<{ id: string }>(
+    migrator,
+    `insert into doctor_payouts (tenant_id, doctor_id, period_from, period_to, gross_paise, share_paise, is_sample)
+     values ($1, $2, current_date - 30, current_date, 100000, 50000, true) returning id`,
+    [tenant.id, doctor.id],
+  );
   return {
     id: tenant.id,
     locationId: location.id,
@@ -823,6 +850,10 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     labSettingsId: labSettings.id,
     marScheduleId: marSchedule.id,
     medAdminId: medAdmin.id,
+    insPayerId: insPayer.id,
+    insRequestId: insRequest.id,
+    daRuleId: daRule.id,
+    daPayoutId: daPayout.id,
   };
 }
 
@@ -869,6 +900,10 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from appointments where tenant_id = any($1::uuid[])`,
     `delete from schedule_exceptions where tenant_id = any($1::uuid[])`,
     `delete from doctor_schedules where tenant_id = any($1::uuid[])`,
+    `delete from insurance_requests where tenant_id = any($1::uuid[])`,
+    `delete from insurance_payers where tenant_id = any($1::uuid[])`,
+    `delete from doctor_payouts where tenant_id = any($1::uuid[])`,
+    `delete from doctor_share_rules where tenant_id = any($1::uuid[])`,
     `delete from lab_results where tenant_id = any($1::uuid[])`,
     `delete from lab_accessions where tenant_id = any($1::uuid[])`,
     `delete from lab_test_params where tenant_id = any($1::uuid[])`,

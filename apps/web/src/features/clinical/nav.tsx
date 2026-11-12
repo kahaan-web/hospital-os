@@ -5,11 +5,13 @@ import { createTranslator } from '@hos/shared';
 import type { ShellNavItem } from '@hos/ui';
 import {
   BedDouble,
+  Calculator,
   CalendarClock,
   FlaskConical,
   HeartPulse,
   Pill,
   Receipt,
+  ShieldCheck,
   Stethoscope,
   UserRound,
   Wallet,
@@ -76,6 +78,12 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'nursing', labelKey: 'clinical.nursing.nav', href: '/app/nursing', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: true },
   { id: 'nursing-encounter', labelKey: 'clinical.nursing.encounter', href: '/app/nursing/encounters/[id]', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
   { id: 'nursing-diet', labelKey: 'clinical.nursing.diet', href: '/app/nursing/diet', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
+  { id: 'insurance', labelKey: 'clinical.insurance.nav', href: '/app/insurance', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: true },
+  { id: 'insurance-new', labelKey: 'clinical.insurance.newRequest', href: '/app/insurance/new', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
+  { id: 'insurance-request', labelKey: 'clinical.insurance.request', href: '/app/insurance/[id]', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
+  { id: 'insurance-payers', labelKey: 'clinical.insurance.payers', href: '/app/insurance/payers', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
+  { id: 'doctor-accounting', labelKey: 'clinical.doctorAccounting.nav', href: '/app/doctor-accounting', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: true },
+  { id: 'doctor-accounting-payouts', labelKey: 'clinical.doctorAccounting.payouts', href: '/app/doctor-accounting/payouts', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: false },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -89,6 +97,8 @@ const ICONS: Record<string, ReactNode> = {
   pharmacy: <Pill size={18} aria-hidden strokeWidth={1.5} />,
   lab: <FlaskConical size={18} aria-hidden strokeWidth={1.5} />,
   nursing: <HeartPulse size={18} aria-hidden strokeWidth={1.5} />,
+  insurance: <ShieldCheck size={18} aria-hidden strokeWidth={1.5} />,
+  'doctor-accounting': <Calculator size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {
