@@ -104,12 +104,13 @@ export function registerLab(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.patch(`${PREFIX}/tests/:id`, { schema: { params: idParams, body: labTestPatchSchema } }, async (req, reply) =>
+  // Patch bodies are parsed after the guards so a caller without access gets 403, not a 400 about the body.
+  r.patch(`${PREFIX}/tests/:id`, { schema: { params: idParams } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       await gate.requireModule(MODULE);
       await gate.requireFeature(features.masterTemplate);
       gate.requirePermission('lab.manage');
-      return updateTest(ctx(gate), req.params.id, req.body);
+      return updateTest(ctx(gate), req.params.id, labTestPatchSchema.parse(req.body));
     }),
   );
 
@@ -133,12 +134,12 @@ export function registerLab(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.patch(`${PREFIX}/tests/:id/params/:paramId`, { schema: { params: paramParams, body: labParamPatchSchema } }, async (req, reply) =>
+  r.patch(`${PREFIX}/tests/:id/params/:paramId`, { schema: { params: paramParams } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       await gate.requireModule(MODULE);
       await gate.requireFeature(features.masterTemplate);
       gate.requirePermission('lab.manage');
-      return updateParam(ctx(gate), req.params.id, req.params.paramId, req.body);
+      return updateParam(ctx(gate), req.params.id, req.params.paramId, labParamPatchSchema.parse(req.body));
     }),
   );
 

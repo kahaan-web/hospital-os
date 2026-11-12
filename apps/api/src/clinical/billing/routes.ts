@@ -72,21 +72,22 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.post(`${PREFIX}/services`, { schema: { body: serviceCreateSchema } }, async (req, reply) =>
+  // The body is parsed after the permission check so a caller without access gets 403, not a 400 about fields.
+  r.post(`${PREFIX}/services`, async (req, reply) =>
     run(req, reply, async (gate) => {
       await gate.requireModule(MODULE);
       gate.requireAnyPermission(['tenant.manage', 'accounts.manage']);
-      const created = await createService(ctx(gate), req.body);
+      const created = await createService(ctx(gate), serviceCreateSchema.parse(req.body));
       reply.code(201);
       return created;
     }),
   );
 
-  r.patch(`${PREFIX}/services/:id`, { schema: { params: id, body: servicePatchSchema } }, async (req, reply) =>
+  r.patch(`${PREFIX}/services/:id`, { schema: { params: id } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       await gate.requireModule(MODULE);
       gate.requireAnyPermission(['tenant.manage', 'accounts.manage']);
-      return patchService(ctx(gate), req.params.id, req.body);
+      return patchService(ctx(gate), req.params.id, servicePatchSchema.parse(req.body));
     }),
   );
 
