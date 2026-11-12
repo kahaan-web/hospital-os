@@ -1,7 +1,8 @@
 import { schema, type Tx } from '@hos/db';
 import type { CashEntryDto, CashEntryInput, CashLedger, ClinicalCtx, DocSeriesKey, PaymentMode } from '@hos/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { ApiError } from '../http';
+import { billingDefiner } from './billing/definers';
 import { numbering } from './numbering';
 
 const SERIES: Record<CashEntryInput['entryType'], DocSeriesKey> = {
@@ -70,12 +71,9 @@ export const cash: CashLedger<Tx> = {
     const [row] = await ctx.tx.select().from(schema.cashLedger).where(eq(schema.cashLedger.id, entryId));
     if (!row) throw new ApiError(404, 'not_found', 'Cash entry not found');
     if (row.voidedAt) return toDto(row);
-    const [updated] = await ctx.tx
-      .update(schema.cashLedger)
-      .set({ voidedAt: new Date(), voidReason: reason })
-      .where(eq(schema.cashLedger.id, entryId))
-      .returning();
+    await billingDefiner(ctx.tx, sql`select hos_cash_void(${entryId}::uuid, ${reason})`);
+    const [updated] = await ctx.tx.select().from(schema.cashLedger).where(eq(schema.cashLedger.id, entryId));
     await ctx.audit('clinical.cash.void', 'cash_ledger', entryId, { voidedAt: null }, { voidReason: reason });
-    return toDto(updated!);
+    return toDto(updated ?? row);
   },
 };

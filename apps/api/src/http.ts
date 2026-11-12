@@ -248,7 +248,7 @@ export function routeTemplate(req: FastifyRequest): string {
  * Cancel, reschedule and queue status are not creates, so they stay optional.
  * Pharmacy sale, goods receipt, IP issue, return and adjustment replay through the same key
  * instead of a second check inside the handler.
- * OP bill, settlement, concession, refund and deposit posts do the same.
+ * OP bill, finalise, cancel, settlement, concession, refund and deposit posts do the same.
  * Lab accession create does too.
  */
 const IDEMPOTENT_POSTS = new Set([
@@ -266,6 +266,7 @@ const IDEMPOTENT_POSTS = new Set([
   '/api/v1/tenant/m/opd-visit/visits',
   '/api/v1/tenant/m/op-billing/bills',
   '/api/v1/tenant/m/op-billing/bills/:id/finalise',
+  '/api/v1/tenant/m/op-billing/bills/:id/cancel',
   '/api/v1/tenant/m/op-billing/bills/:id/settle',
   '/api/v1/tenant/m/op-billing/bills/:id/refund',
   '/api/v1/tenant/m/op-billing/bills/:id/concessions',

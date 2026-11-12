@@ -18,6 +18,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { ApiError } from '../../http';
 import { cash } from '../cash';
 import { numbering } from '../numbering';
+import { billingDefiner } from './definers';
 import { billDto, depositDto, lineDto } from './map';
 
 const PAYMENT: readonly PaymentMode[] = ['cash', 'upi', 'card', 'cheque', 'neft'];
@@ -65,8 +66,7 @@ async function priceLines(
 }
 
 async function lockBill(ctx: ClinicalCtx<Tx>, billId: string): Promise<typeof schema.bills.$inferSelect> {
-  const locked = await ctx.tx.execute<{ id: string }>(sql`select id from bills where id = ${billId}::uuid for update`);
-  if (!locked.rows[0]) throw new ApiError(404, 'not_found', 'Bill not found');
+  await billingDefiner(ctx.tx, sql`select hos_bill_lock(${billId}::uuid)`);
   const [bill] = await ctx.tx.select().from(schema.bills).where(eq(schema.bills.id, billId));
   if (!bill) throw new ApiError(404, 'not_found', 'Bill not found');
   return bill;
@@ -101,36 +101,34 @@ async function applyPrices(
     })),
     discountPaise,
   );
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i];
-    const line = composed.lines[i];
-    if (!row || !line) continue;
-    await ctx.tx
-      .update(schema.billLines)
-      .set({
-        billDiscountPaise: line.billDiscountPaise,
-        taxablePaise: line.taxablePaise,
-        gstRateBp: line.gstRateBp,
-        cgstPaise: line.cgstPaise,
-        sgstPaise: line.sgstPaise,
-        igstPaise: line.igstPaise,
-      })
-      .where(eq(schema.billLines.id, row.id));
-  }
-  const [updated] = await ctx.tx
-    .update(schema.bills)
-    .set({
-      docType: composed.docType,
-      subtotalPaise: composed.subtotalPaise,
-      discountPaise: composed.discountPaise,
-      cgstPaise: composed.cgstPaise,
-      sgstPaise: composed.sgstPaise,
-      igstPaise: composed.igstPaise,
-      roundOffPaise: composed.roundOffPaise,
-      totalPaise: composed.totalPaise,
-    })
-    .where(eq(schema.bills.id, billId))
-    .returning();
+  const payload = rows.map((row, index) => {
+    const line = composed.lines[index];
+    if (!line) throw new ApiError(422, 'validation', 'Could not price a line');
+    return {
+      id: row.id,
+      bill_discount_paise: line.billDiscountPaise,
+      taxable_paise: line.taxablePaise,
+      gst_rate_bp: line.gstRateBp,
+      cgst_paise: line.cgstPaise,
+      sgst_paise: line.sgstPaise,
+      igst_paise: line.igstPaise,
+    };
+  });
+  await billingDefiner(ctx.tx, sql`
+    select hos_bill_reprice(
+      ${billId}::uuid,
+      ${JSON.stringify(payload)}::jsonb,
+      ${composed.docType},
+      ${composed.subtotalPaise}::bigint,
+      ${composed.discountPaise}::bigint,
+      ${composed.cgstPaise}::bigint,
+      ${composed.sgstPaise}::bigint,
+      ${composed.igstPaise}::bigint,
+      ${composed.roundOffPaise}::bigint,
+      ${composed.totalPaise}::bigint
+    )
+  `);
+  const [updated] = await ctx.tx.select().from(schema.bills).where(eq(schema.bills.id, billId));
   if (!updated) throw new ApiError(404, 'not_found', 'Bill not found');
   return updated;
 }
@@ -247,13 +245,24 @@ export async function finalise(ctx: ClinicalCtx<Tx>, billId: string): Promise<Op
     }
   }
   const number = await numbering.next(ctx, bill.kind === 'ip' ? 'ip_bill' : 'op_bill');
-  const [updated] = await ctx.tx
-    .update(schema.bills)
-    .set({ status: 'final', number, finalisedAt: new Date() })
-    .where(eq(schema.bills.id, bill.id))
-    .returning();
+  await billingDefiner(ctx.tx, sql`select hos_bill_finalise(${bill.id}::uuid, ${number})`);
   await ctx.audit('billing.bill.finalise', 'bill', bill.id, { status: 'draft', number: null }, { status: 'final', number });
-  return present(ctx, updated ?? bill, true);
+  return readBill(ctx, bill.id);
+}
+
+export async function cancelBill(ctx: ClinicalCtx<Tx>, billId: string, reason: string): Promise<OpBillDto> {
+  const bill = await lockBill(ctx, billId);
+  if (bill.status === 'cancelled') throw new ApiError(409, 'already_cancelled', 'This bill is already cancelled');
+  if (bill.status !== 'draft' && bill.status !== 'final') throw new ApiError(422, 'bill_not_open', 'This bill cannot be cancelled');
+  if (bill.paidPaise > 0) throw new ApiError(422, 'bill_has_payments', 'Refund the amount paid before cancelling this bill');
+  const [settled] = await ctx.tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.billSettlements)
+    .where(eq(schema.billSettlements.billId, bill.id));
+  if (Number(settled?.n ?? 0) > 0) throw new ApiError(422, 'bill_has_payments', 'Refund the amount paid before cancelling this bill');
+  await billingDefiner(ctx.tx, sql`select hos_bill_cancel(${bill.id}::uuid, ${reason})`);
+  await ctx.audit('billing.bill.cancel', 'bill', bill.id, { status: bill.status }, { status: 'cancelled', reason });
+  return readBill(ctx, bill.id);
 }
 
 export async function settle(ctx: ClinicalCtx<Tx>, billId: string, input: SettleInput): Promise<OpBillDto> {
@@ -280,17 +289,12 @@ export async function settle(ctx: ClinicalCtx<Tx>, billId: string, input: Settle
   let depositId: string | null = null;
   if (input.mode === 'deposit') {
     if (!input.depositId) throw new ApiError(422, 'deposit_required', 'Choose the deposit to adjust');
-    const locked = await ctx.tx.execute<{ id: string }>(sql`select id from deposits where id = ${input.depositId}::uuid for update`);
-    if (!locked.rows[0]) throw new ApiError(404, 'not_found', 'Deposit not found');
+    await billingDefiner(ctx.tx, sql`select hos_deposit_lock(${input.depositId}::uuid)`);
     const [deposit] = await ctx.tx.select().from(schema.deposits).where(eq(schema.deposits.id, input.depositId));
     if (!deposit) throw new ApiError(404, 'not_found', 'Deposit not found');
     if (deposit.patientId !== bill.patientId) throw new ApiError(422, 'deposit_patient', 'That deposit belongs to another patient');
+    if (deposit.status !== 'open') throw new ApiError(422, 'deposit_closed', 'That deposit is not open');
     if (deposit.balancePaise < input.amountPaise) throw new ApiError(422, 'deposit_short', 'The deposit balance is not enough');
-    const next = deposit.balancePaise - input.amountPaise;
-    await ctx.tx
-      .update(schema.deposits)
-      .set({ balancePaise: next, status: next === 0 ? 'adjusted' : 'open' })
-      .where(eq(schema.deposits.id, deposit.id));
     depositId = deposit.id;
   } else if (isPayment(input.mode)) {
     const entry = await cash.record(ctx, {
@@ -307,20 +311,20 @@ export async function settle(ctx: ClinicalCtx<Tx>, billId: string, input: Settle
     cashEntryId = entry.id;
   }
 
-  await ctx.tx.insert(schema.billSettlements).values({
-    tenantId: ctx.tenantId,
-    billId: bill.id,
-    mode: input.mode,
-    amountPaise: input.amountPaise,
-    depositId,
-    cashEntryId,
-    instrumentRef: blank(input.instrumentRef),
-    receivedBy: ctx.userId,
-  });
   const paid = input.mode === 'credit' ? bill.paidPaise : bill.paidPaise + input.amountPaise;
-  const [updated] = await ctx.tx.update(schema.bills).set({ paidPaise: paid }).where(eq(schema.bills.id, bill.id)).returning();
+  await billingDefiner(ctx.tx, sql`
+    select hos_bill_settle(
+      ${bill.id}::uuid,
+      ${input.mode},
+      ${input.amountPaise}::bigint,
+      ${depositId}::uuid,
+      ${cashEntryId}::uuid,
+      ${blank(input.instrumentRef)},
+      ${ctx.userId}::uuid
+    )
+  `);
   await ctx.audit('billing.bill.settle', 'bill', bill.id, { paidPaise: bill.paidPaise }, { paidPaise: paid, mode: input.mode, amountPaise: input.amountPaise });
-  return present(ctx, updated ?? bill, true);
+  return readBill(ctx, bill.id);
 }
 
 export async function concede(ctx: ClinicalCtx<Tx>, billId: string, input: ConcessionInput, canApprove: boolean): Promise<OpBillDto> {
@@ -366,37 +370,22 @@ export async function refund(ctx: ClinicalCtx<Tx>, billId: string, input: BillRe
     refId: bill.id,
     instrumentRef: blank(input.instrumentRef),
   });
-  const [refundRow] = await ctx.tx
-    .insert(schema.refunds)
-    .values({
-      tenantId: ctx.tenantId,
-      billId: bill.id,
-      number: entry.number,
-      amountPaise: input.amountPaise,
-      reason: input.reason,
-      mode: input.mode,
-      cashEntryId: entry.id,
-      approvedBy: ctx.userId,
-    })
-    .returning();
-  const share = (tax: number) => (bill.totalPaise <= 0 ? 0 : Math.round((tax * input.amountPaise) / bill.totalPaise));
   const noteNumber = await numbering.next(ctx, 'credit_note');
-  await ctx.tx.insert(schema.billCreditNotes).values({
-    tenantId: ctx.tenantId,
-    billId: bill.id,
-    refundId: refundRow?.id ?? null,
-    number: noteNumber,
-    amountPaise: input.amountPaise,
-    cgstPaise: share(bill.cgstPaise),
-    sgstPaise: share(bill.sgstPaise),
-    igstPaise: share(bill.igstPaise),
-    reason: input.reason,
-    status: 'issued',
-  });
   const paid = bill.paidPaise - input.amountPaise;
-  const [updated] = await ctx.tx.update(schema.bills).set({ paidPaise: paid }).where(eq(schema.bills.id, bill.id)).returning();
+  await billingDefiner(ctx.tx, sql`
+    select hos_bill_refund(
+      ${bill.id}::uuid,
+      ${input.amountPaise}::bigint,
+      ${input.reason},
+      ${input.mode},
+      ${entry.number},
+      ${noteNumber},
+      ${entry.id}::uuid,
+      ${ctx.userId}::uuid
+    )
+  `);
   await ctx.audit('billing.bill.refund', 'bill', bill.id, { paidPaise: bill.paidPaise }, { paidPaise: paid, amountPaise: input.amountPaise, creditNote: noteNumber });
-  return present(ctx, updated ?? bill, true);
+  return readBill(ctx, bill.id);
 }
 
 export async function acceptDeposit(ctx: ClinicalCtx<Tx>, input: CreateDepositInput) {
@@ -435,14 +424,13 @@ export async function acceptDeposit(ctx: ClinicalCtx<Tx>, input: CreateDepositIn
     })
     .returning();
   if (!row) throw new ApiError(422, 'validation', 'Could not record the deposit');
-  await ctx.tx.update(schema.cashLedger).set({ refId: row.id }).where(eq(schema.cashLedger.id, entry.id));
+  await billingDefiner(ctx.tx, sql`select hos_cash_attach_ref(${entry.id}::uuid, ${row.id}::uuid)`);
   await ctx.audit('billing.deposit.create', 'deposit', row.id, null, { number: row.number, amountPaise: row.amountPaise });
   return depositDto(row);
 }
 
 export async function refundDeposit(ctx: ClinicalCtx<Tx>, depositId: string, input: DepositRefundInput) {
-  const locked = await ctx.tx.execute<{ id: string }>(sql`select id from deposits where id = ${depositId}::uuid for update`);
-  if (!locked.rows[0]) throw new ApiError(404, 'not_found', 'Deposit not found');
+  await billingDefiner(ctx.tx, sql`select hos_deposit_lock(${depositId}::uuid)`);
   const [deposit] = await ctx.tx.select().from(schema.deposits).where(eq(schema.deposits.id, depositId));
   if (!deposit) throw new ApiError(404, 'not_found', 'Deposit not found');
   if (input.amountPaise > deposit.balancePaise) throw new ApiError(422, 'deposit_short', 'The refund is more than the deposit balance');
@@ -457,24 +445,18 @@ export async function refundDeposit(ctx: ClinicalCtx<Tx>, depositId: string, inp
     refId: deposit.id,
   });
   const balance = deposit.balancePaise - input.amountPaise;
-  const [updated] = await ctx.tx
-    .update(schema.deposits)
-    .set({ balancePaise: balance, status: balance === 0 ? 'refunded' : deposit.status === 'adjusted' ? 'adjusted' : 'open' })
-    .where(eq(schema.deposits.id, deposit.id))
-    .returning();
-  const [refundRow] = await ctx.tx
-    .insert(schema.refunds)
-    .values({
-      tenantId: ctx.tenantId,
-      depositId: deposit.id,
-      number: entry.number,
-      amountPaise: input.amountPaise,
-      reason: input.reason,
-      mode: input.mode,
-      cashEntryId: entry.id,
-      approvedBy: ctx.userId,
-    })
-    .returning();
-  await ctx.audit('billing.deposit.refund', 'deposit', deposit.id, { balancePaise: deposit.balancePaise }, { balancePaise: balance, refundId: refundRow?.id });
+  await billingDefiner(ctx.tx, sql`
+    select hos_deposit_refund(
+      ${deposit.id}::uuid,
+      ${input.amountPaise}::bigint,
+      ${input.reason},
+      ${input.mode},
+      ${entry.number},
+      ${entry.id}::uuid,
+      ${ctx.userId}::uuid
+    )
+  `);
+  const [updated] = await ctx.tx.select().from(schema.deposits).where(eq(schema.deposits.id, deposit.id));
+  await ctx.audit('billing.deposit.refund', 'deposit', deposit.id, { balancePaise: deposit.balancePaise }, { balancePaise: balance });
   return depositDto(updated ?? deposit);
 }

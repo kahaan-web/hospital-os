@@ -854,7 +854,6 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         ...row(common, 'id = $1', b.serviceId, `name = 'Touched by A'`, 'name',
           `insert into services (tenant_id, code, name, category) values ($1, 'NO${pair.runId}', 'Nope', 'misc')`),
         beforeMassDelete: [
-          'delete from bill_lines',
           'delete from lab_results',
           'delete from lab_test_params',
           'delete from lab_tests',
@@ -922,11 +921,14 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.chargeId, `description = 'Touched by A'`, 'description',
           `insert into charges (tenant_id, location_id, encounter_id, patient_id, description, qty, unit_price_paise, amount_paise, gst_treatment, service_date, source_module, source_type, source_id, source_line) values ($1, '${b.locationId}', '${b.encounterId}', '${b.patientId}', 'Nope', 1, 100, 100, 'exempt_healthcare', current_date, 'opd', 'fixture', '${b.encounterId}', 'nope')`),
-        beforeMassDelete: ['delete from bill_lines'],
       };
     case 'cash_ledger':
-      return row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
-        `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`);
+      return {
+        ...row(common, 'id = $1', b.cashId, `void_reason = 'Touched by A'`, 'void_reason',
+          `insert into cash_ledger (tenant_id, location_id, entry_type, direction, mode, amount_paise, number, ref_type, ref_id) values ($1, '${b.locationId}', 'receipt', 'in', 'cash', 100, 'ZNOPE${pair.runId}', 'bill', '${b.encounterId}')`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'doctor_schedules':
       return {
         ...common,
@@ -967,29 +969,51 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
       return {
         ...row(common, 'id = $1', b.billId, `cancel_reason = 'Touched by A'`, 'cancel_reason',
           `insert into bills (tenant_id, location_id, patient_id, encounter_id, kind, doc_type, status, pay_class, subtotal_paise, total_paise) values ($1, '${b.locationId}', '${b.patientId}', '${b.encounterId}', 'op', 'bill_of_supply', 'draft', 'cash', 100, 100)`),
-        beforeMassDelete: ['delete from bill_credit_notes', 'delete from refunds', 'delete from concessions', 'delete from bill_settlements', 'delete from bill_lines', 'update charges set bill_id = null'],
+        denyUpdate: true,
+        denyDelete: true,
       };
     case 'bill_lines':
-      return row(common, 'id = $1', b.billLineId, `description = 'Touched by A'`, 'description',
-        `insert into bill_lines (tenant_id, bill_id, charge_id, line_no, description, qty, unit_price_paise, amount_paise, taxable_paise, gst_treatment, service_date) values ($1, '${b.billId}', gen_random_uuid(), 2, 'Nope', 1, 100, 100, 100, 'exempt_healthcare', current_date)`);
+      return {
+        ...row(common, 'id = $1', b.billLineId, `description = 'Touched by A'`, 'description',
+          `insert into bill_lines (tenant_id, bill_id, charge_id, line_no, description, qty, unit_price_paise, amount_paise, taxable_paise, gst_treatment, service_date) values ($1, '${b.billId}', gen_random_uuid(), 2, 'Nope', 1, 100, 100, 100, 'exempt_healthcare', current_date)`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'deposits':
-      return row(common, 'id = $1', b.depositId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
-        `insert into deposits (tenant_id, location_id, patient_id, number, amount_paise, balance_paise, mode) values ($1, '${b.locationId}', '${b.patientId}', 'DPNO${pair.runId}', 100, 100, 'cash')`);
+      return {
+        ...row(common, 'id = $1', b.depositId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
+          `insert into deposits (tenant_id, location_id, patient_id, number, amount_paise, balance_paise, mode) values ($1, '${b.locationId}', '${b.patientId}', 'DPNO${pair.runId}', 100, 100, 'cash')`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'bill_settlements':
-      return row(common, 'id = $1', b.settlementId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
-        `insert into bill_settlements (tenant_id, bill_id, mode, amount_paise) values ($1, '${b.billId}', 'cash', 100)`);
+      return {
+        ...row(common, 'id = $1', b.settlementId, `instrument_ref = 'Touched by A'`, 'instrument_ref',
+          `insert into bill_settlements (tenant_id, bill_id, mode, amount_paise) values ($1, '${b.billId}', 'cash', 100)`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'concessions':
-      return row(common, 'id = $1', b.concessionId, `reason = 'Touched by A'`, 'reason',
-        `insert into concessions (tenant_id, bill_id, amount_paise, reason) values ($1, '${b.billId}', 100, 'Nope')`);
+      return {
+        ...row(common, 'id = $1', b.concessionId, `reason = 'Touched by A'`, 'reason',
+          `insert into concessions (tenant_id, bill_id, amount_paise, reason) values ($1, '${b.billId}', 100, 'Nope')`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'refunds':
       return {
         ...row(common, 'id = $1', b.refundId, `reason = 'Touched by A'`, 'reason',
           `insert into refunds (tenant_id, bill_id, number, amount_paise, reason, mode) values ($1, '${b.billId}', 'RFNO${pair.runId}', 100, 'Nope', 'cash')`),
-        beforeMassDelete: ['delete from bill_credit_notes'],
+        denyUpdate: true,
+        denyDelete: true,
       };
     case 'bill_credit_notes':
-      return row(common, 'id = $1', b.billCreditNoteId, `reason = 'Touched by A'`, 'reason',
-        `insert into bill_credit_notes (tenant_id, bill_id, number, amount_paise) values ($1, '${b.billId}', 'CNNO${pair.runId}', 100)`);
+      return {
+        ...row(common, 'id = $1', b.billCreditNoteId, `reason = 'Touched by A'`, 'reason',
+          `insert into bill_credit_notes (tenant_id, bill_id, number, amount_paise) values ($1, '${b.billId}', 'CNNO${pair.runId}', 100)`),
+        denyUpdate: true,
+        denyDelete: true,
+      };
     case 'order_sets':
       return {
         ...common,
