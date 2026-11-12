@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['*.trycloudflare.com', '*.ts.net', 'localhost', '127.0.0.1'],
   // Separate build output so a production build can be made while a dev server is running.
   distDir: process.env.HOS_NEXT_DIST_DIR || '.next',
+  // typecheck and lint run in CI/verify (npm run typecheck / lint); the demo prod build skips them to stay fast on the Dell.
+  typescript: { ignoreBuildErrors: Boolean(process.env.HOS_NEXT_DIST_DIR) },
+  eslint: { ignoreDuringBuilds: Boolean(process.env.HOS_NEXT_DIST_DIR) },
   transpilePackages: ['@hos/ui', '@hos/shared'],
   async rewrites() {
     return [
