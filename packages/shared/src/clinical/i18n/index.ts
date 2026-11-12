@@ -8,6 +8,7 @@ import { equipmentEn } from './equipment';
 import { ipbillingEn } from './ipbilling';
 import { labEn } from './lab';
 import { linenEn } from './linen';
+import { bloodBankEn, marketingEn, misEn } from './mvp';
 import { nursingEn } from './nursing';
 import { otEn } from './ot';
 import { payrollEn } from './payroll';
@@ -26,6 +27,9 @@ export const clinicalEn = {
   pharmacy: pharmacyEn,
   lab: labEn,
   nursing: nursingEn,
+  bloodBank: bloodBankEn,
+  marketing: marketingEn,
+  mis: misEn,
   portal: portalEn,
   ot: otEn,
   radiology: radiologyEn,

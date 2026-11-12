@@ -8,8 +8,11 @@ import {
   Calculator,
   CalendarClock,
   ClipboardList,
+  ChartColumn,
+  Droplets,
   FlaskConical,
   HeartPulse,
+  Megaphone,
   Pill,
   Receipt,
   ScanLine,
@@ -100,6 +103,10 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'equipment-asset', labelKey: 'clinical.equipment.title', href: '/app/equipment/[id]', moduleKey: 'equipment-maintenance', permission: 'equipment.manage', nav: false },
   { id: 'payroll', labelKey: 'clinical.payroll.nav', href: '/app/payroll', moduleKey: 'payroll-attendance', permission: 'payroll.manage', nav: true },
   { id: 'payroll-employee', labelKey: 'clinical.payroll.title', href: '/app/payroll/[id]', moduleKey: 'payroll-attendance', permission: 'payroll.manage', nav: false },
+  { id: 'blood-bank', labelKey: 'clinical.bloodBank.nav', href: '/app/blood-bank', moduleKey: 'blood-bank', permission: 'pharmacy.manage', nav: true },
+  { id: 'blood-bank-request', labelKey: 'clinical.bloodBank.title', href: '/app/blood-bank/requests/[id]', moduleKey: 'blood-bank', permission: 'pharmacy.manage', nav: false },
+  { id: 'marketing', labelKey: 'clinical.marketing.nav', href: '/app/marketing', moduleKey: 'marketing', permission: 'reports.view', nav: true },
+  { id: 'mis', labelKey: 'clinical.mis.nav', href: '/app/mis', moduleKey: 'mis-dashboards', permission: 'reports.view', nav: true },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -121,6 +128,9 @@ const ICONS: Record<string, ReactNode> = {
   linen: <Shirt size={18} aria-hidden strokeWidth={1.5} />,
   equipment: <Wrench size={18} aria-hidden strokeWidth={1.5} />,
   payroll: <Users size={18} aria-hidden strokeWidth={1.5} />,
+  'blood-bank': <Droplets size={18} aria-hidden strokeWidth={1.5} />,
+  marketing: <Megaphone size={18} aria-hidden strokeWidth={1.5} />,
+  mis: <ChartColumn size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

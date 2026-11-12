@@ -12,6 +12,7 @@ import { registerIndents } from './indents/routes';
 import { registerLab } from './lab/routes';
 import { registerLinen } from './linen/routes';
 import { registerModuleRoutes } from './module-routes';
+import { registerMvp } from './mvp/routes';
 import { registerNursing } from './nursing/routes';
 import { registerOt } from './ot/routes';
 import { registerPayroll } from './payroll/routes';
@@ -33,6 +34,7 @@ export function registerClinical(app: FastifyInstance, deps: Deps): void {
   registerNursing(app, deps);
   registerIndents(app, deps);
   registerLinen(app, deps);
+  registerMvp(app, deps);
   registerPortal(app, deps);
   registerOt(app, deps);
   registerRadiology(app, deps);

@@ -33,6 +33,7 @@ import { seedDoctor } from './seed-clinical/doctor';
 import { seedIpbilling } from './seed-clinical/ipbilling';
 import { seedInsuranceDa } from './seed-clinical/insurance-da';
 import { seedLab } from './seed-clinical/lab';
+import { seedMvpBbMktMis } from './seed-clinical/mvp-bb-mkt-mis';
 import { seedNursing } from './seed-clinical/nursing';
 import { seedOtRad } from './seed-clinical/ot-rad';
 import { seedPharmacy } from './seed-clinical/pharmacy';
@@ -610,6 +611,7 @@ export async function seedDemo(log: (m: string) => void = console.log): Promise<
     await seedLab(log);
     await seedNursing(log);
     await seedOtRad(log);
+    await seedMvpBbMktMis(log);
     await seedPortal(log);
     await seedInsuranceDa(log);
   } finally {

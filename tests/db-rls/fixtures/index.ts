@@ -14,6 +14,7 @@ import { seedIndents } from './indents';
 import { seedEquipment } from './equipment';
 import { seedLab } from './lab';
 import { seedLinen } from './linen';
+import { seedMvp } from './mvp';
 import { seedNursing } from './nursing';
 import { seedOtRad } from './ot-rad';
 import { seedPayroll } from './payroll';
@@ -41,6 +42,7 @@ export const fixtureModules: FixtureModule[] = [
   { name: 'linen', seed: seedLinen },
   { name: 'equipment', seed: seedEquipment },
   { name: 'payroll', seed: seedPayroll },
+  { name: 'mvp-bb-mkt', seed: seedMvp },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

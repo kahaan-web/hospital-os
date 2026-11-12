@@ -16,3 +16,4 @@ export * from './indents';
 export * from './linen';
 export * from './equipment';
 export * from './payroll';
+export * from './mvp-bb-mkt';
