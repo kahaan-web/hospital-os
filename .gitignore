@@ -20,3 +20,4 @@ apps/mobile/dist/
 # Cursor worker task files
 .cursor-task.md
 *.tsbuildinfo
+.next-prod/
