@@ -10,6 +10,7 @@ import { seedCore } from './core';
 import { seedCreditNotes } from './credit-notes';
 import { seedDoctor } from './doctor';
 import { seedLab } from './lab';
+import { seedMvp } from './mvp';
 import { seedNursing } from './nursing';
 import { seedPharmacy } from './pharmacy';
 import { seedRegistration } from './registration';
@@ -28,6 +29,7 @@ export const fixtureModules: FixtureModule[] = [
   { name: 'appointments', seed: seedAppointments },
   { name: 'lab', seed: seedLab },
   { name: 'nursing', seed: seedNursing },
+  { name: 'mvp-bb-mkt', seed: seedMvp },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

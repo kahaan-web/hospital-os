@@ -264,6 +264,27 @@ function doctorGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+/** MVP demo slice: blood bank, marketing, MIS dashboard. Not tied to a tier; Sunrise is granted the modules in the demo seed. */
+function mvpGuards(): [string, TenantRouteGuard][] {
+  const bb = (method: string, url: string): [string, TenantRouteGuard] =>
+    entry(method, `/api/v1/tenant/m/blood-bank${url}`, { permission: 'pharmacy.manage', module: 'blood-bank' });
+  const mkt = (method: string, url: string): [string, TenantRouteGuard] =>
+    entry(method, `/api/v1/tenant/m/marketing${url}`, { permission: 'reports.view', module: 'marketing' });
+  return [
+    bb('GET', '/inventory'),
+    bb('POST', '/units/receive'),
+    bb('GET', '/requests'),
+    bb('POST', '/requests'),
+    bb('GET', '/requests/:id'),
+    bb('POST', '/requests/:id/issue'),
+    mkt('GET', '/campaigns'),
+    mkt('POST', '/campaigns'),
+    mkt('GET', '/campaigns/:id'),
+    mkt('POST', '/campaigns/:id/mark-sent'),
+    entry('GET', '/api/v1/tenant/m/mis-dashboards/kpis', { permission: 'reports.view', module: 'mis-dashboards' }),
+  ];
+}
+
 const LAB = '/api/v1/tenant/m/lab';
 const labFeature = CLINICAL_FEATURES.lab;
 
@@ -639,6 +660,7 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   ...billingGuards(),
   // B8. Ingest is token-authenticated in the handler; the row keeps the inventory closed.
   ...labGuards(),
+  ...mvpGuards(),
   entry('GET', '/api/v1/tenant/m/nurse-station/ward', {
     permission: 'nursing.manage',
     module: 'nurse-station',

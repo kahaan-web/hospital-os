@@ -105,6 +105,9 @@ export interface Side {
   labSettingsId: string;
   marScheduleId: string;
   medAdminId: string;
+  bbUnitId: string;
+  bbRequestId: string;
+  mktCampaignId: string;
 }
 
 export interface FixturePair {
@@ -433,6 +436,24 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
      values ($1, $2, 'given', '1 tab', $3) returning id`,
     [tenant.id, marSchedule.id, user.id],
+  );
+  const bbUnit = await one<{ id: string }>(
+    migrator,
+    `insert into bb_units (tenant_id, location_id, unit_no, component, abo, rh, volume_ml, collected_on, expires_at, tti_cleared, is_sample)
+     values ($1, $2, $3, 'prbc', 'O', 'pos', 280, current_date - 1, current_date + 30, true, true) returning id`,
+    [tenant.id, location.id, `DEMO-ZU${runId}${mark}`],
+  );
+  const bbRequest = await one<{ id: string }>(
+    migrator,
+    `insert into bb_requests (tenant_id, location_id, patient_id, patient_abo, patient_rh, component, is_sample)
+     values ($1, $2, $3, 'O', 'pos', 'prbc', true) returning id`,
+    [tenant.id, location.id, patient.id],
+  );
+  const mktCampaign = await one<{ id: string }>(
+    migrator,
+    `insert into mkt_campaigns (tenant_id, name, channel, message, is_sample)
+     values ($1, 'Probe campaign (Sample)', 'sms', 'Probe message', true) returning id`,
+    [tenant.id],
   );
   const vital = await one<{ id: string }>(
     migrator,
@@ -823,6 +844,9 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     labSettingsId: labSettings.id,
     marScheduleId: marSchedule.id,
     medAdminId: medAdmin.id,
+    bbUnitId: bbUnit.id,
+    bbRequestId: bbRequest.id,
+    mktCampaignId: mktCampaign.id,
   };
 }
 
@@ -877,6 +901,9 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from lab_settings where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
+    `delete from bb_requests where tenant_id = any($1::uuid[])`,
+    `delete from bb_units where tenant_id = any($1::uuid[])`,
+    `delete from mkt_campaigns where tenant_id = any($1::uuid[])`,
     `delete from medication_administrations where tenant_id = any($1::uuid[])`,
     `delete from mar_schedules where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,

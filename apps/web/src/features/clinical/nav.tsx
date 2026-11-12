@@ -6,8 +6,11 @@ import type { ShellNavItem } from '@hos/ui';
 import {
   BedDouble,
   CalendarClock,
+  ChartColumn,
+  Droplets,
   FlaskConical,
   HeartPulse,
+  Megaphone,
   Pill,
   Receipt,
   Stethoscope,
@@ -76,6 +79,10 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'nursing', labelKey: 'clinical.nursing.nav', href: '/app/nursing', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: true },
   { id: 'nursing-encounter', labelKey: 'clinical.nursing.encounter', href: '/app/nursing/encounters/[id]', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
   { id: 'nursing-diet', labelKey: 'clinical.nursing.diet', href: '/app/nursing/diet', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
+  { id: 'blood-bank', labelKey: 'clinical.bloodBank.nav', href: '/app/blood-bank', moduleKey: 'blood-bank', permission: 'pharmacy.manage', nav: true },
+  { id: 'blood-bank-request', labelKey: 'clinical.bloodBank.title', href: '/app/blood-bank/requests/[id]', moduleKey: 'blood-bank', permission: 'pharmacy.manage', nav: false },
+  { id: 'marketing', labelKey: 'clinical.marketing.nav', href: '/app/marketing', moduleKey: 'marketing', permission: 'reports.view', nav: true },
+  { id: 'mis', labelKey: 'clinical.mis.nav', href: '/app/mis', moduleKey: 'mis-dashboards', permission: 'reports.view', nav: true },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -89,6 +96,9 @@ const ICONS: Record<string, ReactNode> = {
   pharmacy: <Pill size={18} aria-hidden strokeWidth={1.5} />,
   lab: <FlaskConical size={18} aria-hidden strokeWidth={1.5} />,
   nursing: <HeartPulse size={18} aria-hidden strokeWidth={1.5} />,
+  'blood-bank': <Droplets size={18} aria-hidden strokeWidth={1.5} />,
+  marketing: <Megaphone size={18} aria-hidden strokeWidth={1.5} />,
+  mis: <ChartColumn size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

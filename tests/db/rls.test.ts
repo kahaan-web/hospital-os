@@ -106,6 +106,9 @@ const TABLES = [
   'lab_settings',
   'mar_schedules',
   'medication_administrations',
+  'bb_units',
+  'bb_requests',
+  'mkt_campaigns',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -1259,6 +1262,18 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
          insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
          select $1, ins.id, 'held', '', '${b.userId}' from ins`,
       );
+    case 'bb_units':
+      return {
+        ...row(common, 'id = $1', b.bbUnitId, `source_centre = 'Touched by A'`, 'source_centre',
+          `insert into bb_units (tenant_id, location_id, unit_no, component, abo, rh, volume_ml, collected_on, expires_at) values ($1, '${b.locationId}', 'DEMO-NOPE-${pair.runId}', 'prbc', 'O', 'pos', 280, current_date, current_date + 30)`),
+        beforeMassDelete: ['delete from bb_requests'],
+      };
+    case 'bb_requests':
+      return row(common, 'id = $1', b.bbRequestId, `indication = 'Touched by A'`, 'indication',
+        `insert into bb_requests (tenant_id, location_id, patient_id, patient_abo, patient_rh, component) values ($1, '${b.locationId}', '${b.patientId}', 'O', 'pos', 'prbc')`);
+    case 'mkt_campaigns':
+      return row(common, 'id = $1', b.mktCampaignId, `name = 'Touched by A'`, 'name',
+        `insert into mkt_campaigns (tenant_id, name, channel, message) values ($1, 'Nope', 'sms', 'Nope message')`);
     default:
       return assertNever(table);
   }
