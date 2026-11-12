@@ -106,6 +106,9 @@ const TABLES = [
   'lab_settings',
   'mar_schedules',
   'medication_administrations',
+  'ot_cases',
+  'rad_orders',
+  'rad_reports',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -1233,6 +1236,18 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
         insertSql: `insert into lab_settings (tenant_id, collect_before_payment) values ($1, false)`,
         retargetSql: `update lab_settings set tenant_id = $1`,
       };
+    case 'ot_cases':
+      return row(common, 'id = $1', b.otCaseId, `notes = 'Touched by A'`, 'notes',
+        `insert into ot_cases (tenant_id, location_id, patient_id, number, procedure_name, surgeon_name, room_code, scheduled_start, scheduled_end) values ($1, '${b.locationId}', '${b.patientId}', 'ZNOPE${pair.runId}', 'Nope', 'Nope', 'OT-1', now(), now() + interval '1 hour')`);
+    case 'rad_orders':
+      return {
+        ...row(common, 'id = $1', b.radOrderId, `clinical_notes = 'Touched by A'`, 'clinical_notes',
+          `insert into rad_orders (tenant_id, location_id, patient_id, number, modality, study_name) values ($1, '${b.locationId}', '${b.patientId}', 'ZNOPE${pair.runId}', 'xray', 'Nope')`),
+        beforeMassDelete: ['delete from rad_reports'],
+      };
+    case 'rad_reports':
+      return row(common, 'id = $1', b.radReportId, `findings = 'Touched by A'`, 'findings',
+        `insert into rad_reports (tenant_id, order_id, findings, version) values ($1, '${b.radOrderId}', 'Nope', 99)`);
     case 'mar_schedules':
       return {
         ...common,

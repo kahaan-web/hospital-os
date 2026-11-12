@@ -8,7 +8,9 @@ import { registerIpbilling } from './ipbilling/routes';
 import { registerLab } from './lab/routes';
 import { registerModuleRoutes } from './module-routes';
 import { registerNursing } from './nursing/routes';
+import { registerOt } from './ot/routes';
 import { registerPharmacy } from './pharmacy/routes';
+import { registerRadiology } from './radiology/routes';
 import { registerPortal } from './portal/routes';
 import { registerRegistration } from './registration/routes';
 
@@ -24,6 +26,8 @@ export function registerClinical(app: FastifyInstance, deps: Deps): void {
   registerLab(app, deps);
   registerNursing(app, deps);
   registerPortal(app, deps);
+  registerOt(app, deps);
+  registerRadiology(app, deps);
 }
 
 export { clinical } from './registry';
