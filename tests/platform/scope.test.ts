@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connectRoles, disconnectRoles, expectSqlState, type DbRoles } from '../db/helpers';
+import { connectRoles, disconnectRoles, expectSqlState, scopePlatform, scopeTenant, type DbRoles } from '../db/helpers';
 
 /**
  * Option C: platform scope is the login role, not a GUC hos_app can set.
@@ -156,6 +156,114 @@ describe.sequential('platform scope login', () => {
       expect(Number(seen.rows[0]?.n)).toBe(1);
     } finally {
       await platform().query('ROLLBACK');
+    }
+  });
+
+  it('hides billing, lab and nursing rows from platform scope and still shows masters', async () => {
+    const phi = [
+      'bills',
+      'bill_lines',
+      'deposits',
+      'bill_settlements',
+      'concessions',
+      'refunds',
+      'bill_credit_notes',
+      'cash_ledger',
+      'lab_accessions',
+      'lab_results',
+      'mar_schedules',
+      'medication_administrations',
+    ];
+    const masters = ['services', 'tariffs', 'wards', 'lab_tests', 'lab_test_params', 'lab_interfaces', 'lab_settings'];
+    const sunrise = await admin().query<{ id: string }>(`select id from tenants where slug = 'sunrise-care'`);
+    const tenantId = sunrise.rows[0]?.id;
+    expect(tenantId).toBeTruthy();
+
+    let probe: string | null = null;
+    const mar = await admin().query<{ n: number }>(`select count(*)::int as n from mar_schedules`);
+    if (Number(mar.rows[0]?.n) === 0) {
+      const inserted = await admin().query<{ mar_schedule_id: string }>(
+        `with src as (
+           select i.tenant_id, i.id as item_id, o.encounter_id
+             from clinical_order_items i
+             join clinical_orders o on o.tenant_id = i.tenant_id and o.id = i.order_id
+            where i.tenant_id = $1
+            limit 1
+         ), ins as (
+           insert into mar_schedules (tenant_id, order_item_id, encounter_id, scheduled_at)
+           select tenant_id, item_id, encounter_id, timestamptz '2099-11-11+00' from src
+           returning id, tenant_id
+         )
+         insert into medication_administrations (tenant_id, mar_schedule_id, status)
+         select tenant_id, id, 'given' from ins
+         returning mar_schedule_id`,
+        [tenantId],
+      );
+      probe = inserted.rows[0]?.mar_schedule_id ?? null;
+      expect(probe, 'sunrise has no clinical order to probe the MAR').toBeTruthy();
+    }
+
+    try {
+      const policies = await admin().query<{ tablename: string; qual: string | null; with_check: string | null }>(
+        `select tablename, qual, with_check
+           from pg_policies
+          where schemaname = 'public' and policyname = tablename || '_tenant' and tablename = any($1::text[])`,
+        [phi],
+      );
+      expect(policies.rows.map((row) => row.tablename).sort()).toEqual([...phi].sort());
+      for (const row of policies.rows) {
+        expect(row.qual ?? '', row.tablename).toContain('hos_scope()');
+        expect(row.with_check ?? '', row.tablename).toContain('hos_scope()');
+      }
+      const masterPolicies = await admin().query<{ tablename: string; qual: string | null }>(
+        `select tablename, qual from pg_policies
+          where schemaname = 'public' and policyname = tablename || '_tenant' and tablename = any($1::text[])`,
+        [masters],
+      );
+      expect(masterPolicies.rows).toHaveLength(masters.length);
+      for (const row of masterPolicies.rows) {
+        expect(row.qual ?? '', row.tablename).not.toContain('hos_scope()');
+      }
+
+      for (const table of phi) {
+        const held = await admin().query<{ tenant_id: string }>(`select tenant_id from ${table} limit 1`);
+        const ownerId = held.rows[0]?.tenant_id;
+        expect(ownerId, `${table} has no sample row`).toBeTruthy();
+
+        await platform().query('BEGIN');
+        try {
+          await scopePlatform(platform(), ownerId!);
+          const hidden = await platform().query<{ n: number }>(`select count(*)::int as n from ${table}`);
+          expect(Number(hidden.rows[0]?.n), table).toBe(0);
+        } finally {
+          await platform().query('ROLLBACK');
+        }
+
+        await app().query('BEGIN');
+        try {
+          await scopeTenant(app(), ownerId!);
+          const visible = await app().query<{ n: number }>(`select count(*)::int as n from ${table}`);
+          expect(Number(visible.rows[0]?.n), table).toBeGreaterThan(0);
+        } finally {
+          await app().query('ROLLBACK');
+        }
+      }
+
+      await platform().query('BEGIN');
+      try {
+        await scopePlatform(platform(), tenantId!);
+        for (const table of ['services', 'tariffs', 'wards', 'lab_tests']) {
+          const seen = await platform().query<{ n: number }>(`select count(*)::int as n from ${table}`);
+          expect(Number(seen.rows[0]?.n), table).toBeGreaterThan(0);
+        }
+      } finally {
+        await platform().query('ROLLBACK');
+      }
+    } finally {
+      if (probe) {
+        await admin().query(`delete from medication_administrations where mar_schedule_id = $1`, [probe]);
+        await admin().query(`delete from mar_schedules where id = $1`, [probe]);
+      }
     }
   });
 });
