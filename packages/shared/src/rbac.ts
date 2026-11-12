@@ -22,6 +22,8 @@ export const PERMISSIONS = {
   'pharmacy.manage': 'Pharmacy and stores transactions',
   'lab.manage': 'Lab samples and results',
   'nursing.manage': 'Nurse station orders and vitals',
+  'equipment.manage': 'Equipment register, breakdowns and preventive maintenance',
+  'payroll.manage': 'Staff master, attendance marks and payslip preview',
   'clinical.order': 'Clinical orders and notes (CPOE)',
   'accounts.manage': 'Doctor accounting and finance reports',
   'reports.view': 'Run registers and MIS reports',

@@ -684,6 +684,55 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     permission: 'nursing.manage',
     module: 'nurse-station',
   }),
+  // MVP demo slice: equipment maintenance (migration 1220) and payroll & attendance (migration 1260).
+  entry('GET', '/api/v1/tenant/m/equipment-maintenance/assets', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('POST', '/api/v1/tenant/m/equipment-maintenance/assets', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('GET', '/api/v1/tenant/m/equipment-maintenance/assets/:id', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('POST', '/api/v1/tenant/m/equipment-maintenance/assets/:id/pm-schedules', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('POST', '/api/v1/tenant/m/equipment-maintenance/pm-schedules/:id/complete', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('POST', '/api/v1/tenant/m/equipment-maintenance/assets/:id/breakdown', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('POST', '/api/v1/tenant/m/equipment-maintenance/assets/:id/restore', {
+    permission: 'equipment.manage',
+    module: 'equipment-maintenance',
+  }),
+  entry('GET', '/api/v1/tenant/m/payroll-attendance/employees', {
+    permission: 'payroll.manage',
+    module: 'payroll-attendance',
+  }),
+  entry('POST', '/api/v1/tenant/m/payroll-attendance/employees', {
+    permission: 'payroll.manage',
+    module: 'payroll-attendance',
+  }),
+  entry('GET', '/api/v1/tenant/m/payroll-attendance/employees/:id', {
+    permission: 'payroll.manage',
+    module: 'payroll-attendance',
+  }),
+  entry('PUT', '/api/v1/tenant/m/payroll-attendance/employees/:id/attendance', {
+    permission: 'payroll.manage',
+    module: 'payroll-attendance',
+  }),
+  entry('GET', '/api/v1/tenant/m/payroll-attendance/employees/:id/payslip', {
+    permission: 'payroll.manage',
+    module: 'payroll-attendance',
+  }),
 ];
 
 const keys = ENTRIES.map(([key]) => key);

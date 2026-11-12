@@ -4,10 +4,12 @@ import { registerAdt } from './adt/routes';
 import { registerAppointments } from './appointments/routes';
 import { registerBilling } from './billing/routes';
 import { registerDoctor } from './doctor/routes';
+import { registerEquipment } from './equipment/routes';
 import { registerIpbilling } from './ipbilling/routes';
 import { registerLab } from './lab/routes';
 import { registerModuleRoutes } from './module-routes';
 import { registerNursing } from './nursing/routes';
+import { registerPayroll } from './payroll/routes';
 import { registerPharmacy } from './pharmacy/routes';
 import { registerPortal } from './portal/routes';
 import { registerRegistration } from './registration/routes';
@@ -24,6 +26,8 @@ export function registerClinical(app: FastifyInstance, deps: Deps): void {
   registerLab(app, deps);
   registerNursing(app, deps);
   registerPortal(app, deps);
+  registerEquipment(app, deps);
+  registerPayroll(app, deps);
 }
 
 export { clinical } from './registry';

@@ -12,7 +12,9 @@ import {
   Receipt,
   Stethoscope,
   UserRound,
+  Users,
   Wallet,
+  Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { isNavActive } from '@/lib/navActive';
@@ -76,6 +78,10 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'nursing', labelKey: 'clinical.nursing.nav', href: '/app/nursing', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: true },
   { id: 'nursing-encounter', labelKey: 'clinical.nursing.encounter', href: '/app/nursing/encounters/[id]', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
   { id: 'nursing-diet', labelKey: 'clinical.nursing.diet', href: '/app/nursing/diet', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
+  { id: 'equipment', labelKey: 'clinical.equipment.nav', href: '/app/equipment', moduleKey: 'equipment-maintenance', permission: 'equipment.manage', nav: true },
+  { id: 'equipment-asset', labelKey: 'clinical.equipment.title', href: '/app/equipment/[id]', moduleKey: 'equipment-maintenance', permission: 'equipment.manage', nav: false },
+  { id: 'payroll', labelKey: 'clinical.payroll.nav', href: '/app/payroll', moduleKey: 'payroll-attendance', permission: 'payroll.manage', nav: true },
+  { id: 'payroll-employee', labelKey: 'clinical.payroll.title', href: '/app/payroll/[id]', moduleKey: 'payroll-attendance', permission: 'payroll.manage', nav: false },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -89,6 +95,8 @@ const ICONS: Record<string, ReactNode> = {
   pharmacy: <Pill size={18} aria-hidden strokeWidth={1.5} />,
   lab: <FlaskConical size={18} aria-hidden strokeWidth={1.5} />,
   nursing: <HeartPulse size={18} aria-hidden strokeWidth={1.5} />,
+  equipment: <Wrench size={18} aria-hidden strokeWidth={1.5} />,
+  payroll: <Users size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {
