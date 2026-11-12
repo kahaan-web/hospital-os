@@ -12,3 +12,5 @@ export * from './portal';
 export * from './ot-rad';
 export * from './insurance';
 export * from './doctor-accounting';
+export * from './indents';
+export * from './linen';

@@ -7,6 +7,7 @@ import {
   BedDouble,
   Calculator,
   CalendarClock,
+  ClipboardList,
   FlaskConical,
   HeartPulse,
   Pill,
@@ -14,6 +15,7 @@ import {
   ScanLine,
   Scissors,
   ShieldCheck,
+  Shirt,
   Stethoscope,
   UserRound,
   Wallet,
@@ -90,6 +92,8 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'insurance-payers', labelKey: 'clinical.insurance.payers', href: '/app/insurance/payers', moduleKey: 'insurance', permission: 'billing.ip.manage', nav: false },
   { id: 'doctor-accounting', labelKey: 'clinical.doctorAccounting.nav', href: '/app/doctor-accounting', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: true },
   { id: 'doctor-accounting-payouts', labelKey: 'clinical.doctorAccounting.payouts', href: '/app/doctor-accounting/payouts', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: false },
+  { id: 'indents', labelKey: 'clinical.indents.nav', href: '/app/indents', moduleKey: 'indents-purchase', permission: 'indents.manage', nav: true },
+  { id: 'linen', labelKey: 'clinical.linen.nav', href: '/app/linen', moduleKey: 'linen-laundry', permission: 'linen.manage', nav: true },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -107,6 +111,8 @@ const ICONS: Record<string, ReactNode> = {
   radiology: <ScanLine size={18} aria-hidden strokeWidth={1.5} />,
   insurance: <ShieldCheck size={18} aria-hidden strokeWidth={1.5} />,
   'doctor-accounting': <Calculator size={18} aria-hidden strokeWidth={1.5} />,
+  indents: <ClipboardList size={18} aria-hidden strokeWidth={1.5} />,
+  linen: <Shirt size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

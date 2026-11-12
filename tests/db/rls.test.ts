@@ -113,6 +113,11 @@ const TABLES = [
   'insurance_requests',
   'doctor_share_rules',
   'doctor_payouts',
+  'indents',
+  'indent_lines',
+  'purchase_orders',
+  'linen_items',
+  'laundry_batches',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -1299,6 +1304,34 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'doctor_payouts':
       return row(common, 'id = $1', b.daPayoutId, `pay_ref = 'Touched by A'`, 'pay_ref',
         `insert into doctor_payouts (tenant_id, doctor_id, period_from, period_to) values ($1, '${b.doctorId}', current_date, current_date)`);
+    case 'indents':
+      return {
+        ...row(common, 'id = $1', b.indentId, `department = 'Touched by A'`, 'department',
+          `insert into indents (tenant_id, location_id, number, department) values ($1, '${b.locationId}', 'ZINA${pair.runId}', 'Nope')`),
+        beforeMassDelete: ['delete from purchase_orders', 'delete from indent_lines'],
+      };
+    case 'indent_lines':
+      return {
+        ...common,
+        hidden: 'id = $1',
+        bParam: b.indentLineId,
+        setSql: `qty_requested = 9`,
+        untouched: `select coalesce(qty_requested = 9, false) as touched from indent_lines where id = $1`,
+        insertSql: `insert into indent_lines (tenant_id, indent_id, line_no, item_name, qty_requested) values ($1, '${b.indentId}', 2, 'Nope', 1)`,
+        retargetSql: `update indent_lines set tenant_id = $1`,
+      };
+    case 'purchase_orders':
+      return row(common, 'id = $1', b.purchaseOrderId, `supplier_name = 'Touched by A'`, 'supplier_name',
+        `insert into purchase_orders (tenant_id, location_id, number, indent_id, supplier_name) values ($1, '${b.locationId}', 'ZPOA${pair.runId}', '${b.indentId}', 'Nope')`);
+    case 'linen_items':
+      return {
+        ...row(common, 'id = $1', b.linenItemId, `name = 'Touched by A'`, 'name',
+          `insert into linen_items (tenant_id, location_id, name) values ($1, '${b.locationId}', 'Nope ${pair.runId}')`),
+        beforeMassDelete: ['delete from laundry_batches'],
+      };
+    case 'laundry_batches':
+      return row(common, 'id = $1', b.laundryBatchId, `vendor = 'Touched by A'`, 'vendor',
+        `insert into laundry_batches (tenant_id, location_id, number, linen_item_id, qty_sent) values ($1, '${b.locationId}', 'ZLBA${pair.runId}', '${b.linenItemId}', 1)`);
     default:
       return assertNever(table);
   }

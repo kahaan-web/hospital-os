@@ -10,7 +10,9 @@ import { seedCore } from './core';
 import { seedCreditNotes } from './credit-notes';
 import { seedDoctor } from './doctor';
 import { seedInsuranceDa } from './insurance-da';
+import { seedIndents } from './indents';
 import { seedLab } from './lab';
+import { seedLinen } from './linen';
 import { seedNursing } from './nursing';
 import { seedOtRad } from './ot-rad';
 import { seedPharmacy } from './pharmacy';
@@ -33,6 +35,8 @@ export const fixtureModules: FixtureModule[] = [
   { name: 'ot-rad', seed: seedOtRad },
   // Doctor share rules and payouts need the probe tenant's doctor from the doctor fixture.
   { name: 'insurance-da', seed: seedInsuranceDa },
+  { name: 'indents', seed: seedIndents },
+  { name: 'linen', seed: seedLinen },
 ];
 
 export async function tenantIdBySlug(owner: pg.Client, slug: string): Promise<string | null> {

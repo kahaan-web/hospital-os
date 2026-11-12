@@ -3,8 +3,10 @@ import { appointmentsEn } from './appointments';
 import { billingEn } from './billing';
 import { doctorEn } from './doctor';
 import { doctorAccountingEn, insuranceEn } from './insurance';
+import { indentsEn } from './indents';
 import { ipbillingEn } from './ipbilling';
 import { labEn } from './lab';
+import { linenEn } from './linen';
 import { nursingEn } from './nursing';
 import { otEn } from './ot';
 import { pharmacyEn } from './pharmacy';
@@ -27,4 +29,6 @@ export const clinicalEn = {
   radiology: radiologyEn,
   insurance: insuranceEn,
   doctorAccounting: doctorAccountingEn,
+  indents: indentsEn,
+  linen: linenEn,
 } as const;

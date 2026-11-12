@@ -6,6 +6,7 @@ import type { Db, Tx } from '../client';
 import { hashPassword } from '../password';
 import * as schema from '../schema';
 import { demoMobile, seedDemoPeople } from '../seed-demo-people';
+import { seedSunriseIndentsLinen } from './indents-linen';
 
 const DEMO_PASSWORD = 'Demo@12345';
 const SUNRISE = 'sunrise-care';
@@ -61,6 +62,10 @@ export async function seedClinicalFoundation(db: Db, log: (m: string) => void): 
   const android = ['android-patient-portal', 'android-doctor-portal', 'android-nurses-workbench'];
   await db.update(schema.modules).set({ status: 'available' }).where(inArray(schema.modules.key, android));
   log(`android modules set available: ${android.join(', ')}`);
+  // MVP demo slice (indents, linen): the Sunrise grant below only takes effect once the module is available.
+  const demoSlice = ['indents-purchase', 'linen-laundry'];
+  await db.update(schema.modules).set({ status: 'available' }).where(inArray(schema.modules.key, demoSlice));
+  log(`demo slice modules set available: ${demoSlice.join(', ')}`);
 
   const sunrise = (await db.select().from(schema.tenants).where(eq(schema.tenants.slug, SUNRISE)))[0];
   if (!sunrise) {
@@ -68,6 +73,7 @@ export async function seedClinicalFoundation(db: Db, log: (m: string) => void): 
   } else {
     await seedSunriseClinical(db, sunrise.id, log);
     await grantSunriseModules(db, sunrise.id, log);
+    await seedSunriseIndentsLinen(db, sunrise.id, log);
   }
   await ensureLotusTenant(db, log);
   // The first seedDemoPeople call (from seedDemo) runs before Lotus exists. Call it again so Lotus's
@@ -77,7 +83,15 @@ export async function seedClinicalFoundation(db: Db, log: (m: string) => void): 
 }
 
 async function grantSunriseModules(db: Db, tenantId: string, log: (m: string) => void) {
-  const keys = ['nurse-station', 'cpoe', 'android-patient-portal', 'android-doctor-portal', 'android-nurses-workbench'];
+  const keys = [
+    'nurse-station',
+    'cpoe',
+    'android-patient-portal',
+    'android-doctor-portal',
+    'android-nurses-workbench',
+    'indents-purchase',
+    'linen-laundry',
+  ];
   const mods = await db.select().from(schema.modules).where(inArray(schema.modules.key, keys));
   for (const mod of mods) {
     const exists = await db
