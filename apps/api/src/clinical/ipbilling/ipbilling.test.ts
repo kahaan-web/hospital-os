@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createDb, dbEnv, withTenant } from '@hos/db';
 import type { OpBillDto } from '@hos/shared';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../app';
 import { writeAudit } from '../../http';
