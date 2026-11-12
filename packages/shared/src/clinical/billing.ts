@@ -374,6 +374,11 @@ export const billRefundSchema = z.object({
 });
 export type BillRefundInput = z.infer<typeof billRefundSchema>;
 
+export const billCancelSchema = z.object({
+  reason: z.string().trim().min(3, 'Say why this bill is cancelled').max(300),
+});
+export type BillCancelInput = z.infer<typeof billCancelSchema>;
+
 export const createDepositSchema = z.object({
   patientId: z.uuid(),
   encounterId: z.uuid().optional(),

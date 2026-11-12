@@ -150,6 +150,7 @@ function billingGuards(): [string, TenantRouteGuard][] {
     post('POST', `${OP}/bills`, opFeature.voucherPosting),
     post('GET', `${OP}/bills/:id`, opFeature.voucherPosting),
     post('POST', `${OP}/bills/:id/finalise`, opFeature.voucherPosting),
+    post('POST', `${OP}/bills/:id/cancel`, opFeature.voucherPosting),
     post('POST', `${OP}/bills/:id/settle`, opFeature.settlements),
     post('POST', `${OP}/bills/:id/concessions`, opFeature.concessions),
     post('POST', `${OP}/bills/:id/refund`, opFeature.opRefund),

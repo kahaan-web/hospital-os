@@ -1,5 +1,6 @@
 import {
   CLINICAL_FEATURES,
+  billCancelSchema,
   billListQuery,
   billRefundSchema,
   concessionSchema,
@@ -21,7 +22,7 @@ import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
 import { ApiError } from '../../http';
 import { renderHtml, renderPdf } from '../print';
-import { acceptDeposit, buildBill, concede, finalise, readBill, refund, refundDeposit, settle } from './engine';
+import { acceptDeposit, buildBill, cancelBill, concede, finalise, readBill, refund, refundDeposit, settle } from './engine';
 import { createService, createTariff, listServiceMasters, patchService, patchTariff } from './masters';
 import { billPrint } from './print-bill';
 import { cashSummary, depositRegister, doctorSharing, listBills, listDeposits, listRefunds, outstanding, revenueReport, unbilled, visitStatistics } from './queries';
@@ -148,6 +149,15 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
       await open(gate);
       await gate.requireFeature(F.voucherPosting);
       return finalise(ctx(gate), req.params.id);
+    }),
+  );
+
+  r.post(`${PREFIX}/bills/:id/cancel`, { schema: { params: id, body: billCancelSchema } }, async (req, reply) =>
+    run(req, reply, async (gate) => {
+      requireKey(req);
+      await open(gate);
+      await gate.requireFeature(F.voucherPosting);
+      return cancelBill(ctx(gate), req.params.id, req.body.reason);
     }),
   );
 

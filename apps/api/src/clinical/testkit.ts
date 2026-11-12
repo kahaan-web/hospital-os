@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createDb, dbEnv, migrate, schema, seedDemo, withTenant, type Db } from '@hos/db';
+import { createDb, dbEnv, migrate, schema, seedDemo, withTenant, type Db, type Tx } from '@hos/db';
 import { eq, sql } from 'drizzle-orm';
 import pg from 'pg';
 import { expect } from 'vitest';
@@ -94,7 +94,8 @@ const IDENT = /^[a-z_]+$/;
 
 /**
  * CONTRACTS §10 for one class-T table. Connects as hos_app in tenant A:
- * B's row is invisible, UPDATE/DELETE by that id touch nothing, and moving a row onto B is rejected (42501).
+ * B's row is invisible, UPDATE/DELETE by that id touch nothing (0 rows or 42501 when the
+ * grant was revoked), and moving a row onto B is rejected (42501).
  */
 export async function expectIsolation(table: string, idOfB: string): Promise<void> {
   if (!IDENT.test(table)) throw new Error(`unsafe table name ${table}`);
@@ -112,10 +113,8 @@ export async function expectIsolation(table: string, idOfB: string): Promise<voi
     await withTenant(app(), fx.sunrise.tenantId, async (tx) => {
       const seen = await tx.execute<{ n: number }>(sqlCount(table, idOfB));
       expect(Number(seen.rows[0]?.n ?? 0)).toBe(0);
-      const upd = await tx.execute(sqlTouch(table, idOfB));
-      expect(upd.rowCount ?? 0).toBe(0);
-      const del = await tx.execute(sqlDelete(table, idOfB));
-      expect(del.rowCount ?? 0).toBe(0);
+      await expectHiddenOrDenied(tx, sqlTouch(table, idOfB));
+      await expectHiddenOrDenied(tx, sqlDelete(table, idOfB));
       const mine = await tx.execute<{ n: number }>(sqlAll(table));
       if (Number(mine.rows[0]?.n ?? 0) > 0) {
         await expect(tx.execute(sqlRetarget(table, fx.lotus.tenantId))).rejects.toSatisfy((error: unknown) => errorCode(error) === '42501');
@@ -137,6 +136,20 @@ export async function expectIsolation(table: string, idOfB: string): Promise<voi
   } finally {
     await Promise.race([admin.end(), new Promise((resolve) => setTimeout(resolve, 2000))]);
   }
+}
+
+async function expectHiddenOrDenied(tx: Tx, query: ReturnType<typeof sql>): Promise<void> {
+  const mark = `iso_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  await tx.execute(sql.raw(`SAVEPOINT ${mark}`));
+  try {
+    const result = await tx.execute(query);
+    expect(result.rowCount ?? 0).toBe(0);
+  } catch (error) {
+    await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${mark}`));
+    if (errorCode(error) === '42501') return;
+    throw error;
+  }
+  await tx.execute(sql.raw(`RELEASE SAVEPOINT ${mark}`));
 }
 
 function sqlCount(table: string, id: string) {
