@@ -22,6 +22,8 @@ export const PERMISSIONS = {
   'pharmacy.manage': 'Pharmacy and stores transactions',
   'lab.manage': 'Lab samples and results',
   'nursing.manage': 'Nurse station orders and vitals',
+  'indents.manage': 'Raise, approve and convert indents to purchase orders',
+  'linen.manage': 'Linen stock, laundry dispatch and receipt',
   'clinical.order': 'Clinical orders and notes (CPOE)',
   'accounts.manage': 'Doctor accounting and finance reports',
   'reports.view': 'Run registers and MIS reports',

@@ -6,10 +6,12 @@ import type { ShellNavItem } from '@hos/ui';
 import {
   BedDouble,
   CalendarClock,
+  ClipboardList,
   FlaskConical,
   HeartPulse,
   Pill,
   Receipt,
+  Shirt,
   Stethoscope,
   UserRound,
   Wallet,
@@ -76,6 +78,8 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'nursing', labelKey: 'clinical.nursing.nav', href: '/app/nursing', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: true },
   { id: 'nursing-encounter', labelKey: 'clinical.nursing.encounter', href: '/app/nursing/encounters/[id]', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
   { id: 'nursing-diet', labelKey: 'clinical.nursing.diet', href: '/app/nursing/diet', moduleKey: 'nurse-station', permission: 'nursing.manage', nav: false },
+  { id: 'indents', labelKey: 'clinical.indents.nav', href: '/app/indents', moduleKey: 'indents-purchase', permission: 'indents.manage', nav: true },
+  { id: 'linen', labelKey: 'clinical.linen.nav', href: '/app/linen', moduleKey: 'linen-laundry', permission: 'linen.manage', nav: true },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -89,6 +93,8 @@ const ICONS: Record<string, ReactNode> = {
   pharmacy: <Pill size={18} aria-hidden strokeWidth={1.5} />,
   lab: <FlaskConical size={18} aria-hidden strokeWidth={1.5} />,
   nursing: <HeartPulse size={18} aria-hidden strokeWidth={1.5} />,
+  indents: <ClipboardList size={18} aria-hidden strokeWidth={1.5} />,
+  linen: <Shirt size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

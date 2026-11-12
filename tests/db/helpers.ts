@@ -105,6 +105,11 @@ export interface Side {
   labSettingsId: string;
   marScheduleId: string;
   medAdminId: string;
+  indentId: string;
+  indentLineId: string;
+  purchaseOrderId: string;
+  linenItemId: string;
+  laundryBatchId: string;
 }
 
 export interface FixturePair {
@@ -433,6 +438,31 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into medication_administrations (tenant_id, mar_schedule_id, status, dose_given, given_by)
      values ($1, $2, 'given', '1 tab', $3) returning id`,
     [tenant.id, marSchedule.id, user.id],
+  );
+  const indent = await one<{ id: string }>(
+    migrator,
+    `insert into indents (tenant_id, location_id, number, department) values ($1, $2, $3, 'Sample ward') returning id`,
+    [tenant.id, location.id, `ZIN${mark}${runId}`],
+  );
+  const indentLine = await one<{ id: string }>(
+    migrator,
+    `insert into indent_lines (tenant_id, indent_id, line_no, item_name, qty_requested) values ($1, $2, 1, 'Sample', 1) returning id`,
+    [tenant.id, indent.id],
+  );
+  const purchaseOrder = await one<{ id: string }>(
+    migrator,
+    `insert into purchase_orders (tenant_id, location_id, number, indent_id, supplier_name) values ($1, $2, $3, $4, 'Sample supplier') returning id`,
+    [tenant.id, location.id, `ZPO${mark}${runId}`, indent.id],
+  );
+  const linenItem = await one<{ id: string }>(
+    migrator,
+    `insert into linen_items (tenant_id, location_id, name) values ($1, $2, $3) returning id`,
+    [tenant.id, location.id, `Sample sheet ${mark}${runId}`],
+  );
+  const laundryBatch = await one<{ id: string }>(
+    migrator,
+    `insert into laundry_batches (tenant_id, location_id, number, linen_item_id, qty_sent) values ($1, $2, $3, $4, 1) returning id`,
+    [tenant.id, location.id, `ZLB${mark}${runId}`, linenItem.id],
   );
   const vital = await one<{ id: string }>(
     migrator,
@@ -823,6 +853,11 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     labSettingsId: labSettings.id,
     marScheduleId: marSchedule.id,
     medAdminId: medAdmin.id,
+    indentId: indent.id,
+    indentLineId: indentLine.id,
+    purchaseOrderId: purchaseOrder.id,
+    linenItemId: linenItem.id,
+    laundryBatchId: laundryBatch.id,
   };
 }
 
@@ -877,6 +912,11 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from lab_settings where tenant_id = any($1::uuid[])`,
     `delete from cash_ledger where tenant_id = any($1::uuid[])`,
     `delete from charges where tenant_id = any($1::uuid[])`,
+    `delete from purchase_orders where tenant_id = any($1::uuid[])`,
+    `delete from indent_lines where tenant_id = any($1::uuid[])`,
+    `delete from indents where tenant_id = any($1::uuid[])`,
+    `delete from laundry_batches where tenant_id = any($1::uuid[])`,
+    `delete from linen_items where tenant_id = any($1::uuid[])`,
     `delete from medication_administrations where tenant_id = any($1::uuid[])`,
     `delete from mar_schedules where tenant_id = any($1::uuid[])`,
     `delete from clinical_order_items where tenant_id = any($1::uuid[])`,

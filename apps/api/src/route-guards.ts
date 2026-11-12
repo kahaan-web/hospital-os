@@ -264,6 +264,35 @@ function doctorGuards(): [string, TenantRouteGuard][] {
   ];
 }
 
+const INDENTS = '/api/v1/tenant/m/indents-purchase';
+/** MVP demo slice: indents and purchase orders (docs/specs/07-indents-purchase.md). No feature gates yet. */
+function indentsGuards(): [string, TenantRouteGuard][] {
+  const manage = (method: string, url: string): [string, TenantRouteGuard] =>
+    entry(method, url, { permission: 'indents.manage', module: 'indents-purchase' });
+  return [
+    manage('GET', `${INDENTS}/indents`),
+    manage('POST', `${INDENTS}/indents`),
+    manage('GET', `${INDENTS}/indents/:id`),
+    manage('POST', `${INDENTS}/indents/:id/approve`),
+    manage('POST', `${INDENTS}/indents/:id/convert-to-po`),
+    manage('GET', `${INDENTS}/purchase-orders`),
+  ];
+}
+
+const LINEN = '/api/v1/tenant/m/linen-laundry';
+/** MVP demo slice: linen stock and laundry batches (docs/specs/10-linen-laundry.md). No feature gates yet. */
+function linenGuards(): [string, TenantRouteGuard][] {
+  const manage = (method: string, url: string): [string, TenantRouteGuard] =>
+    entry(method, url, { permission: 'linen.manage', module: 'linen-laundry' });
+  return [
+    manage('GET', `${LINEN}/stock`),
+    manage('POST', `${LINEN}/stock`),
+    manage('GET', `${LINEN}/laundry-batches`),
+    manage('POST', `${LINEN}/laundry-batches`),
+    manage('POST', `${LINEN}/laundry-batches/:id/receive`),
+  ];
+}
+
 const LAB = '/api/v1/tenant/m/lab';
 const labFeature = CLINICAL_FEATURES.lab;
 
@@ -639,6 +668,8 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   ...billingGuards(),
   // B8. Ingest is token-authenticated in the handler; the row keeps the inventory closed.
   ...labGuards(),
+  ...indentsGuards(),
+  ...linenGuards(),
   entry('GET', '/api/v1/tenant/m/nurse-station/ward', {
     permission: 'nursing.manage',
     module: 'nurse-station',
