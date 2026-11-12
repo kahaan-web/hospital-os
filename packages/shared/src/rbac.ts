@@ -24,6 +24,8 @@ export const PERMISSIONS = {
   'nursing.manage': 'Nurse station orders and vitals',
   'indents.manage': 'Raise, approve and convert indents to purchase orders',
   'linen.manage': 'Linen stock, laundry dispatch and receipt',
+  'equipment.manage': 'Equipment register, breakdowns and preventive maintenance',
+  'payroll.manage': 'Staff master, attendance marks and payslip preview',
   'clinical.order': 'Clinical orders and notes (CPOE)',
   'ot.manage': 'Schedule and complete operation theatre cases',
   'radiology.manage': 'Radiology worklist, reporting and signing',

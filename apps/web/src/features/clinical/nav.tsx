@@ -18,7 +18,9 @@ import {
   Shirt,
   Stethoscope,
   UserRound,
+  Users,
   Wallet,
+  Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { isNavActive } from '@/lib/navActive';
@@ -94,6 +96,10 @@ export const CLINICAL_SCREENS: readonly ClinicalScreen[] = [
   { id: 'doctor-accounting-payouts', labelKey: 'clinical.doctorAccounting.payouts', href: '/app/doctor-accounting/payouts', moduleKey: 'doctor-accounting', permission: 'accounts.manage', nav: false },
   { id: 'indents', labelKey: 'clinical.indents.nav', href: '/app/indents', moduleKey: 'indents-purchase', permission: 'indents.manage', nav: true },
   { id: 'linen', labelKey: 'clinical.linen.nav', href: '/app/linen', moduleKey: 'linen-laundry', permission: 'linen.manage', nav: true },
+  { id: 'equipment', labelKey: 'clinical.equipment.nav', href: '/app/equipment', moduleKey: 'equipment-maintenance', permission: 'equipment.manage', nav: true },
+  { id: 'equipment-asset', labelKey: 'clinical.equipment.title', href: '/app/equipment/[id]', moduleKey: 'equipment-maintenance', permission: 'equipment.manage', nav: false },
+  { id: 'payroll', labelKey: 'clinical.payroll.nav', href: '/app/payroll', moduleKey: 'payroll-attendance', permission: 'payroll.manage', nav: true },
+  { id: 'payroll-employee', labelKey: 'clinical.payroll.title', href: '/app/payroll/[id]', moduleKey: 'payroll-attendance', permission: 'payroll.manage', nav: false },
 ];
 
 const ICONS: Record<string, ReactNode> = {
@@ -113,6 +119,8 @@ const ICONS: Record<string, ReactNode> = {
   'doctor-accounting': <Calculator size={18} aria-hidden strokeWidth={1.5} />,
   indents: <ClipboardList size={18} aria-hidden strokeWidth={1.5} />,
   linen: <Shirt size={18} aria-hidden strokeWidth={1.5} />,
+  equipment: <Wrench size={18} aria-hidden strokeWidth={1.5} />,
+  payroll: <Users size={18} aria-hidden strokeWidth={1.5} />,
 };
 
 export function clinicalNavItems(opts: {

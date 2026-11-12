@@ -14,3 +14,5 @@ export * from './insurance';
 export * from './doctor-accounting';
 export * from './indents';
 export * from './linen';
+export * from './equipment';
+export * from './payroll';

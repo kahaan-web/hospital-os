@@ -118,6 +118,11 @@ const TABLES = [
   'purchase_orders',
   'linen_items',
   'laundry_batches',
+  'equipment_assets',
+  'equipment_pm_schedules',
+  'equipment_service_logs',
+  'payroll_employees',
+  'payroll_attendance',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -1332,6 +1337,60 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'laundry_batches':
       return row(common, 'id = $1', b.laundryBatchId, `vendor = 'Touched by A'`, 'vendor',
         `insert into laundry_batches (tenant_id, location_id, number, linen_item_id, qty_sent) values ($1, '${b.locationId}', 'ZLBA${pair.runId}', '${b.linenItemId}', 1)`);
+    case 'equipment_assets':
+      return {
+        ...row(
+          common,
+          'id = $1',
+          b.equipmentAssetId,
+          `name = 'Touched by A'`,
+          'name',
+          `insert into equipment_assets (tenant_id, asset_tag, name) values ($1, 'ZNO${pair.runId}', 'Nope')`,
+        ),
+        beforeMassDelete: ['delete from equipment_service_logs', 'delete from equipment_pm_schedules'],
+      };
+    case 'equipment_pm_schedules':
+      return row(
+        common,
+        'id = $1',
+        b.equipmentPmId,
+        `title = 'Touched by A'`,
+        'title',
+        `insert into equipment_pm_schedules (tenant_id, equipment_id, title, frequency_days, next_due)
+         values ($1, '${b.equipmentAssetId}', 'Nope', 30, current_date)`,
+      );
+    case 'equipment_service_logs':
+      return row(
+        common,
+        'id = $1',
+        b.equipmentLogId,
+        `description = 'Touched by A'`,
+        'description',
+        `insert into equipment_service_logs (tenant_id, equipment_id, kind, description)
+         values ($1, '${b.equipmentAssetId}', 'pm', 'Nope')`,
+      );
+    case 'payroll_employees':
+      return {
+        ...row(
+          common,
+          'id = $1',
+          b.payrollEmployeeId,
+          `full_name = 'Touched by A'`,
+          'full_name',
+          `insert into payroll_employees (tenant_id, employee_code, full_name) values ($1, 'ZNO${pair.runId}', 'Nope')`,
+        ),
+        beforeMassDelete: ['delete from payroll_attendance'],
+      };
+    case 'payroll_attendance':
+      return row(
+        common,
+        'id = $1',
+        b.payrollAttendanceId,
+        `note = 'Touched by A'`,
+        'note',
+        `insert into payroll_attendance (tenant_id, employee_id, work_date, status)
+         values ($1, '${b.payrollEmployeeId}', current_date + 1, 'present')`,
+      );
     default:
       return assertNever(table);
   }

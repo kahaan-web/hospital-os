@@ -6,6 +6,7 @@ import { registerBilling } from './billing/routes';
 import { registerDoctor } from './doctor/routes';
 import { registerDoctorAccounting } from './doctor-accounting/routes';
 import { registerInsurance } from './insurance/routes';
+import { registerEquipment } from './equipment/routes';
 import { registerIpbilling } from './ipbilling/routes';
 import { registerIndents } from './indents/routes';
 import { registerLab } from './lab/routes';
@@ -13,6 +14,7 @@ import { registerLinen } from './linen/routes';
 import { registerModuleRoutes } from './module-routes';
 import { registerNursing } from './nursing/routes';
 import { registerOt } from './ot/routes';
+import { registerPayroll } from './payroll/routes';
 import { registerPharmacy } from './pharmacy/routes';
 import { registerRadiology } from './radiology/routes';
 import { registerPortal } from './portal/routes';
@@ -36,6 +38,8 @@ export function registerClinical(app: FastifyInstance, deps: Deps): void {
   registerRadiology(app, deps);
   registerInsurance(app, deps);
   registerDoctorAccounting(app, deps);
+  registerEquipment(app, deps);
+  registerPayroll(app, deps);
 }
 
 export { clinical } from './registry';

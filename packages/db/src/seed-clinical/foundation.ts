@@ -7,6 +7,7 @@ import { hashPassword } from '../password';
 import * as schema from '../schema';
 import { demoMobile, seedDemoPeople } from '../seed-demo-people';
 import { seedSunriseIndentsLinen } from './indents-linen';
+import { seedSunriseMvp } from './sunrise-mvp';
 
 const DEMO_PASSWORD = 'Demo@12345';
 const SUNRISE = 'sunrise-care';
@@ -74,6 +75,7 @@ export async function seedClinicalFoundation(db: Db, log: (m: string) => void): 
     await seedSunriseClinical(db, sunrise.id, log);
     await grantSunriseModules(db, sunrise.id, log);
     await seedSunriseIndentsLinen(db, sunrise.id, log);
+    await seedSunriseMvp(db, sunrise.id, log);
   }
   await ensureLotusTenant(db, log);
   // The first seedDemoPeople call (from seedDemo) runs before Lotus exists. Call it again so Lotus's
@@ -91,6 +93,8 @@ async function grantSunriseModules(db: Db, tenantId: string, log: (m: string) =>
     'android-nurses-workbench',
     'indents-purchase',
     'linen-laundry',
+    'equipment-maintenance',
+    'payroll-attendance',
   ];
   const mods = await db.select().from(schema.modules).where(inArray(schema.modules.key, keys));
   for (const mod of mods) {
@@ -104,7 +108,7 @@ async function grantSunriseModules(db: Db, tenantId: string, log: (m: string) =>
       target: 'module',
       moduleId: mod.id,
       effect: 'grant',
-      reason: 'Phase B demo: nurse station, CPOE and Android portals for Sunrise',
+      reason: 'Phase B demo: nurse station, CPOE, Android portals, and MVP equipment and payroll for Sunrise',
     });
   }
   log(`sunrise module overrides ensured (${keys.length})`);

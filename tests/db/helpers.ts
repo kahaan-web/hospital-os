@@ -117,6 +117,11 @@ export interface Side {
   purchaseOrderId: string;
   linenItemId: string;
   laundryBatchId: string;
+  equipmentAssetId: string;
+  equipmentPmId: string;
+  equipmentLogId: string;
+  payrollEmployeeId: string;
+  payrollAttendanceId: string;
 }
 
 export interface FixturePair {
@@ -488,6 +493,35 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     migrator,
     `insert into laundry_batches (tenant_id, location_id, number, linen_item_id, qty_sent) values ($1, $2, $3, $4, 1) returning id`,
     [tenant.id, location.id, `ZLB${mark}${runId}`, linenItem.id],
+  // MVP demo slices: equipment maintenance (1220) and payroll & attendance (1260).
+  const eqAsset = await one<{ id: string }>(
+    migrator,
+    `insert into equipment_assets (tenant_id, asset_tag, name) values ($1, $2, 'Sample asset') returning id`,
+    [tenant.id, `ZEQ${runId}${mark}`],
+  );
+  const eqPm = await one<{ id: string }>(
+    migrator,
+    `insert into equipment_pm_schedules (tenant_id, equipment_id, title, frequency_days, next_due)
+     values ($1, $2, 'Sample PM', 30, current_date) returning id`,
+    [tenant.id, eqAsset.id],
+  );
+  const eqLog = await one<{ id: string }>(
+    migrator,
+    `insert into equipment_service_logs (tenant_id, equipment_id, kind, description)
+     values ($1, $2, 'pm', 'Sample') returning id`,
+    [tenant.id, eqAsset.id],
+  );
+  const payEmployee = await one<{ id: string }>(
+    migrator,
+    `insert into payroll_employees (tenant_id, employee_code, full_name, monthly_basic_paise)
+     values ($1, $2, 'Sample staff', 100000) returning id`,
+    [tenant.id, `ZPE${runId}${mark}`],
+  );
+  const payAttendance = await one<{ id: string }>(
+    migrator,
+    `insert into payroll_attendance (tenant_id, employee_id, work_date, status)
+     values ($1, $2, current_date, 'present') returning id`,
+    [tenant.id, payEmployee.id],
   );
   const vital = await one<{ id: string }>(
     migrator,
@@ -913,6 +947,11 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     purchaseOrderId: purchaseOrder.id,
     linenItemId: linenItem.id,
     laundryBatchId: laundryBatch.id,
+    equipmentAssetId: eqAsset.id,
+    equipmentPmId: eqPm.id,
+    equipmentLogId: eqLog.id,
+    payrollEmployeeId: payEmployee.id,
+    payrollAttendanceId: payAttendance.id,
   };
 }
 
@@ -933,6 +972,11 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from bills where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_stock_moves where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_supplier_return_lines where tenant_id = any($1::uuid[])`,
+    `delete from equipment_service_logs where tenant_id = any($1::uuid[])`,
+    `delete from equipment_pm_schedules where tenant_id = any($1::uuid[])`,
+    `delete from equipment_assets where tenant_id = any($1::uuid[])`,
+    `delete from payroll_attendance where tenant_id = any($1::uuid[])`,
+    `delete from payroll_employees where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_supplier_returns where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_adjustment_lines where tenant_id = any($1::uuid[])`,
     `delete from pharmacy_adjustments where tenant_id = any($1::uuid[])`,
