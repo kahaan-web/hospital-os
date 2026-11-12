@@ -644,6 +644,11 @@ const ENTRIES: [string, TenantRouteGuard][] = [
     module: 'nurse-station',
     feature: CLINICAL_FEATURES.nurseStation.medicineOrders,
   }),
+  entry('GET', '/api/v1/tenant/m/nurse-station/handover', {
+    permission: 'nursing.manage',
+    module: 'nurse-station',
+    feature: CLINICAL_FEATURES.nurseStation.medicineOrders,
+  }),
   entry('GET', '/api/v1/tenant/m/nurse-station/encounters/:id/orders', {
     permission: 'nursing.manage',
     module: 'nurse-station',

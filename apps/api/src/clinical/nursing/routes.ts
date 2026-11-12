@@ -10,6 +10,7 @@ import { ApiError } from '../../http';
 import { clinical } from '../registry';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { readPatient } from '../patients-read';
+import { handoverSheet } from './handover';
 import { investigationPrescriptionDoc, medicinePrescriptionDoc } from './prints';
 import {
   dietOrders,
@@ -67,6 +68,13 @@ export function registerNursing(app: FastifyInstance, deps: Deps): void {
     run(req, reply, async (gate) => {
       await guard(gate, features.medicineOrders);
       return wardPatients(clinicalCtx(gate), req.query);
+    }),
+  );
+
+  r.get(`${PREFIX}/handover`, { schema: { querystring: wardQuery } }, async (req, reply) =>
+    run(req, reply, async (gate) => {
+      await guard(gate, features.medicineOrders);
+      return handoverSheet(clinicalCtx(gate), req.query);
     }),
   );
 

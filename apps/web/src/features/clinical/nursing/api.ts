@@ -11,12 +11,43 @@ import { apiGet, apiPost } from '@/lib/api';
 
 const BASE = '/tenant/m/nurse-station';
 
+export interface HandoverPatient {
+  encounterId: string;
+  uhid: string;
+  fullName: string;
+  ageLabel: string;
+  gender: string;
+  wardCode: string | null;
+  bedLabel: string | null;
+  doctorName: string | null;
+  latestVitals: {
+    recordedAt: string;
+    bpSystolic: number | null;
+    bpDiastolic: number | null;
+    pulse: number | null;
+    spo2: number | null;
+    tempC: number | null;
+    respRate: number | null;
+  } | null;
+  dosesDue: number;
+  dosesGiven: number;
+  dosesOther: number;
+  diet: string | null;
+}
+
+export interface HandoverSheet {
+  generatedAt: string;
+  date: string;
+  patients: HandoverPatient[];
+}
+
 function key() {
   return crypto.randomUUID();
 }
 
 export const nursingApi = {
   ward: (wardCode?: string) => apiGet<WardPatient[]>(`${BASE}/ward${wardCode ? `?wardCode=${encodeURIComponent(wardCode)}` : ''}`),
+  handover: (wardCode?: string) => apiGet<HandoverSheet>(`${BASE}/handover${wardCode ? `?wardCode=${encodeURIComponent(wardCode)}` : ''}`),
   orders: (encounterId: string) => apiGet<ClinicalOrderDto[]>(`${BASE}/encounters/${encounterId}/orders`),
   results: (encounterId: string) =>
     apiGet<{ orderItemId: string; summary: unknown }[]>(`${BASE}/encounters/${encounterId}/results`),

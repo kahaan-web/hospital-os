@@ -8,6 +8,7 @@ const LINKS = [
   { href: '/app/billing/deposits', label: 'Deposits' },
   { href: '/app/billing/refunds', label: 'Refunds' },
   { href: '/app/billing/services', label: 'Services' },
+  { href: '/app/billing/summary', label: 'Summary' },
   { href: '/app/billing/reports', label: 'Reports' },
 ];
 
