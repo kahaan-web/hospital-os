@@ -7,7 +7,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { advanceStep, locationDtos, onboardingState, quoteFor, tenantSummary } from '../catalog';
 import { openTenant, type Deps, type TenantGate } from '../guard';
-import { ApiError } from '../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../http';
 import { detectLogo, logoContentType } from '../logo';
 
 const SAMPLES = [
@@ -66,20 +66,25 @@ export function registerOnboarding(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get('/api/v1/onboarding/logo', async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get('/api/v1/onboarding/logo', async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       requireOnboarding(gate);
       if (!gate.hospital.logoPath) throw new ApiError(404, 'not_found', 'No logo uploaded');
       const bytes = await readFile(join(deps.env.uploadDir, gate.hospital.logoPath));
       const ext = gate.hospital.logoPath.split('.').pop() ?? 'png';
-      return reply
-        .header('content-security-policy', "default-src 'none'")
-        .header('x-content-type-options', 'nosniff')
-        .header('content-disposition', `inline; filename="logo.${ext}"`)
-        .type(logoContentType(ext))
-        .send(bytes);
-    }),
-  );
+      return {
+        download: 'file',
+        bytes,
+        mime: logoContentType(ext),
+        filename: `logo.${ext}`,
+        headers: {
+          'content-security-policy': "default-src 'none'",
+          'x-content-type-options': 'nosniff',
+        },
+      };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 
   r.put('/api/v1/onboarding/locations', { schema: { body: locationsSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {

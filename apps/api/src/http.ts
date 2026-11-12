@@ -22,6 +22,39 @@ export function sendError(reply: FastifyReply, statusCode: number, code: string,
   return reply.status(statusCode).send({ error: { code, message, ...(extra?.fields ? { fields: extra.fields } : {}), ...(extra?.details !== undefined ? { details: extra.details } : {}) } });
 }
 
+/**
+ * File or markup built while a transaction is open. Return this from the callback
+ * and pass it to `sendCommittedDownload` only after that promise resolves.
+ * `reply.send` inside the callback flushes the HTTP response before COMMIT, so the
+ * next connection can miss the write.
+ */
+export type CommittedDownload =
+  | { download: 'html'; html: string }
+  | { download: 'pdf'; bytes: Buffer; filename?: string; disposition?: 'inline' | 'attachment' }
+  | { download: 'csv'; csv: string; filename: string }
+  | { download: 'file'; bytes: Buffer; mime: string; filename: string; headers?: Record<string, string> };
+
+export function isCommittedDownload(value: unknown): value is CommittedDownload {
+  if (!value || typeof value !== 'object' || !('download' in value)) return false;
+  const kind = (value as { download: unknown }).download;
+  return kind === 'html' || kind === 'pdf' || kind === 'csv' || kind === 'file';
+}
+
+export function sendCommittedDownload(reply: FastifyReply, file: CommittedDownload): FastifyReply {
+  if (file.download === 'html') return reply.type('text/html; charset=utf-8').send(file.html);
+  if (file.download === 'csv') {
+    return reply.type('text/csv; charset=utf-8').header('content-disposition', `attachment; filename="${file.filename}"`).send(file.csv);
+  }
+  if (file.download === 'pdf') {
+    const sent = reply.type('application/pdf');
+    if (file.filename) sent.header('content-disposition', `${file.disposition ?? 'inline'}; filename="${file.filename}"`);
+    return sent.send(file.bytes);
+  }
+  let sent = reply.type(file.mime).header('content-disposition', `inline; filename="${file.filename}"`);
+  for (const [name, value] of Object.entries(file.headers ?? {})) sent = sent.header(name, value);
+  return sent.send(file.bytes);
+}
+
 export function installErrorHandler(app: Pick<FastifyInstance, 'setErrorHandler' | 'setNotFoundHandler'>): void {
   app.setNotFoundHandler((_req: FastifyRequest, reply: FastifyReply) => {
     sendError(reply, 404, 'not_found', 'Not found');
@@ -307,10 +340,12 @@ export async function withIdempotency<T>(
       .where(and(eq(schema.idempotencyKeys.tenantId, tenantId), eq(schema.idempotencyKeys.scope, scope), eq(schema.idempotencyKeys.key, key)));
     if (!existing || existing.responseStatus == null) throw new ApiError(409, 'idempotency_in_progress', 'That idempotency key is still in progress');
     if (existing.requestHash !== requestHash) throw new ApiError(409, 'idempotency_mismatch', 'This idempotency key was already used with a different request');
+    // Header and status only. The route sends this body after the transaction commits.
     reply.header('Idempotent-Replayed', 'true');
     reply.status(existing.responseStatus);
     return existing.responseBody as T;
   }
+  // fn must return the payload. reply.send here would flush before COMMIT and would store the reply object.
   const body = await fn();
   const status = reply.statusCode || 200;
   if (status >= 200 && status < 300) {

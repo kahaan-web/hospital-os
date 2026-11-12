@@ -21,7 +21,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError } from '../../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../../http';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { readPatient } from '../patients-read';
 import { admissionStickerDoc, summaryDoc } from './prints';
@@ -251,8 +251,8 @@ export function registerAdt(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/admissions/:id/print/:kind/:format`, { schema: { params: printParams } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/admissions/:id/print/:kind/:format`, { schema: { params: printParams } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       if (!gate.locationId) throw new ApiError(422, 'location_required', 'Choose a location');
       await gate.requireModule(MODULE);
       gate.requirePermission('adt.manage');
@@ -265,11 +265,12 @@ export function registerAdt(app: FastifyInstance, deps: Deps): void {
         req.params.kind === 'sticker'
           ? admissionStickerDoc(admission, patient, head)
           : summaryDoc(admission, await getSummary(gate.tx, admission.id, gate.locationId!), patient, head);
-      if (req.params.format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
+      if (req.params.format === 'html') return { download: 'html', html: renderHtml(doc) };
       const pdf = await renderPdf(doc);
-      return reply.type('application/pdf').header('content-disposition', `inline; filename="${req.params.kind}-${admission.number}.pdf"`).send(Buffer.from(pdf));
-    }),
-  );
+      return { download: 'pdf', bytes: Buffer.from(pdf), filename: `${req.params.kind}-${admission.number}.pdf` };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 
   const report = async (
     req: FastifyRequest,
