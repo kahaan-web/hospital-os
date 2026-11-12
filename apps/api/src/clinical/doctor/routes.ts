@@ -4,13 +4,14 @@ import {
   orderSetSchema,
   prescriptionSchema,
   serviceOrderSchema,
+  type PrintDoc,
 } from '@hos/shared';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError } from '../../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../../http';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { doctorCasePaperDoc, investigationDoc, prescriptionDoc } from './prints';
 import {
@@ -99,8 +100,8 @@ export function registerDoctor(app: FastifyInstance, deps: Deps): void {
   r.get(
     `${PREFIX_OPD}/encounters/:id/print/:kind/:format`,
     { schema: { params: z.object({ id: z.uuid(), kind: z.enum(printKinds), format: z.enum(printFormats) }) } },
-    async (req, reply) =>
-      run(req, reply, async (gate) => {
+    async (req, reply) => {
+      const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
         await guardOpdDoctor(gate, false);
         const { kind, format } = req.params;
         const c = ctx(gate);
@@ -110,22 +111,18 @@ export function registerDoctor(app: FastifyInstance, deps: Deps): void {
           const latest = bundle.orderList.find((o) => o.kind === 'medicine') ?? bundle.orderList[0];
           if (!latest) throw new ApiError(422, 'validation', 'No prescription order to print');
           const doc = prescriptionDoc(bundle.patient, latest, head, bundle.doctor);
-          if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-          const pdf = await renderPdf(doc);
-          return reply.type('application/pdf').header('content-disposition', `inline; filename="prescription.pdf"`).send(Buffer.from(pdf));
+          return renderDownload(format, doc, 'prescription.pdf');
         }
         if (kind === 'investigation') {
           const labs = bundle.orderList.filter((o) => o.kind === 'lab' || o.kind === 'procedure' || o.kind === 'radiology');
           const doc = investigationDoc(bundle.patient, labs, head);
-          if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-          const pdf = await renderPdf(doc);
-          return reply.type('application/pdf').header('content-disposition', `inline; filename="investigation.pdf"`).send(Buffer.from(pdf));
+          return renderDownload(format, doc, 'investigation.pdf');
         }
         const doc = doctorCasePaperDoc(bundle.patient, bundle.paper, head);
-        if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-        const pdf = await renderPdf(doc);
-        return reply.type('application/pdf').header('content-disposition', `inline; filename="case-paper.pdf"`).send(Buffer.from(pdf));
-      }),
+        return renderDownload(format, doc, 'case-paper.pdf');
+      });
+      return sendCommittedDownload(reply, file);
+    },
   );
 
   r.get(`${PREFIX_CPOE}/inpatients`, async (req, reply) =>
@@ -197,8 +194,8 @@ export function registerDoctor(app: FastifyInstance, deps: Deps): void {
   r.get(
     `${PREFIX_CPOE}/encounters/:id/print/:kind/:format`,
     { schema: { params: z.object({ id: z.uuid(), kind: z.enum(printKinds), format: z.enum(printFormats) }) } },
-    async (req, reply) =>
-      run(req, reply, async (gate) => {
+    async (req, reply) => {
+      const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
         gate.requirePermission('clinical.view');
         await gate.requireAnyModule(['opd-visit', 'cpoe']);
         const { kind, format } = req.params;
@@ -209,22 +206,24 @@ export function registerDoctor(app: FastifyInstance, deps: Deps): void {
           const latest = bundle.orderList.find((o) => o.kind === 'medicine') ?? bundle.orderList[0];
           if (!latest) throw new ApiError(422, 'validation', 'No prescription order to print');
           const doc = prescriptionDoc(bundle.patient, latest, head, bundle.doctor);
-          if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-          const pdf = await renderPdf(doc);
-          return reply.type('application/pdf').send(Buffer.from(pdf));
+          return renderDownload(format, doc);
         }
         if (kind === 'investigation') {
           const labs = bundle.orderList.filter((o) => o.kind === 'lab' || o.kind === 'procedure');
           const doc = investigationDoc(bundle.patient, labs, head);
-          if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-          const pdf = await renderPdf(doc);
-          return reply.type('application/pdf').send(Buffer.from(pdf));
+          return renderDownload(format, doc);
         }
         const doc = doctorCasePaperDoc(bundle.patient, bundle.paper, head);
-        if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-        const pdf = await renderPdf(doc);
-        return reply.type('application/pdf').send(Buffer.from(pdf));
-      }),
+        return renderDownload(format, doc);
+      });
+      return sendCommittedDownload(reply, file);
+    },
   );
 
+}
+
+async function renderDownload(format: 'html' | 'pdf', doc: PrintDoc, filename?: string): Promise<CommittedDownload> {
+  if (format === 'html') return { download: 'html', html: renderHtml(doc) };
+  const pdf = await renderPdf(doc);
+  return filename ? { download: 'pdf', bytes: Buffer.from(pdf), filename } : { download: 'pdf', bytes: Buffer.from(pdf) };
 }

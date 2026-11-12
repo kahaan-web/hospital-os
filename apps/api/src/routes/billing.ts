@@ -8,7 +8,7 @@ import { applySubscriptionChange, createOrder, payOrder, resolvePending, verifyP
 import { invoiceDto, invoiceListItem, quoteFor, subscriptionDto } from '../catalog';
 import { invoiceHtml, invoicePdf } from '../documents';
 import { openTenant, type Deps, type TenantGate } from '../guard';
-import { ApiError, idempotencyKey, requestHash, requestMeta, routeTemplate, tenant, withIdempotency, type Actor } from '../http';
+import { ApiError, idempotencyKey, requestHash, requestMeta, routeTemplate, sendCommittedDownload, tenant, withIdempotency, type Actor, type CommittedDownload } from '../http';
 
 const mockWebhookSchema = z.object({
   paymentId: z.string().min(1).max(64),
@@ -121,20 +121,22 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get('/api/v1/billing/invoices/:id/pdf', { schema: { params: z.object({ id: z.uuid() }) } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get('/api/v1/billing/invoices/:id/pdf', { schema: { params: z.object({ id: z.uuid() }) } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       gate.requirePermission('billing.view');
       const invoice = await invoiceDto(gate.tx, req.params.id);
       const pdf = await invoicePdf(invoice);
-      return reply.header('content-disposition', `attachment; filename="${invoice.number.replaceAll('/', '-')}.pdf"`).type('application/pdf').send(Buffer.from(pdf));
-    }),
-  );
+      return { download: 'pdf', bytes: Buffer.from(pdf), filename: `${invoice.number.replaceAll('/', '-')}.pdf`, disposition: 'attachment' };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 
-  r.get('/api/v1/billing/invoices/:id/html', { schema: { params: z.object({ id: z.uuid() }) } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get('/api/v1/billing/invoices/:id/html', { schema: { params: z.object({ id: z.uuid() }) } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       gate.requirePermission('billing.view');
       const invoice = await invoiceDto(gate.tx, req.params.id);
-      return reply.type('text/html; charset=utf-8').send(invoiceHtml(invoice));
-    }),
-  );
+      return { download: 'html', html: invoiceHtml(invoice) };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 }

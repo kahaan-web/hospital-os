@@ -6,7 +6,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError } from '../../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../../http';
 import { clinical } from '../registry';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { readPatient } from '../patients-read';
@@ -130,8 +130,8 @@ export function registerNursing(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/encounters/:id/print/:kind/:format`, { schema: { params: printParams } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/encounters/:id/print/:kind/:format`, { schema: { params: printParams } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       const feature = req.params.kind === 'medicine' ? features.medicinePrescription : features.investigationPrescription;
       await guard(gate, feature);
       const all = await encounterOrders(clinicalCtx(gate), req.params.id);
@@ -141,9 +141,10 @@ export function registerNursing(app: FastifyInstance, deps: Deps): void {
       const patient = await readPatient(gate.tx, encRow.patientId);
       const head = await letterhead(gate.tx, gate.locationId!);
       const doc = req.params.kind === 'medicine' ? medicinePrescriptionDoc(patient, filtered, head) : investigationPrescriptionDoc(patient, filtered, head);
-      if (req.params.format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
+      if (req.params.format === 'html') return { download: 'html', html: renderHtml(doc) };
       const pdf = await renderPdf(doc);
-      return reply.type('application/pdf').header('content-disposition', `inline; filename="${req.params.kind}-${req.params.id}.pdf"`).send(Buffer.from(pdf));
-    }),
-  );
+      return { download: 'pdf', bytes: Buffer.from(pdf), filename: `${req.params.kind}-${req.params.id}.pdf` };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 }

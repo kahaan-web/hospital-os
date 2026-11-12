@@ -20,7 +20,7 @@ import { moduleStates, subscriptionDto } from '../../catalog';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
 import { sha256Hex } from '../../crypto';
-import { ApiError, requestMeta, writeAudit } from '../../http';
+import { ApiError, isCommittedDownload, requestMeta, sendCommittedDownload, writeAudit, type CommittedDownload } from '../../http';
 import { clinical } from '../registry';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { mockAstmAdapter } from './adapter';
@@ -207,8 +207,8 @@ export function registerLab(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/accessions/:id/report`, { schema: { params: idParams, querystring: reportQuery } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/accessions/:id/report`, { schema: { params: idParams, querystring: reportQuery } }, async (req, reply) => {
+    const body = await run(req, reply, async (gate) => {
       await gate.requireModule(MODULE);
       await gate.requireFeature(features.labResultReport);
       gate.requirePermission('lab.manage');
@@ -217,11 +217,13 @@ export function registerLab(app: FastifyInstance, deps: Deps): void {
       if (format === 'json') return report;
       const head = await letterhead(gate.tx, gate.locationId!);
       const doc = labReportPrint(report, head);
-      if (format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
+      if (format === 'html') return { download: 'html', html: renderHtml(doc) } satisfies CommittedDownload;
       const pdf = await renderPdf(doc);
-      return reply.type('application/pdf').header('content-disposition', `inline; filename="${report.number.replaceAll('/', '-')}.pdf"`).send(Buffer.from(pdf));
-    }),
-  );
+      return { download: 'pdf', bytes: Buffer.from(pdf), filename: `${report.number.replaceAll('/', '-')}.pdf` } satisfies CommittedDownload;
+    });
+    if (isCommittedDownload(body)) return sendCommittedDownload(reply, body);
+    return body;
+  });
 
   r.post(`${PREFIX}/accessions/:id/email`, { schema: { params: idParams, body: emailResultSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {

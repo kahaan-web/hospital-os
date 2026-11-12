@@ -15,7 +15,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError } from '../../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../../http';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { readPatient } from '../patients-read';
 import { barcodeDoc, casePaperDoc, photoIdDoc, stickerDoc } from './prints';
@@ -163,8 +163,8 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
   r.get(
     `${PREFIX}/patients/:id/print/:kind/:format`,
     { schema: { params: z.object({ id: z.uuid(), kind: z.enum(printKinds), format: z.enum(printFormats) }) } },
-    async (req, reply) =>
-      run(req, reply, async (gate) => {
+    async (req, reply) => {
+      const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
         await guardRegistration(gate);
         gate.requireAnyPermission(['patients.view', 'patients.manage']);
         const { kind, format } = req.params;
@@ -182,12 +182,12 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
           : kind === 'sticker' ? stickerDoc(patient, head)
           : kind === 'photo-id' ? photoIdDoc(patient, head)
           : barcodeDoc(patient, head);
-        if (format === 'html') {
-          return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
-        }
+        if (format === 'html') return { download: 'html', html: renderHtml(doc) };
         const pdf = await renderPdf(doc);
-        return reply.type('application/pdf').header('content-disposition', `inline; filename="${kind}-${patient.uhid}.pdf"`).send(Buffer.from(pdf));
-      }),
+        return { download: 'pdf', bytes: Buffer.from(pdf), filename: `${kind}-${patient.uhid}.pdf` };
+      });
+      return sendCommittedDownload(reply, file);
+    },
   );
 
   r.get(`${PREFIX}/reports/register`, { schema: { querystring: registerReportQuery } }, async (req, reply) =>
@@ -200,15 +200,16 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/reports/register.csv`, { schema: { querystring: registerReportQuery } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/reports/register.csv`, { schema: { querystring: registerReportQuery } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       await guardRegistration(gate);
       await gate.requireFeature(registrationFeatures.patientExcelData);
       gate.requirePermission('reports.view');
       const rows = await registerReport(gate.tx, req.query);
-      return reply.type('text/csv; charset=utf-8').header('content-disposition', 'attachment; filename="patient-register.csv"').send(registerReportCsv(rows));
-    }),
-  );
+      return { download: 'csv', csv: registerReportCsv(rows), filename: 'patient-register.csv' };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 
   r.post(`${PREFIX}/patients/:id/mailer`, { schema: { params: z.object({ id: z.uuid() }), body: patientMailerSchema } }, async (req, reply) =>
     run(req, reply, async (gate) => {
@@ -248,8 +249,8 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/patients/:id/documents/:docId/file`, { schema: { params: z.object({ id: z.uuid(), docId: z.uuid() }) } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/patients/:id/documents/:docId/file`, { schema: { params: z.object({ id: z.uuid(), docId: z.uuid() }) } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       await guardRegistration(gate);
       await gate.requireFeature(registrationFeatures.attachPatientDocuments);
       gate.requireAnyPermission(['patients.view', 'patients.manage']);
@@ -260,7 +261,8 @@ export function registerRegistration(app: FastifyInstance, deps: Deps): void {
       if (!row) throw new ApiError(404, 'not_found', 'Document not found');
       const abs = join(deps.env.uploadDir, row.filePath);
       const bytes = await readFile(abs);
-      return reply.type(row.mime).header('content-disposition', `inline; filename="${row.kind}"`).send(bytes);
-    }),
-  );
+      return { download: 'file', bytes, mime: row.mime, filename: row.kind };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 }

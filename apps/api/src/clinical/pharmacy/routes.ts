@@ -20,7 +20,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError } from '../../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../../http';
 import { letterhead, renderHtml, renderPdf } from '../print';
 import { pharmacyReport } from './reports';
 import { saleInvoiceDoc } from './prints';
@@ -182,8 +182,8 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/sales/:id/print`, { schema: { params: idParams, querystring: z.object({ format: z.enum(['pdf', 'html']).optional() }) } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/sales/:id/print`, { schema: { params: idParams, querystring: z.object({ format: z.enum(['pdf', 'html']).optional() }) } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       await guard(gate);
       const sale = await readSale(ctx(gate), req.params.id);
       let label = sale.walkinName || 'Cash buyer';
@@ -192,11 +192,12 @@ export function registerPharmacy(app: FastifyInstance, deps: Deps): void {
         if (patient) label = `${patient.fullName} (${patient.uhid})`;
       }
       const doc = saleInvoiceDoc(sale, await letterhead(gate.tx, gate.locationId!), label);
-      if (req.query.format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
+      if (req.query.format === 'html') return { download: 'html', html: renderHtml(doc) };
       const pdf = await renderPdf(doc);
-      return reply.type('application/pdf').header('content-disposition', `inline; filename="${sale.number}.pdf"`).send(Buffer.from(pdf));
-    }),
-  );
+      return { download: 'pdf', bytes: Buffer.from(pdf), filename: `${sale.number}.pdf` };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 
   r.get(`${PREFIX}/inpatients`, async (req, reply) =>
     run(req, reply, async (gate) => {

@@ -19,7 +19,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
-import { ApiError } from '../../http';
+import { ApiError, sendCommittedDownload, type CommittedDownload } from '../../http';
 import { renderHtml, renderPdf } from '../print';
 import { acceptDeposit, buildBill, concede, finalise, readBill, refund, refundDeposit, settle } from './engine';
 import { createService, createTariff, listServiceMasters, patchService, patchTariff } from './masters';
@@ -183,16 +183,17 @@ export function registerBilling(app: FastifyInstance, deps: Deps): void {
     }),
   );
 
-  r.get(`${PREFIX}/bills/:id/print`, { schema: { params: id, querystring: z.object({ format: z.enum(['pdf', 'html']).default('pdf') }) } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+  r.get(`${PREFIX}/bills/:id/print`, { schema: { params: id, querystring: z.object({ format: z.enum(['pdf', 'html']).default('pdf') }) } }, async (req, reply) => {
+    const file = await run(req, reply, async (gate): Promise<CommittedDownload> => {
       await open(gate);
       await gate.requireFeature(F.voucherDocument);
       const doc = await billPrint(ctx(gate), req.params.id);
-      if (req.query.format === 'html') return reply.type('text/html; charset=utf-8').send(renderHtml(doc));
+      if (req.query.format === 'html') return { download: 'html', html: renderHtml(doc) };
       const pdf = await renderPdf(doc);
-      return reply.type('application/pdf').header('content-disposition', 'inline; filename="op-bill.pdf"').send(Buffer.from(pdf));
-    }),
-  );
+      return { download: 'pdf', bytes: Buffer.from(pdf), filename: 'op-bill.pdf' };
+    });
+    return sendCommittedDownload(reply, file);
+  });
 
   r.get(`${PREFIX}/deposits`, { schema: { querystring: z.object({ patientId: z.uuid().optional() }) } }, async (req, reply) =>
     run(req, reply, async (gate) => {
