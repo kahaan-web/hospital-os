@@ -286,6 +286,9 @@ function insuranceDoctorAccountingGuards(): [string, TenantRouteGuard][] {
     da('POST', '/payouts'),
     da('GET', '/payouts/:id'),
     da('POST', '/payouts/:id/pay'),
+  ];
+}
+
 const INDENTS = '/api/v1/tenant/m/indents-purchase';
 /** MVP demo slice: indents and purchase orders (docs/specs/07-indents-purchase.md). No feature gates yet. */
 function indentsGuards(): [string, TenantRouteGuard][] {
@@ -312,8 +315,11 @@ function linenGuards(): [string, TenantRouteGuard][] {
     manage('GET', `${LINEN}/laundry-batches`),
     manage('POST', `${LINEN}/laundry-batches`),
     manage('POST', `${LINEN}/laundry-batches/:id/receive`),
+  ];
+}
+
 /** MVP demo slice: blood bank, marketing, MIS dashboard. Not tied to a tier; Sunrise is granted the modules in the demo seed. */
-function mvpGuards(): [string, TenantRouteGuard][] {
+function bbMktMisGuards(): [string, TenantRouteGuard][] {
   const bb = (method: string, url: string): [string, TenantRouteGuard] =>
     entry(method, `/api/v1/tenant/m/blood-bank${url}`, { permission: 'pharmacy.manage', module: 'blood-bank' });
   const mkt = (method: string, url: string): [string, TenantRouteGuard] =>
@@ -715,7 +721,7 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   ...insuranceDoctorAccountingGuards(),
   ...indentsGuards(),
   ...linenGuards(),
-  ...mvpGuards(),
+  ...bbMktMisGuards(),
   entry('GET', '/api/v1/tenant/m/nurse-station/ward', {
     permission: 'nursing.manage',
     module: 'nurse-station',
