@@ -4,14 +4,10 @@ import {
   composeBill,
   placeOfSupply,
   type ClinicalCtx,
-  type ConcessionInput,
-  type CreateDepositInput,
   type CreateIpBillInput,
-  type DepositRefundInput,
   type GstTreatment,
   type ManualChargeInput,
   type OpBillDto,
-  type SettleInput,
   type SplitIpBillInput,
 } from '@hos/shared';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -26,7 +22,6 @@ import {
   settle,
 } from '../billing/engine';
 import { billDto, lineDto } from '../billing/map';
-import { numbering } from '../numbering';
 import { encounterPayerDto, payerDto, receivableDto } from './map';
 
 function dayOf(value: Date | string): string {
@@ -500,7 +495,7 @@ export async function computeDischargeBalance(ctx: ClinicalCtx<Tx>, encounterId:
     .select({ bal: sql<number>`coalesce(sum(balance_paise), 0)::bigint` })
     .from(schema.deposits)
     .where(and(eq(schema.deposits.encounterId, encounterId), sql`balance_paise > 0`));
-  let balance = Number(bills?.due ?? 0) - Number(deposits?.bal ?? 0);
+  const balance = Number(bills?.due ?? 0) - Number(deposits?.bal ?? 0);
   if (balance > 0) reasons.push(`Patient balance due ₹${(balance / 100).toFixed(2)}`);
   const ok = reasons.length === 0 && balance <= 0;
   return { ok, balancePaise: Math.max(balance, 0), reasons };

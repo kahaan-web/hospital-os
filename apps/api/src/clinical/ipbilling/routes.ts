@@ -78,6 +78,13 @@ function canApprove(gate: TenantGate): boolean {
 export function registerIpbilling(app: FastifyInstance, deps: Deps): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const run = <T>(req: FastifyRequest, reply: FastifyReply, fn: (gate: TenantGate) => Promise<T>) => openTenant(deps, req, reply, fn);
+  // Set the status only after openTenant commits. Sending inside the transaction
+  // races the next request (same fix as admin suspend / reactivate).
+  const created = async <T>(req: FastifyRequest, reply: FastifyReply, fn: (gate: TenantGate) => Promise<T>): Promise<T> => {
+    const value = await run(req, reply, fn);
+    reply.code(201);
+    return value;
+  };
   const id = z.object({ id: z.uuid() });
   const enc = z.object({ encounterId: z.uuid() });
 
@@ -90,12 +97,10 @@ export function registerIpbilling(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/encounters/:encounterId/charges`, { schema: { params: enc, body: manualChargeSchema } }, async (req, reply) => {
     requireKey(req);
-    return run(req, reply, async (gate) => {
+    return created(req, reply, async (gate) => {
       await open(gate);
       await gate.requireFeature(F.postingCharges);
-      const created = await postManualCharge(ctx(gate), req.params.encounterId, req.body);
-      reply.code(201);
-      return created;
+      return postManualCharge(ctx(gate), req.params.encounterId, req.body);
     });
   });
 
@@ -118,12 +123,10 @@ export function registerIpbilling(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/encounters/:encounterId/bills`, { schema: { params: enc, body: createIpBillSchema } }, async (req, reply) => {
     requireKey(req);
-    return run(req, reply, async (gate) => {
+    return created(req, reply, async (gate) => {
       await open(gate);
       await gate.requireFeature(F.billPreparation);
-      const created = await buildIpBill(ctx(gate), req.params.encounterId, req.body);
-      reply.code(201);
-      return created;
+      return buildIpBill(ctx(gate), req.params.encounterId, req.body);
     });
   });
 
@@ -186,12 +189,10 @@ export function registerIpbilling(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/bills/:id/concessions`, { schema: { params: id, body: concessionSchema } }, async (req, reply) => {
     requireKey(req);
-    return run(req, reply, async (gate) => {
+    return created(req, reply, async (gate) => {
       await open(gate);
       await gate.requireFeature(F.concessions);
-      const created = await concede(ctx(gate), req.params.id, req.body, canApprove(gate));
-      reply.code(201);
-      return created;
+      return concede(ctx(gate), req.params.id, req.body, canApprove(gate));
     });
   });
 
@@ -206,24 +207,20 @@ export function registerIpbilling(app: FastifyInstance, deps: Deps): void {
 
   r.post(`${PREFIX}/deposits`, { schema: { body: createDepositSchema } }, async (req, reply) => {
     requireKey(req);
-    return run(req, reply, async (gate) => {
+    return created(req, reply, async (gate) => {
       await open(gate);
       await gate.requireFeature(F.acceptDeposit);
-      const created = await acceptDeposit(ctx(gate), req.body);
-      reply.code(201);
-      return created;
+      return acceptDeposit(ctx(gate), req.body);
     });
   });
 
   r.post(`${PREFIX}/deposits/:id/refund`, { schema: { params: id, body: depositRefundSchema } }, async (req, reply) => {
     requireKey(req);
-    return run(req, reply, async (gate) => {
+    return created(req, reply, async (gate) => {
       await open(gate);
       await gate.requireFeature(F.refundDeposit);
       gate.requirePermission('billing.op.refund');
-      const updated = await refundDeposit(ctx(gate), req.params.id, req.body);
-      reply.code(201);
-      return updated;
+      return refundDeposit(ctx(gate), req.params.id, req.body);
     });
   });
 
@@ -235,11 +232,9 @@ export function registerIpbilling(app: FastifyInstance, deps: Deps): void {
   );
 
   r.post(`${PREFIX}/payers`, { schema: { body: payerCreateSchema } }, async (req, reply) =>
-    run(req, reply, async (gate) => {
+    created(req, reply, async (gate) => {
       await open(gate);
-      const created = await createPayer(ctx(gate), req.body);
-      reply.code(201);
-      return created;
+      return createPayer(ctx(gate), req.body);
     }),
   );
 
