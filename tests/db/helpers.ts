@@ -472,6 +472,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     migrator,
     `insert into rad_reports (tenant_id, order_id, findings, is_sample) values ($1, $2, 'Sample', true) returning id`,
     [tenant.id, radOrder.id],
+  );
   const indent = await one<{ id: string }>(
     migrator,
     `insert into indents (tenant_id, location_id, number, department) values ($1, $2, $3, 'Sample ward') returning id`,
@@ -496,6 +497,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     migrator,
     `insert into laundry_batches (tenant_id, location_id, number, linen_item_id, qty_sent) values ($1, $2, $3, $4, 1) returning id`,
     [tenant.id, location.id, `ZLB${mark}${runId}`, linenItem.id],
+  );
   // MVP demo slices: equipment maintenance (1220) and payroll & attendance (1260).
   const eqAsset = await one<{ id: string }>(
     migrator,
@@ -525,6 +527,7 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     `insert into payroll_attendance (tenant_id, employee_id, work_date, status)
      values ($1, $2, current_date, 'present') returning id`,
     [tenant.id, payEmployee.id],
+  );
   const bbUnit = await one<{ id: string }>(
     migrator,
     `insert into bb_units (tenant_id, location_id, unit_no, component, abo, rh, volume_ml, collected_on, expires_at, tti_cleared, is_sample)
