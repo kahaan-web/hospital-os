@@ -485,6 +485,7 @@ const ENTRIES: [string, TenantRouteGuard][] = [
   }),
   entry('GET', '/api/v1/tenant/clinical/codes', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/doctors', { permission: AUTHENTICATED }),
+  entry('GET', '/api/v1/tenant/clinical/departments', { permission: AUTHENTICATED }),
   entry('GET', '/api/v1/tenant/clinical/services', { permission: AUTHENTICATED }),
 
   // B1. Permission, module and feature match each handler. Photo has no feature gate.

@@ -15,6 +15,11 @@ import {
   locationOf,
   nextApptNo,
   tenantOf,
+  zTee,
+  zSurgeryKind,
+  zOptUuid,
+  zBookingType,
+  zCaseType,
 } from './service';
 
 const idParams = z.object({ id: z.uuid() });
@@ -24,12 +29,12 @@ const bookingFields = z.object({
   patientId: z.uuid(),
   doctorId: z.uuid(),
   patientType: z.enum(['ip', 'op']),
-  admissionId: z.uuid().optional().nullable(),
+  admissionId: zOptUuid,
   diagnosis: z.string().default(''),
-  surgeryType: z.enum(['major', 'minor']).default('major'),
-  surgeryId: z.uuid().optional().nullable(),
+  surgeryType: zSurgeryKind.default('major'),
+  surgeryId: zOptUuid,
   frozenSection: z.boolean().default(false),
-  teeRequired: z.boolean().default(false),
+  teeRequired: zTee.default(false),
   weight: z.string().default(''),
   language: z.string().default(''),
   sex: z.string().default(''),
@@ -47,8 +52,8 @@ const createBookingBody = bookingFields.extend({
   date: z.string(),
   startTime: z.string(),
   durationMin: z.coerce.number().int().min(15).max(720),
-  bookingType: z.enum(['planned', 'emergency']).default('planned'),
-  caseType: z.enum(['elective', 'emergency']).default('elective'),
+  bookingType: zBookingType.default('planned'),
+  caseType: zCaseType.default('elective'),
 });
 
 async function bookingDetail(gate: { tx: import('@hos/db').Tx }, tenantId: string, id: string) {
@@ -374,7 +379,7 @@ export function registerOtBookings(app: FastifyInstance, deps: Deps): void {
 
   const bulkFilter = z.object({
     ids: z.array(z.uuid()).optional(),
-    doctorId: z.uuid().optional(),
+    doctorId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
     from: z.string().optional(),
     to: z.string().optional(),
     reason: z.string().trim().min(3).optional(),

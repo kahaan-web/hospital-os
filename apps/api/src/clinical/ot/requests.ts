@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
 import { ApiError } from '../../http';
-import { PREFIX, locationOf, nextRequestNumber, patientAgeYears, tenantOf } from './service';
+import { PREFIX, locationOf, nextRequestNumber, patientAgeYears, tenantOf, zTee, zSurgeryKind, zOptUuid, zOptStr, zSort, zOptEnum, zOptUuidQ } from './service';
 
 const idParams = z.object({ id: z.uuid() });
 const patientParams = z.object({ patientId: z.uuid() });
@@ -15,16 +15,16 @@ const requestBody = z.object({
   patientId: z.uuid(),
   doctorId: z.uuid(),
   patientType: z.enum(['ip', 'op']),
-  admissionId: z.uuid().optional().nullable(),
+  admissionId: zOptUuid,
   expectedDate: z.string(),
   expectedTime: z.string().optional().nullable(),
   officePermission: z.boolean().default(false),
-  officePermissionRemark: z.string().default(''),
-  diagnosis: z.string().default(''),
-  surgeryType: z.enum(['major', 'minor']),
-  surgeryId: z.uuid().optional().nullable(),
+  officePermissionRemark: zOptStr.default(''),
+  diagnosis: zOptStr.default(''),
+  surgeryType: zSurgeryKind,
+  surgeryId: zOptUuid,
   frozenSection: z.boolean().default(false),
-  teeRequired: z.boolean().default(false),
+  teeRequired: zTee.default(false),
   specialRemarkIds: z.array(z.uuid()).default([]),
   weight: z.string().default(''),
   language: z.string().default(''),
@@ -32,7 +32,7 @@ const requestBody = z.object({
   indication: z.string().default(''),
   surgeonIds: z.array(z.uuid()).default([]),
   anaesthetistIds: z.array(z.uuid()).default([]),
-  preferredResourceId: z.uuid().optional().nullable(),
+  preferredResourceId: zOptUuid,
 });
 
 async function requestDetail(gate: { tx: Tx }, tenantId: string, id: string) {
@@ -69,10 +69,10 @@ export function registerOtRequests(app: FastifyInstance, deps: Deps): void {
         querystring: z.object({
           from: z.string().optional(),
           to: z.string().optional(),
-          otId: z.uuid().optional(),
-          sort: z.enum(['number', 'patient', 'doctor', 'date']).optional(),
+          otId: zOptUuidQ,
+          sort: zSort,
           q: z.string().optional(),
-          status: z.enum(['requested', 'booked', 'cancelled']).optional(),
+          status: zOptEnum(['requested', 'booked', 'cancelled']),
         }),
       },
     },

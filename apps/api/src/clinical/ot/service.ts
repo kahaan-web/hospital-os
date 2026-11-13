@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { schema, type Tx } from '@hos/db';
 import { and, asc, count, desc, eq, gt, gte, inArray, lte, lt, ne, or, sql } from 'drizzle-orm';
 import type { TenantGate } from '../../guard';
@@ -151,3 +152,19 @@ export function patientAgeYears(dob: Date | null): string {
   if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) y -= 1;
   return String(Math.max(0, y));
 }
+
+/** Lenient inputs so the web client's values (yes/no, '', 'select', sort labels) are accepted. */
+const blankToUndef = (v: unknown) => (v === '' || v === null ? undefined : v);
+export const zTee = z.preprocess((v) => (v === 'yes' || v === 'true' || v === true ? true : v === 'no' || v === 'false' || v === '' || v == null || v === false ? false : v), z.boolean());
+export const zSurgeryKind = z.preprocess((v) => (v === '' || v == null ? 'major' : v), z.enum(['major', 'minor']));
+export const zOptUuid = z.preprocess((v) => (v === '' ? null : v), z.uuid().optional().nullable());
+export const zBookingType = z.preprocess((v) => (v === 'select' || v === '' || v == null ? 'planned' : v), z.enum(['planned', 'emergency']));
+export const zCaseType = z.preprocess((v) => (v === '' || v == null ? 'elective' : v), z.enum(['elective', 'emergency']));
+export const zOptStr = z.preprocess((v) => (v == null ? '' : v), z.string());
+export const zSort = z.preprocess((v) => {
+  const m: Record<string, string> = { requestNo: 'number', patientNo: 'patient', patientName: 'patient', doctorName: 'doctor', expectedDate: 'date' };
+  const s = blankToUndef(v);
+  return typeof s === 'string' ? (m[s] ?? s) : s;
+}, z.enum(['number', 'patient', 'doctor', 'date']).optional());
+export const zOptEnum = <T extends [string, ...string[]]>(vals: T) => z.preprocess(blankToUndef, z.enum(vals).optional());
+export const zOptUuidQ = z.preprocess(blankToUndef, z.uuid().optional());

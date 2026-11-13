@@ -15,6 +15,13 @@ export function registerOtMasters(app: FastifyInstance, deps: Deps): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const run = <T>(req: FastifyRequest, reply: FastifyReply, fn: (gate: TenantGate) => Promise<T>) => openTenant(deps, req, reply, fn);
 
+  // Departments list for OT Reports/Masters dropdowns (no departments table yet: derived from doctor specialities).
+  r.get('/api/v1/tenant/clinical/departments', async (req, reply) =>
+    run(req, reply, async (gate) => {
+      const rows = await gate.tx.selectDistinct({ name: schema.doctors.speciality }).from(schema.doctors).orderBy(asc(schema.doctors.speciality));
+      return rows.filter((x) => x.name && x.name.trim()).map((x) => ({ id: x.name as string, name: x.name as string }));
+    }),
+  );
   r.get(`${PREFIX}/masters/surgeries`, { schema: { querystring: z.object({ type: z.enum(['major', 'minor']).optional() }) } }, async (req, reply) =>
     run(req, reply, async (gate) => {
       const tenantId = tenantOf(gate);

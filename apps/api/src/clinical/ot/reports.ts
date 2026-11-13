@@ -21,9 +21,9 @@ export function registerOtReports(app: FastifyInstance, deps: Deps): void {
         querystring: z.object({
           from: z.string().optional(),
           to: z.string().optional(),
-          doctorId: z.uuid().optional(),
-          departmentId: z.uuid().optional(),
-          anaesthetistId: z.uuid().optional(),
+          doctorId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
+          departmentId: z.string().optional(),
+          anaesthetistId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
           surgeryIds: z.string().optional(),
         }),
       },
