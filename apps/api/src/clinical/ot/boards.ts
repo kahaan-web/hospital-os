@@ -70,7 +70,7 @@ export function registerOtBoards(app: FastifyInstance, deps: Deps): void {
         querystring: z.object({
           from: z.string().optional(),
           to: z.string().optional(),
-          criteria: z.enum(['surgery_date', 'booking_date']).optional(),
+          criteria: z.preprocess((v) => (v === 'surgery' ? 'surgery_date' : v === 'booking' ? 'booking_date' : v), z.enum(['surgery_date', 'booking_date']).optional()),
           status: z.enum(['active', 'cancelled', 'all']).optional(),
           otId: z.uuid().optional(),
           patientType: z.string().optional(),
