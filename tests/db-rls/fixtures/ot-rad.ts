@@ -30,6 +30,13 @@ const FIXTURES: Fixture[] = [
     params: (id, spec) => [id, `${spec.tag}-rad-1`],
   },
   {
+    table: 'ot_surgery_master',
+    sql: `insert into ot_surgery_master (tenant_id, name, surgery_type, is_sample)
+          select $1::uuid, 'Sample minor procedure', 'minor', true
+          where not exists (select 1 from ot_surgery_master where tenant_id = $1)`,
+    params: (id) => [id],
+  },
+  {
     table: 'rad_reports',
     sql: `insert into rad_reports (tenant_id, order_id, findings, is_sample)
           select $1::uuid, o.id, 'Sample', true

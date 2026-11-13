@@ -106,6 +106,14 @@ export interface Side {
   marScheduleId: string;
   medAdminId: string;
   otCaseId: string;
+  otSurgeryId: string;
+  otSpecialRemarkId: string;
+  otDoctorRoleId: string;
+  otResourceId: string;
+  otSettingsId: string;
+  otRequestId: string;
+  otBookingId: string;
+  otPostOpId: string;
   radOrderId: string;
   radReportId: string;
   insPayerId: string;
@@ -461,6 +469,55 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
      values ($1, $2, $3, $4, 'Sample procedure', 'Dr. Sample', 'OT-1', now() + interval '1 day', now() + interval '1 day 1 hour', true)
      returning id`,
     [tenant.id, location.id, patient.id, `ZOT${runId}${mark}`],
+  );
+  const otSurgery = await one<{ id: string }>(
+    migrator,
+    `insert into ot_surgery_master (tenant_id, name, surgery_type, is_sample) values ($1, 'Sample surgery', 'minor', true) returning id`,
+    [tenant.id],
+  );
+  const otSpecialRemark = await one<{ id: string }>(
+    migrator,
+    `insert into ot_special_remarks (tenant_id, remark, is_sample) values ($1, 'Sample remark', true) returning id`,
+    [tenant.id],
+  );
+  const otDoctorRole = await one<{ id: string }>(
+    migrator,
+    `insert into ot_doctor_roles (tenant_id, doctor_id, is_surgeon, is_sample) values ($1, $2, true, true) returning id`,
+    [tenant.id, doctor.id],
+  );
+  const otResource = await one<{ id: string }>(
+    migrator,
+    `insert into ot_resources (tenant_id, location_id, code, name, is_sample) values ($1, $2, $3, 'Sample OT', true) returning id`,
+    [tenant.id, location.id, `ZOTR${runId}${mark}`],
+  );
+  const otSettingsRow = await one<{ id: string }>(
+    migrator,
+    `insert into ot_settings (tenant_id, is_sample) values ($1, true) returning id`,
+    [tenant.id],
+  );
+  const otRequest = await one<{ id: string }>(
+    migrator,
+    `insert into ot_requests (tenant_id, location_id, number, patient_id, doctor_id, patient_type, expected_date, surgery_type, surgery_id, is_sample)
+     values ($1, $2, $3, $4, $5, 'op', current_date + 2, 'minor', $6, true) returning id`,
+    [tenant.id, location.id, `ZREQ${runId}${mark}`, patient.id, doctor.id, otSurgery.id],
+  );
+  await migrator.query(`insert into ot_request_special_remarks (tenant_id, request_id, remark_id) values ($1, $2, $3)`, [
+    tenant.id,
+    otRequest.id,
+    otSpecialRemark.id,
+  ]);
+  const otBooking = await one<{ id: string }>(
+    migrator,
+    `insert into ot_bookings (tenant_id, location_id, resource_id, patient_id, doctor_id, patient_type, booking_date,
+                              scheduled_start, scheduled_end, duration_min, is_sample)
+     values ($1, $2, $3, $4, $5, 'op', current_date + 2, now() + interval '3 days', now() + interval '3 days 1 hour', 60, true)
+     returning id`,
+    [tenant.id, location.id, otResource.id, patient.id, doctor.id],
+  );
+  const otPostOp = await one<{ id: string }>(
+    migrator,
+    `insert into ot_post_op (tenant_id, booking_id, is_sample) values ($1, $2, true) returning id`,
+    [tenant.id, otBooking.id],
   );
   const radOrder = await one<{ id: string }>(
     migrator,
@@ -959,6 +1016,14 @@ async function insertSide(migrator: pg.Client, mark: 'a' | 'b', runId: string, r
     marScheduleId: marSchedule.id,
     medAdminId: medAdmin.id,
     otCaseId: otCase.id,
+    otSurgeryId: otSurgery.id,
+    otSpecialRemarkId: otSpecialRemark.id,
+    otDoctorRoleId: otDoctorRole.id,
+    otResourceId: otResource.id,
+    otSettingsId: otSettingsRow.id,
+    otRequestId: otRequest.id,
+    otBookingId: otBooking.id,
+    otPostOpId: otPostOp.id,
     radOrderId: radOrder.id,
     radReportId: radReport.id,
     insPayerId: insPayer.id,
@@ -1043,6 +1108,15 @@ export async function deletePair(admin: pg.Client, pair: FixturePair | null): Pr
     `delete from charges where tenant_id = any($1::uuid[])`,
     `delete from rad_reports where tenant_id = any($1::uuid[])`,
     `delete from rad_orders where tenant_id = any($1::uuid[])`,
+    `delete from ot_post_op where tenant_id = any($1::uuid[])`,
+    `delete from ot_request_special_remarks where tenant_id = any($1::uuid[])`,
+    `delete from ot_bookings where tenant_id = any($1::uuid[])`,
+    `delete from ot_requests where tenant_id = any($1::uuid[])`,
+    `delete from ot_settings where tenant_id = any($1::uuid[])`,
+    `delete from ot_resources where tenant_id = any($1::uuid[])`,
+    `delete from ot_doctor_roles where tenant_id = any($1::uuid[])`,
+    `delete from ot_special_remarks where tenant_id = any($1::uuid[])`,
+    `delete from ot_surgery_master where tenant_id = any($1::uuid[])`,
     `delete from ot_cases where tenant_id = any($1::uuid[])`,
     `delete from purchase_orders where tenant_id = any($1::uuid[])`,
     `delete from indent_lines where tenant_id = any($1::uuid[])`,

@@ -10,6 +10,7 @@ export * from './lab';
 export * from './nursing';
 export * from './portal';
 export * from './ot-rad';
+export * from './ot-gknm';
 export * from './insurance';
 export * from './doctor-accounting';
 export * from './indents';

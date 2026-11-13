@@ -107,6 +107,15 @@ const TABLES = [
   'mar_schedules',
   'medication_administrations',
   'ot_cases',
+  'ot_surgery_master',
+  'ot_special_remarks',
+  'ot_doctor_roles',
+  'ot_resources',
+  'ot_settings',
+  'ot_requests',
+  'ot_request_special_remarks',
+  'ot_bookings',
+  'ot_post_op',
   'rad_orders',
   'rad_reports',
   'insurance_payers',
@@ -1258,6 +1267,45 @@ function specFor(table: TableName, pair: FixturePair): IsoSpec {
     case 'ot_cases':
       return row(common, 'id = $1', b.otCaseId, `notes = 'Touched by A'`, 'notes',
         `insert into ot_cases (tenant_id, location_id, patient_id, number, procedure_name, surgeon_name, room_code, scheduled_start, scheduled_end) values ($1, '${b.locationId}', '${b.patientId}', 'ZNOPE${pair.runId}', 'Nope', 'Nope', 'OT-1', now(), now() + interval '1 hour')`);
+    case 'ot_surgery_master':
+      return row(common, 'id = $1', b.otSurgeryId, `name = 'Touched by A'`, 'name',
+        `insert into ot_surgery_master (tenant_id, name, surgery_type) values ($1, 'Nope', 'minor')`);
+    case 'ot_special_remarks':
+      return row(common, 'id = $1', b.otSpecialRemarkId, `remark = 'Touched by A'`, 'remark',
+        `insert into ot_special_remarks (tenant_id, remark) values ($1, 'Nope')`);
+    case 'ot_doctor_roles':
+      return row(common, 'id = $1', b.otDoctorRoleId, `is_surgeon = false`, 'is_surgeon',
+        `insert into ot_doctor_roles (tenant_id, doctor_id, is_surgeon) values ($1, '${b.doctorId}', true)`);
+    case 'ot_resources':
+      return row(common, 'id = $1', b.otResourceId, `name = 'Touched by A'`, 'name',
+        `insert into ot_resources (tenant_id, location_id, code, name) values ($1, '${b.locationId}', 'ZNOPE${pair.runId}', 'Nope')`);
+    case 'ot_settings':
+      return row(common, 'id = $1', b.otSettingsId, `min_lead_days = 9`, 'min_lead_days',
+        `insert into ot_settings (tenant_id, min_lead_days) values ($1, 1)`);
+    case 'ot_requests':
+      return row(common, 'id = $1', b.otRequestId, `diagnosis = 'Touched by A'`, 'diagnosis',
+        `insert into ot_requests (tenant_id, location_id, number, patient_id, doctor_id, patient_type, expected_date, surgery_type, surgery_id)
+         values ($1, '${b.locationId}', 'ZNOPE${pair.runId}', '${b.patientId}', '${b.doctorId}', 'op', current_date, 'minor', '${b.otSurgeryId}')`);
+    case 'ot_request_special_remarks':
+      return {
+        ...common,
+        hidden: 'tenant_id = $1 and request_id = $2',
+        bParam: b.otRequestId,
+        setSql: `remark_id = '${b.otSpecialRemarkId}'`,
+        untouched: `select false as touched`,
+        insertSql: `insert into ot_request_special_remarks (tenant_id, request_id, remark_id) values ($1, '${b.otRequestId}', '${b.otSpecialRemarkId}')`,
+        retargetSql: `update ot_request_special_remarks set tenant_id = $1 where request_id = '${b.otRequestId}'`,
+      };
+    case 'ot_bookings':
+      return row(common, 'id = $1', b.otBookingId, `remarks = 'Touched by A'`, 'remarks',
+        `insert into ot_bookings (tenant_id, location_id, resource_id, patient_id, doctor_id, patient_type, booking_date, scheduled_start, scheduled_end, duration_min)
+         values ($1, '${b.locationId}', '${b.otResourceId}', '${b.patientId}', '${b.doctorId}', 'op', current_date, now(), now() + interval '1 hour', 60)`);
+    case 'ot_post_op':
+      return {
+        ...row(common, 'id = $1', b.otPostOpId, `findings = 'Touched by A'`, 'findings',
+          `insert into ot_post_op (tenant_id, booking_id, findings) values ($1, '${b.otBookingId}', 'Nope')`),
+        beforeMassDelete: ['delete from ot_post_op'],
+      };
     case 'rad_orders':
       return {
         ...row(common, 'id = $1', b.radOrderId, `clinical_notes = 'Touched by A'`, 'clinical_notes',
