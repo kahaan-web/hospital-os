@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { PageError } from '@/features/common/LoadState';
+import { otGknm2Api } from './api-gknm2';
 import { otSchedulingApi, type OtBulkResult, type OtScheduleBooking, type OtScheduleRow } from './api';
 import { FieldGrid, InlineNote, Panel } from './bits';
 import { formatOtDate, formatTime12, minutesOf, otActionError, plusDays, todayIso } from './format';
@@ -22,12 +23,15 @@ export function ScheduleScreen() {
   const lookups = useOtLookups();
   const [date, setDate] = useState(todayIso);
   const [category, setCategory] = useState('');
+  const [otType, setOtType] = useState('');
+  const [resourceTypes, setResourceTypes] = useState<Map<string, { otCategory: string; otType: string }>>(new Map());
+  const [bulkOtId, setBulkOtId] = useState('');
   const [rows, setRows] = useState<OtScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
   const [picked, setPicked] = useState<string[]>([]);
-  const [selectBy, setSelectBy] = useState<'ticks' | 'doctor'>('ticks');
+  const [selectBy, setSelectBy] = useState<'ticks' | 'doctor' | 'date_ot'>('ticks');
   const [doctorId, setDoctorId] = useState('');
   const [from, setFrom] = useState(todayIso);
   const [to, setTo] = useState(todayIso);
@@ -38,6 +42,16 @@ export function ScheduleScreen() {
   const [busy, setBusy] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [result, setResult] = useState<OtBulkResult | null>(null);
+
+  useEffect(() => {
+    otGknm2Api.listResources().then((resources) => {
+      const map = new Map<string, { otCategory: string; otType: string }>();
+      for (const r of resources) {
+        map.set(r.id, { otCategory: r.otCategory || r.categoryName, otType: r.otType || '' });
+      }
+      setResourceTypes(map);
+    }).catch(() => setResourceTypes(new Map()));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +84,21 @@ export function ScheduleScreen() {
     return [...values];
   }, [lookups.resources, rows]);
 
-  const shown = rows.filter((row) => !category || !row.category || row.category === category);
+  const otTypes = useMemo(() => {
+    const values = new Set<string>();
+    for (const meta of resourceTypes.values()) if (meta.otType) values.add(meta.otType);
+    if (otType) values.add(otType);
+    return [...values].sort();
+  }, [resourceTypes, otType]);
+
+  const shown = rows.filter((row) => {
+    if (category && row.category && row.category !== category) return false;
+    if (otType) {
+      const meta = resourceTypes.get(row.resourceId);
+      if (meta?.otType !== otType) return false;
+    }
+    return true;
+  });
   const bookings = shown.flatMap((row) => row.bookings.map((booking) => ({ ...booking, resourceName: booking.resourceName || row.resourceName, resourceId: booking.resourceId || row.resourceId })));
   const outside = bookings.filter((booking) => {
     const start = minutesOf(booking.fromTime);
@@ -89,18 +117,42 @@ export function ScheduleScreen() {
     setPicked((prev) => (on ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((item) => item !== id)));
   };
 
-  const target = (): { ids?: string[]; doctorId?: string; from?: string; to?: string } | string => {
+  const tickBookings = useMemo(
+    () => (bulkOtId ? bookings.filter((b) => b.resourceId === bulkOtId) : bookings),
+    [bookings, bulkOtId],
+  );
+
+  const target = async (): Promise<{ ids?: string[]; doctorId?: string; from?: string; to?: string } | string> => {
     if (selectBy === 'ticks') {
       if (picked.length === 0) return 'Tick at least one booking.';
       return { ids: picked };
     }
-    if (!doctorId) return 'Choose a doctor.';
+    if (selectBy === 'doctor') {
+      if (!doctorId) return 'Choose a doctor.';
+      if (!from || !to) return 'Choose the date range.';
+      return { doctorId, from, to };
+    }
     if (!from || !to) return 'Choose the date range.';
-    return { doctorId, from, to };
+    const ids: string[] = [];
+    let cursor = from;
+    while (cursor <= to) {
+      const dayRows = await otSchedulingApi.schedule(cursor, category || undefined);
+      for (const row of dayRows) {
+        if (bulkOtId && row.resourceId !== bulkOtId) continue;
+        if (otType) {
+          const meta = resourceTypes.get(row.resourceId);
+          if (meta?.otType !== otType) continue;
+        }
+        for (const booking of row.bookings) ids.push(booking.id);
+      }
+      cursor = plusDays(cursor, 1);
+    }
+    if (ids.length === 0) return 'No bookings found for this date range and OT.';
+    return { ids };
   };
 
   const runCancel = async () => {
-    const body = target();
+    const body = await target();
     if (typeof body === 'string') {
       setBulkError(body);
       return;
@@ -124,7 +176,7 @@ export function ScheduleScreen() {
   };
 
   const runReschedule = async () => {
-    const body = target();
+    const body = await target();
     if (typeof body === 'string') {
       setBulkError(body);
       return;
@@ -166,7 +218,7 @@ export function ScheduleScreen() {
   return (
     <>
       <OtSubNav />
-      <PageHeader title="OT schedule" description="Theatres across the day. Click a block to open the booking." />
+      <PageHeader title="Schedule dashboard" description="Theatres across the day in 15-minute ticks. Click a block to open the booking." />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hos-space-3)', alignItems: 'end', marginBottom: 'var(--hos-space-3)' }}>
         <div>
           <span style={{ display: 'block', fontSize: 'var(--hos-text-sm)', fontWeight: 500, marginBottom: 4 }}>Select date</span>
@@ -180,10 +232,20 @@ export function ScheduleScreen() {
             </IconButton>
           </div>
         </div>
-        <Field label="OT category">
+        <Field label="OT category" hint="CR P10: resource master category">
           <Select aria-label="OT category" value={category} onChange={(event) => setCategory(event.target.value)}>
             <option value="">All categories</option>
             {categories.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="OT type" hint="CR P10: resource master type">
+          <Select aria-label="OT type" value={otType} onChange={(event) => setOtType(event.target.value)}>
+            <option value="">All types</option>
+            {otTypes.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>
@@ -235,7 +297,7 @@ export function ScheduleScreen() {
                       }}
                     >
                       <span style={{ display: 'block', fontWeight: 600 }}>
-                        Appt No: {booking.apptNo || '—'} From {formatTime12(booking.fromTime)} To {formatTime12(booking.toTime)}
+                        Appt No: {booking.apptNo || '—'} From Time {formatTime12(booking.fromTime)} To Time {formatTime12(booking.toTime)}
                       </span>
                       <span style={{ display: 'block' }}>{booking.patientName || booking.patientNo || 'Patient'}</span>
                       <span style={{ display: 'block' }}>{booking.doctors || booking.doctorName}</span>
@@ -248,20 +310,57 @@ export function ScheduleScreen() {
         </div>
       </div>
       {outside.length > 0 ? (
-        <InlineNote tone="muted">Bookings outside 07:00–19:00 stay in the list below and are not drawn on the grid.</InlineNote>
+        <>
+          <InlineNote tone="muted">Bookings outside 07:00–19:00 are listed below and are not drawn on the grid.</InlineNote>
+          <Panel title="Off-grid bookings">
+            <div className="hos-table-wrap">
+              <table className="hos-table" style={{ fontSize: 'var(--hos-text-sm)' }}>
+                <thead>
+                  <tr>
+                    <th scope="col">Theatre</th>
+                    <th scope="col">Appt no</th>
+                    <th scope="col">From time</th>
+                    <th scope="col">To time</th>
+                    <th scope="col">Patient</th>
+                    <th scope="col">Doctors</th>
+                    <th scope="col">Open</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {outside.map((booking) => (
+                    <tr key={`outside-${booking.id}`}>
+                      <td>{booking.resourceName}</td>
+                      <td>{booking.apptNo || '—'}</td>
+                      <td>{formatTime12(booking.fromTime)}</td>
+                      <td>{formatTime12(booking.toTime)}</td>
+                      <td>{booking.patientName || booking.patientNo || '—'}</td>
+                      <td>{booking.doctors || booking.doctorName || '—'}</td>
+                      <td>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => openBooking(booking)}>
+                          Booking
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </>
       ) : null}
 
-      <Panel title="Bulk cancel or reschedule">
+      <Panel title="Bulk cancellation / rescheduling">
         <p style={{ marginTop: 0, color: 'var(--hos-fg-secondary)', fontSize: 'var(--hos-text-sm)' }}>
           Tick bookings on this date, or choose a doctor and a date range. Each booking is checked for overlap. The result lists what moved and what failed.
         </p>
         <RadioGroup
           aria-label="How to select bookings"
           value={selectBy}
-          onValueChange={(value) => setSelectBy(value === 'doctor' ? 'doctor' : 'ticks')}
+          onValueChange={(value) => setSelectBy(value === 'doctor' ? 'doctor' : value === 'date_ot' ? 'date_ot' : 'ticks')}
           options={[
-            { value: 'ticks', label: 'Ticked bookings' },
-            { value: 'doctor', label: 'Doctor and date range' },
+            { value: 'ticks', label: 'Ticked bookings on this day' },
+            { value: 'doctor', label: 'By doctor and date range' },
+            { value: 'date_ot', label: 'By date range and OT' },
           ]}
         />
         {selectBy === 'doctor' ? (
@@ -276,15 +375,44 @@ export function ScheduleScreen() {
               <DatePicker aria-label="To date" value={to} onChange={(next) => next && setTo(next)} />
             </Field>
           </FieldGrid>
+        ) : selectBy === 'date_ot' ? (
+          <FieldGrid>
+            <Field label="From">
+              <DatePicker aria-label="From date" value={from} onChange={(next) => next && setFrom(next)} />
+            </Field>
+            <Field label="To">
+              <DatePicker aria-label="To date" value={to} onChange={(next) => next && setTo(next)} />
+            </Field>
+            <Field label="OT">
+              <Select aria-label="OT" value={bulkOtId} onChange={(event) => setBulkOtId(event.target.value)}>
+                <option value="">All theatres in range</option>
+                {lookups.resources.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name || row.code}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </FieldGrid>
         ) : (
           <div style={{ maxHeight: 220, overflow: 'auto', marginTop: 8 }}>
+            <Field label="Limit ticks to OT" className="mb-2">
+              <Select aria-label="Limit ticks to OT" value={bulkOtId} onChange={(event) => setBulkOtId(event.target.value)}>
+                <option value="">All theatres on this day</option>
+                {lookups.resources.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name || row.code}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Checkbox
-              checked={bookings.length > 0 && picked.length === bookings.length}
+              checked={tickBookings.length > 0 && picked.length === tickBookings.length}
               label="Select all on this day"
-              onCheckedChange={(checked) => setPicked(checked === true ? bookings.map((booking) => booking.id) : [])}
+              onCheckedChange={(checked) => setPicked(checked === true ? tickBookings.map((booking) => booking.id) : [])}
             />
-            {bookings.length === 0 ? <p style={{ color: 'var(--hos-fg-muted)' }}>No bookings to tick.</p> : null}
-            {bookings.map((booking) => (
+            {tickBookings.length === 0 ? <p style={{ color: 'var(--hos-fg-muted)' }}>No bookings to tick.</p> : null}
+            {tickBookings.map((booking) => (
               <Checkbox
                 key={booking.id}
                 checked={picked.includes(booking.id)}

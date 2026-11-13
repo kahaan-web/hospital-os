@@ -121,8 +121,8 @@ export function ListStatusScreen() {
           />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="OT">
-            <Select value={otId} onChange={(e) => setOtId(e.target.value)} aria-label="OT">
+          <Field label="Search OT">
+            <Select value={otId} onChange={(e) => setOtId(e.target.value)} aria-label="Search OT">
               <option value="">All theatres</option>
               {ots.map((ot) => (
                 <option key={ot.id} value={ot.id}>
@@ -230,7 +230,7 @@ function MotionDates({
         id="use-from"
         checked={useFromDate}
         onCheckedChange={(c) => setUseFromDate(c === true)}
-        label="Dates from"
+        label="Dates From"
       />
       <Field label="From" className="min-w-[10rem]">
         <DatePicker value={from} onChange={(v) => v && setFrom(v)} disabled={!useFromDate} aria-label="From date" />

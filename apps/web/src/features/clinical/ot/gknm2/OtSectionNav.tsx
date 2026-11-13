@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 const LINKS = [
   { href: '/app/ot', label: 'OT home' },
+  { href: '/app/ot/schedule', label: 'Schedule' },
   { href: '/app/ot/list-status', label: 'List status' },
   { href: '/app/ot/reports', label: 'Reports' },
   { href: '/app/ot/masters', label: 'Masters' },

@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Field, Input } from '@hos/ui';
-import { Check } from 'lucide-react';
+import { Checkbox, Field, Input } from '@hos/ui';
 import { nowTimeValue } from './helpers';
 
 export function TimeTickRow({
@@ -15,8 +14,19 @@ export function TimeTickRow({
   onChange: (next: string) => void;
   id: string;
 }) {
+  const ticked = Boolean(value.trim());
+
   return (
-    <div className="flex flex-wrap items-end gap-2">
+    <div className="flex flex-wrap items-end gap-3">
+      <Checkbox
+        id={`${id}-tick`}
+        checked={ticked}
+        label="Tick"
+        onCheckedChange={(checked) => {
+          if (checked === true) onChange(value.trim() ? value : nowTimeValue());
+          else onChange('');
+        }}
+      />
       <Field label={label} className="min-w-[12rem] flex-1">
         <Input
           id={id}
@@ -26,16 +36,6 @@ export function TimeTickRow({
           aria-label={label}
         />
       </Field>
-      <Button
-        type="button"
-        variant="secondary"
-        title={`Set ${label} to current time`}
-        aria-label={`Tick — set ${label} to now`}
-        onClick={() => onChange(nowTimeValue())}
-      >
-        <Check size={16} aria-hidden />
-        <span className="sr-only">Tick now</span>
-      </Button>
     </div>
   );
 }
