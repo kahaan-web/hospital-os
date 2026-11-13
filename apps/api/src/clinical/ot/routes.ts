@@ -8,9 +8,14 @@ import type { Deps, TenantGate } from '../../guard';
 import { openTenant } from '../../guard';
 import { ApiError } from '../../http';
 
+import { registerOtBoards } from './boards';
+import { registerOtBookings } from './bookings';
+import { registerOtMasters } from './masters';
+import { registerOtReports } from './reports';
+import { registerOtRequests } from './requests';
+import { PREFIX, locationOf } from './service';
+
 /** MVP demo slice: OT list, schedule, start, complete, cancel. Tenant and permission checks come from TENANT_GUARDS. */
-const MODULE = 'ot-scheduling';
-const PREFIX = `/api/v1/tenant/m/${MODULE}`;
 
 const idParams = z.object({ id: z.uuid() });
 const listQuery = z.object({
@@ -30,11 +35,6 @@ const createBody = z.object({
 });
 const completeBody = z.object({ notes: z.string().trim().max(2000).optional() });
 const cancelBody = z.object({ reason: z.string().trim().min(3, 'Say why the case is cancelled').max(300) });
-
-function locationOf(gate: TenantGate): string {
-  if (!gate.locationId) throw new ApiError(422, 'location_required', 'Choose a location');
-  return gate.locationId;
-}
 
 async function detail(tx: Tx, id: string) {
   const [row] = await tx
@@ -163,4 +163,10 @@ export function registerOt(app: FastifyInstance, deps: Deps): void {
       return detail(gate.tx, current.id);
     }),
   );
+
+  registerOtMasters(app, deps);
+  registerOtRequests(app, deps);
+  registerOtBookings(app, deps);
+  registerOtBoards(app, deps);
+  registerOtReports(app, deps);
 }

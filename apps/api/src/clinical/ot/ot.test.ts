@@ -73,6 +73,73 @@ it('schedules a case, blocks a room clash, then starts and completes it', async 
   expect(again.statusCode).toBe(409);
 });
 
+it('creates a GKNM request, books it, and blocks overlap', async () => {
+  const cookie = await login(fx.sunrise.ownerEmail);
+  const surgeries = await app.inject({ method: 'GET', url: `${PREFIX}/masters/surgeries`, headers: headers(cookie) });
+  expect(surgeries.statusCode, surgeries.body).toBe(200);
+  const surgeryList = surgeries.json() as Array<{ id: string }>;
+  expect(surgeryList.length).toBeGreaterThan(0);
+  const resources = await app.inject({ method: 'GET', url: `${PREFIX}/resources`, headers: headers(cookie) });
+  expect(resources.statusCode, resources.body).toBe(200);
+  const otList = resources.json() as Array<{ id: string; code: string }>;
+  expect(otList.length).toBeGreaterThan(0);
+  const day = new Date(Date.now() + 400 * 86_400_000).toISOString().slice(0, 10);
+  const request = await app.inject({
+    method: 'POST',
+    url: `${PREFIX}/requests`,
+    headers: headers(cookie),
+    payload: {
+      patientId: fx.sunrise.patientId,
+      doctorId: fx.sunrise.doctorId,
+      patientType: 'op',
+      expectedDate: day,
+      expectedTime: '10:00',
+      surgeryType: 'major',
+      surgeryId: surgeryList[0]!.id,
+      diagnosis: 'Sample cholecystitis',
+    },
+  });
+  expect(request.statusCode, request.body).toBe(201);
+  const req = request.json() as { id: string; status: string };
+  expect(req.status).toBe('requested');
+  const booking = await app.inject({
+    method: 'POST',
+    url: `${PREFIX}/requests/${req.id}/book`,
+    headers: headers(cookie),
+    payload: {
+      resourceId: otList[0]!.id,
+      date: day,
+      startTime: '10:00',
+      durationMin: 60,
+      bookingType: 'planned',
+      caseType: 'elective',
+      remarks: 'Booked from request',
+    },
+  });
+  expect(booking.statusCode, booking.body).toBe(201);
+  const booked = booking.json() as { id: string };
+  const overlap = await app.inject({
+    method: 'POST',
+    url: `${PREFIX}/bookings`,
+    headers: headers(cookie),
+    payload: {
+      patientId: fx.sunrise.patientId,
+      doctorId: fx.sunrise.doctorId,
+      patientType: 'op',
+      resourceId: otList[0]!.id,
+      date: day,
+      startTime: '10:30',
+      durationMin: 60,
+      bookingType: 'planned',
+      caseType: 'elective',
+    },
+  });
+  expect(overlap.statusCode).toBe(409);
+  const detail = await app.inject({ method: 'GET', url: `${PREFIX}/requests/${req.id}`, headers: headers(cookie) });
+  expect((detail.json() as { status: string }).status).toBe('booked');
+  await app.inject({ method: 'POST', url: `${PREFIX}/bookings/${booked.id}/cancel`, headers: headers(cookie), payload: { remarks: 'Sample cancel for test' } });
+});
+
 it('does not show or touch another tenant’s OT case', async () => {
   const admin = new pg.Client({ connectionString: dbEnv().migrationUrl });
   await admin.connect();
