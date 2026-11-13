@@ -1,0 +1,253 @@
+                                               GKNM HOSPITAL
+
+                               OT Scheduling
+OT Scheduling Dashboard:
+
+
+
+
+OT Scheduling – New Request:
+
+
+
+
+                                                          Page | 1
+                                                                      GKNM HOSPITAL
+Change Requirements:
+1.Request to be generated for In Patient, Out Patient
+2.Provision to Capture Diagnosis - Free Text
+3. Provision to Capture Surgery name - Type of Surgery (Major /Minor) – Based on the Type
+surgery name to be displayed.
+4.Add Expected Time also next to Expected date.
+5.Frozen Section and TEE Required to be captured .
+6.Special Remarks - Multiple selection – data to be added in masters.
+7.In Dashboard Provision to view all the saved field against the request.
+
+
+OT Scheduling – Edit Request:
+
+
+
+
+                                                                                     Page | 2
+                                  GKNM HOSPITAL
+OT Scheduling – Cancel Request:
+
+
+
+
+OT Scheduling – Outstanding:
+
+
+
+
+                                             Page | 3
+                                                     GKNM HOSPITAL
+OT Scheduling – Direct Booking:
+
+
+
+
+OT Scheduling – Direct Booking (IT Common Module):
+
+
+
+
+                                                                Page | 4
+                                                                       GKNM HOSPITAL
+Change Requirements:
+Provision for 6 fields to be added and captured at the time of request as per ITC
+1.Weight – Open Text Box
+2.Language – Open Text Box
+3.Sex - Open Text Box
+4.Frozen Section Checkbox
+5.Indication - Open Text Box
+6.Diagnosis - Open Text Box
+7.TEE Required Yes or No Radio Button by default No
+8.Surgeon doctor to be selected from the checklist multiple selection allowed and Surgeon
+Doctor only to be mapped here from the masters
+9.Anaesthetist doctor to be selected from the checklist multiple selection allowed and
+Anaesthetist Doctor only to be mapped here from the masters
+10.If In Patient then Display Ward Name and Bed No
+11.Booking should not allow after for mentioned No of days & time .
+    For Eg.Today after 5PM it should not allow tomorrows bookings.
+12. Provision to Capture Surgery name - Type of Surgery (Major /Minor) – Based on the Type
+surgery name to be displayed.
+
+OT Scheduling – OT Booking Against Request:
+
+
+
+
+                                                                                     Page | 5
+                                                                         GKNM HOSPITAL
+
+OT Scheduling – Post Operative Surgery Details Entry (IT Common Module)
+
+
+
+
+Change Requirements:
+Currently Post-Operative module is enabled to capture data for performed Operation in the IT
+common Module as attached .The Same to be provided in HIS.
+
+1.Pre OP Time – Tick if Tick then default time to be loaded and can be editable .
+2.Wheeling In Time - Tick if Tick then default time to be loaded and can be editable .
+3.Anesthesia Start Time - Tick if Tick then default time to be loaded and can be editable .
+4.Surgery Start Time - Tick if Tick then default time to be loaded and can be editable .
+5.Surgery End Time - Tick if Tick then default time to be loaded and can be editable .
+6.Anesthesia End Time - Tick if Tick then default time to be loaded and can be editable .
+7.Wheeling Out Time - Tick if Tick then default time to be loaded and can be editable .
+
+8.Executed Surgery – Surgery to be displayed – Additional remarks to be added if required
+9.Per OP Findings - Text Box
+10.Assisted Doctors - Text Box
+11.Scrub Nurse - Text Box
+
+                                                                                        Page | 6
+                                      GKNM HOSPITAL
+11.Floor Nurse - Text Box
+
+12.Advers Anesthesia - Text Box
+13.Change of Plan if any - Text Box
+14.Anesthesia Type - Drop Down
+15.Type of surgery - Drop Down
+16.Complication - Text Box
+17.Out Come - Text Box
+18.Antibiotic – Text Box
+
+
+
+
+OT Scheduling – Modify Booking:
+
+
+
+
+                                                 Page | 7
+                                  GKNM HOSPITAL
+
+OT Scheduling – Cancel Booking:
+
+
+
+
+OT Scheduling – Shift Manual:
+
+
+
+
+                                             Page | 8
+                                      GKNM HOSPITAL
+
+OT Scheduling – Shift Now:
+
+
+
+
+OT Scheduling – Schedule Dashboard:
+
+
+
+
+Change Requirements :
+
+                                                 Page | 9
+                                                                          GKNM HOSPITAL
+Provision to filter - OT Category /Type - as Tagged in Resource Master.
+OT Scheduling – OT List Status:
+
+
+
+
+OT Scheduling – Reports:
+
+
+
+
+                                                                                    Page | 10
+                                                                              GKNM HOSPITAL
+Change Requirements:
+OT Register Report add new column of Length of Stay(LOS).
+If Admission Patient- Days to be calculated as from Admission date to report generated day.
+If Discharge Patient- Days to be calculated as from Admission date to Discharge Day.
+Report based on Doctor/Department with multiple surgery selection (Master).
+
+OT Scheduling – Reports (IT Common Module):
+
+
+
+
+Reports - Doctor Wise
+
+
+
+
+                                                                                              Page | 11
+                             GKNM HOSPITAL
+
+Reports – Department Wise
+
+
+
+
+Reports - Anesthetist Wise
+
+
+
+
+                                       Page | 12
+                            GKNM HOSPITAL
+
+
+
+
+Reports – Cancellation
+
+
+
+
+Reports – Duplicate Entry
+
+
+
+
+                                      Page | 13
+                              GKNM HOSPITAL
+
+
+
+
+Reports – Frozen Statistics
+
+
+
+
+                                        Page | 14
+                                               GKNM HOSPITAL
+
+
+
+
+OT Scheduling – OT Master / Resource Master:
+
+
+
+
+Change Requirements:
+                                                         Page | 15
+                                                                       GKNM HOSPITAL
+Overlapping Allowed Yes/No based on the OT Master Configuration
+Max Overlapping allowed count based on the OT Master Configuration
+Add OT Category /Type - against individual OT
+Add Restriction Days & Time against each OT.
+
+Bulk Cancellation or Rescheduling:
+Incase of Doctor Leave or due to some Admin Reason provision of bulk Cancellation or bulk
+Rescheduling/Postponed to be provided to the user.
+
+
+
+
+                                                                                    Page | 16
+
