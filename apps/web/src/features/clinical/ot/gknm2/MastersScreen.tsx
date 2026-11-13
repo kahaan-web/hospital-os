@@ -473,7 +473,7 @@ function ResourceForm({
       <Field label="Resource type">
         <Select value={form.resourceType} onChange={(e) => patch({ resourceType: e.target.value as OtResourceInput['resourceType'] })}>
           <option value="medical">Medical</option>
-          <option value="non_medical">Non medical</option>
+          <option value="non_medical">Non Medical</option>
         </Select>
       </Field>
       <Field label="Default charge code">

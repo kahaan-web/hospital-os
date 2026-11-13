@@ -143,12 +143,17 @@ export function PostOpScreen({ bookingId }: { bookingId: string }) {
     <>
       <OtSectionNav />
       <PageHeader
-        title="Post operative surgery details"
-        description="Record theatre times and outcomes for this booking."
+        title="Surgery details entry"
+        description="Post operative surgery details — record theatre times and outcomes for this booking."
         actions={
-          <Link href="/app/ot" className="hos-btn hos-btn--md hos-btn--secondary">
-            Back to OT
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/app/ot/book?bookingId=${bookingId}`} className="hos-btn hos-btn--md hos-btn--secondary">
+              Back to booking
+            </Link>
+            <Link href="/app/ot" className="hos-btn hos-btn--md hos-btn--secondary">
+              OT home
+            </Link>
+          </div>
         }
       />
       {notFound ? (
@@ -204,23 +209,23 @@ export function PostOpScreen({ bookingId }: { bookingId: string }) {
       >
         <fieldset className="flex flex-col gap-3 border-0 p-0">
           <legend className="mb-1 text-base font-semibold">Theatre times</legend>
-          <TimeTickRow id="pre-op" label="Pre OP time" value={form.preOpTime ?? ''} onChange={(v) => patch({ preOpTime: v })} />
-          <TimeTickRow id="wheel-in" label="Wheeling in time" value={form.wheelingInTime ?? ''} onChange={(v) => patch({ wheelingInTime: v })} />
+          <TimeTickRow id="pre-op" label="Pre OP Time" value={form.preOpTime ?? ''} onChange={(v) => patch({ preOpTime: v })} />
+          <TimeTickRow id="wheel-in" label="Wheeling In Time" value={form.wheelingInTime ?? ''} onChange={(v) => patch({ wheelingInTime: v })} />
           <TimeTickRow
             id="anes-start"
-            label="Anaesthesia start time"
+            label="Anesthesia Start Time"
             value={form.anaesthesiaStartTime ?? ''}
             onChange={(v) => patch({ anaesthesiaStartTime: v })}
           />
-          <TimeTickRow id="surg-start" label="Surgery start time" value={form.surgeryStartTime ?? ''} onChange={(v) => patch({ surgeryStartTime: v })} />
-          <TimeTickRow id="surg-end" label="Surgery end time" value={form.surgeryEndTime ?? ''} onChange={(v) => patch({ surgeryEndTime: v })} />
+          <TimeTickRow id="surg-start" label="Surgery Start Time" value={form.surgeryStartTime ?? ''} onChange={(v) => patch({ surgeryStartTime: v })} />
+          <TimeTickRow id="surg-end" label="Surgery End Time" value={form.surgeryEndTime ?? ''} onChange={(v) => patch({ surgeryEndTime: v })} />
           <TimeTickRow
             id="anes-end"
-            label="Anaesthesia end time"
+            label="Anesthesia End Time"
             value={form.anaesthesiaEndTime ?? ''}
             onChange={(v) => patch({ anaesthesiaEndTime: v })}
           />
-          <TimeTickRow id="wheel-out" label="Wheeling out time" value={form.wheelingOutTime ?? ''} onChange={(v) => patch({ wheelingOutTime: v })} />
+          <TimeTickRow id="wheel-out" label="Wheeling Out Time" value={form.wheelingOutTime ?? ''} onChange={(v) => patch({ wheelingOutTime: v })} />
         </fieldset>
 
         <Field label="Executed surgery" hint="Prefilled from booked surgery; add remarks below.">
@@ -233,27 +238,27 @@ export function PostOpScreen({ bookingId }: { bookingId: string }) {
         <Field label="Additional remarks (executed surgery)">
           <Textarea value={form.executedSurgeryRemarks} onChange={(e) => patch({ executedSurgeryRemarks: e.target.value })} rows={2} />
         </Field>
-        <Field label="Per OP findings">
+        <Field label="Per OP Findings">
           <Textarea value={form.perOpFindings} onChange={(e) => patch({ perOpFindings: e.target.value })} rows={3} />
         </Field>
-        <Field label="Assisted doctors">
+        <Field label="Assisted Doctors">
           <Input value={form.assistedDoctors} onChange={(e) => patch({ assistedDoctors: e.target.value })} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Scrub nurse">
+          <Field label="Scrub Nurse">
             <Input value={form.scrubNurse} onChange={(e) => patch({ scrubNurse: e.target.value })} />
           </Field>
-          <Field label="Floor nurse">
+          <Field label="Floor Nurse">
             <Input value={form.floorNurse} onChange={(e) => patch({ floorNurse: e.target.value })} />
           </Field>
         </div>
-        <Field label="Adverse anaesthesia event">
+        <Field label="Adverse Anesthesia event">
           <Textarea value={form.adverseAnaesthesiaEvent} onChange={(e) => patch({ adverseAnaesthesiaEvent: e.target.value })} rows={2} />
         </Field>
-        <Field label="Change of plan, if any">
+        <Field label="Change of Plan if any">
           <Textarea value={form.changeOfPlan} onChange={(e) => patch({ changeOfPlan: e.target.value })} rows={2} />
         </Field>
-        <Field label="Anaesthesia type">
+        <Field label="Anesthesia Type">
           <Select
             value={form.anaesthesiaType}
             onChange={(e) => patch({ anaesthesiaType: e.target.value })}
@@ -267,7 +272,7 @@ export function PostOpScreen({ bookingId }: { bookingId: string }) {
             ))}
           </Select>
         </Field>
-        <Field label="Type of surgery">
+        <Field label="Type of Surgery">
           <Select
             value={form.surgeryType}
             onChange={(e) => patch({ surgeryType: e.target.value as SurgeryType | '' })}

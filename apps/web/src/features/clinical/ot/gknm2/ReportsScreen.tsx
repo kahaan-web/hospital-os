@@ -20,7 +20,7 @@ import { PageError } from '@/features/common/LoadState';
 import { ApiError } from '@/lib/api';
 import { apiGet } from '@/lib/api';
 import { OtSectionNav } from './OtSectionNav';
-import { BOOKING_TYPE_OPTIONS, plusDays, todayIso } from './helpers';
+import { BOOKING_TYPE_OPTIONS, downloadCsv, plusDays, todayIso } from './helpers';
 
 type ReportPicker =
   | 'register'
@@ -125,6 +125,84 @@ export function ReportsScreen() {
 
   const print = () => window.print();
 
+  const exportCsv = () => {
+    if (!result) return;
+    const slug = picker;
+    if (result.kind === 'department') {
+      const { matrix } = result;
+      const header = ['Department', ...matrix.ots, 'Total'];
+      const body = matrix.departments.map((dept) => {
+        const cells = matrix.ots.map((ot) => {
+          const hit = matrix.cells.find((c) => c.department === dept && c.ot === ot);
+          return String(hit?.count ?? 0);
+        });
+        return [dept, ...cells, String(matrix.rowTotals[dept] ?? 0)];
+      });
+      downloadCsv(`ot-report-${slug}.csv`, header, body);
+      return;
+    }
+    if (result.kind === 'cancellation') {
+      downloadCsv(
+        `ot-report-${slug}.csv`,
+        ['Type', 'OT', 'Number', 'Name', 'Date', 'Time', 'Reason'],
+        result.rows.map((r) => [r.type, r.ot, r.number, r.name, r.date, r.time, r.reason]),
+      );
+      return;
+    }
+    if (result.kind === 'duplicates') {
+      downloadCsv(
+        `ot-report-${slug}.csv`,
+        ['Sno', 'Date', 'Time', 'OP no', 'IP no', 'Name', 'Sex', 'Diagnosis', 'Surgery'],
+        result.rows.map((r) => [
+          String(r.sno),
+          r.date,
+          r.time,
+          r.opNo,
+          r.ipNo ?? '',
+          r.name,
+          r.sex,
+          r.diagnosis,
+          r.surgery,
+        ]),
+      );
+      return;
+    }
+    if (result.kind === 'frozen') {
+      downloadCsv(
+        `ot-report-${slug}.csv`,
+        ['Sno', 'OP/IP', 'Number', 'Date/time', 'Name', 'Sex/age', 'Ward', 'OT', 'Diagnosis', 'Surgery', 'Surgeon', 'Frozen indication', 'Cancelled'],
+        result.rows.map((r) => [
+          String(r.sno),
+          r.patientType,
+          r.number,
+          r.dateTime,
+          r.name,
+          r.sexAge,
+          r.ward,
+          r.ot,
+          r.diagnosis,
+          r.surgery,
+          r.surgeon,
+          r.frozenIndication,
+          r.cancelled ? 'Yes' : 'No',
+        ]),
+      );
+      return;
+    }
+    const showLos = picker === 'register';
+    const header = showLos
+      ? ['OT', 'Date', 'Time', 'OP no', 'IP no', 'Name', 'Sex', 'Age', 'Diagnosis', 'Surgery', 'LOS']
+      : ['OT', 'Date', 'Time', 'OP no', 'IP no', 'Name', 'Sex', 'Age', 'Diagnosis', 'Surgery'];
+    downloadCsv(
+      `ot-report-${slug}.csv`,
+      header,
+      result.rows.map((r) => {
+        const base = [r.ot, r.date, r.time ?? '', r.opNo, r.ipNo ?? '', r.name, r.sex, r.age, r.diagnosis, r.surgery];
+        return showLos ? [...base, r.lengthOfStay ?? ''] : base;
+      }),
+    );
+  };
+
   const toggleSurgery = (id: string) => {
     setSurgeryIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   };
@@ -141,6 +219,24 @@ export function ReportsScreen() {
           </Link>
         }
       />
+
+      <section className="no-print mb-4 max-w-5xl" aria-label="IT module report list">
+        <h2 className="mb-2 text-sm font-semibold" style={{ color: 'var(--hos-fg-secondary)' }}>
+          IT module report list
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {REPORT_OPTIONS.map((opt) => (
+            <Button
+              key={opt.value}
+              type="button"
+              variant={picker === opt.value ? 'primary' : 'secondary'}
+              onClick={() => setPicker(opt.value)}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
+      </section>
 
       <form
         className="no-print mb-6 flex max-w-5xl flex-col gap-4"
@@ -202,8 +298,11 @@ export function ReportsScreen() {
           <Button type="submit" disabled={loading}>
             {loading ? 'Loading…' : 'Show'}
           </Button>
-          <Button type="button" variant="secondary" onClick={print} disabled={!loaded}>
+          <Button type="button" variant="secondary" onClick={print} disabled={!result}>
             Print
+          </Button>
+          <Button type="button" variant="secondary" onClick={exportCsv} disabled={!result}>
+            CSV
           </Button>
           <Button type="button" variant="secondary" onClick={clear}>
             Clear
@@ -451,32 +550,34 @@ function DepartmentMatrixTable({ matrix }: { matrix: DepartmentMatrixDto }) {
 function CancellationTable({ rows }: { rows: CancellationReportRowDto[] }) {
   if (rows.length === 0) return <EmptyState title="No cancellations" />;
   return (
-    <table className="hos-table">
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>OT</th>
-          <th>Number</th>
-          <th>Name</th>
-          <th>Date</th>
-          <th>Time</th>
-          <th>Reason</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={`${row.number}-${i}`}>
-            <td>{row.type}</td>
-            <td>{row.ot}</td>
-            <td>{row.number}</td>
-            <td>{row.name}</td>
-            <td>{formatDate(row.date)}</td>
-            <td>{row.time}</td>
-            <td>{row.reason}</td>
+    <div className="hos-table-wrap">
+      <table className="hos-table">
+        <thead>
+          <tr>
+            <th scope="col">Type</th>
+            <th scope="col">OT</th>
+            <th scope="col">Number</th>
+            <th scope="col">Name</th>
+            <th scope="col">Date</th>
+            <th scope="col">Time</th>
+            <th scope="col">Reason</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={`${row.number}-${i}`}>
+              <td>{row.type}</td>
+              <td>{row.ot}</td>
+              <td>{row.number}</td>
+              <td>{row.name}</td>
+              <td>{formatDate(row.date)}</td>
+              <td>{row.time}</td>
+              <td>{row.reason}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
