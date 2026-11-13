@@ -1,0 +1,16 @@
+@media print {
+  body:has(.hos-ot-report-print) .no-print,
+  body:has(.hos-ot-report-print) .hos-page-header,
+  body:has(.hos-ot-report-print) nav[aria-label='OT scheduling sections'],
+  body:has(.hos-ot-report-print) .hos-toast-viewport {
+    display: none !important;
+  }
+
+  body:has(.hos-ot-report-print) {
+    background: #fff !important;
+  }
+
+  .hos-ot-report-print .hos-table {
+    font-size: 11px;
+  }
+}
