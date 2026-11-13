@@ -12,10 +12,10 @@ import { OutstandingDialog } from './OutstandingDialog';
 import { useOtLookups } from './useOtLookups';
 
 const SORTS: { value: OtSort; label: string }[] = [
-  { value: 'requestNo', label: 'Request no' },
-  { value: 'patientNo', label: 'Patient no' },
-  { value: 'patientName', label: 'Patient name' },
-  { value: 'doctorName', label: 'Doctor name' },
+  { value: 'requestNo', label: 'Request No' },
+  { value: 'patientNo', label: 'Patient No' },
+  { value: 'patientName', label: 'Patient Name' },
+  { value: 'doctorName', label: 'Doctor Name' },
 ];
 
 function statusTone(status: string): 'warning' | 'info' | 'error' | 'neutral' {
@@ -76,7 +76,10 @@ export function RequestDashboard() {
         description="Requests for a date range. Select a row to book, edit or cancel it."
       />
       <div className="ot-no-print" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hos-space-3)', marginBottom: 'var(--hos-space-4)' }}>
-        <RadioGroup aria-label="Sort by" value={sort} onValueChange={(value) => setSort(value as OtSort)} options={SORTS} />
+        <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+          <legend style={{ fontSize: 'var(--hos-text-sm)', fontWeight: 600, marginBottom: 6 }}>Sort by</legend>
+          <RadioGroup aria-label="Sort by" value={sort} onValueChange={(value) => setSort(value as OtSort)} options={SORTS} />
+        </fieldset>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hos-space-3)', alignItems: 'end' }}>
           <div style={{ minWidth: 220 }}>
             <span style={{ display: 'block', fontSize: 'var(--hos-text-sm)', fontWeight: 500, marginBottom: 4 }}>OT</span>
@@ -100,7 +103,7 @@ export function RequestDashboard() {
             </Select>
           </label>
           <Button type="button" variant="secondary" onClick={() => router.push('/app/ot/list-status')}>
-            OT list
+            OT List
           </Button>
           {otId ? (
             <Button type="button" variant="ghost" onClick={() => setOtId('')}>

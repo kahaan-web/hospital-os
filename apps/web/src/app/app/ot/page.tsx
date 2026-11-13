@@ -2,12 +2,12 @@
 
 import { Button } from '@hos/ui';
 import { useState } from 'react';
-import { CasesPanel } from '@/features/clinical/ot/CasesPanel';
+import { DayBookingsPanel } from '@/features/clinical/ot/DayBookingsPanel';
 import { OtSubNav } from '@/features/clinical/ot/OtSubNav';
 import { RequestDashboard } from '@/features/clinical/ot/RequestDashboard';
 
 export default function OtPage() {
-  const [tab, setTab] = useState<'requests' | 'cases'>('requests');
+  const [tab, setTab] = useState<'requests' | 'bookings'>('requests');
   return (
     <>
       <style>{`
@@ -20,11 +20,11 @@ export default function OtPage() {
         <Button type="button" role="tab" aria-selected={tab === 'requests'} variant={tab === 'requests' ? 'primary' : 'secondary'} onClick={() => setTab('requests')}>
           Requests
         </Button>
-        <Button type="button" role="tab" aria-selected={tab === 'cases'} variant={tab === 'cases' ? 'primary' : 'secondary'} onClick={() => setTab('cases')}>
-          Cases
+        <Button type="button" role="tab" aria-selected={tab === 'bookings'} variant={tab === 'bookings' ? 'primary' : 'secondary'} onClick={() => setTab('bookings')}>
+          Bookings of the day
         </Button>
       </div>
-      {tab === 'requests' ? <RequestDashboard /> : <CasesPanel />}
+      {tab === 'requests' ? <RequestDashboard /> : <DayBookingsPanel />}
     </>
   );
 }

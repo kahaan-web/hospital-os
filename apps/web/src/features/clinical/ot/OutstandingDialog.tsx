@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Checkbox, Dialog, PriceDisplay } from '@hos/ui';
+import { Button, Checkbox, Dialog, Field, Input, PriceDisplay } from '@hos/ui';
 import { useEffect, useState } from 'react';
 import { otSchedulingApi, type OtOutstandingDto } from './api';
 import { InlineNote } from './bits';
@@ -29,9 +29,11 @@ export function OutstandingDialog({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [permissionRemark, setPermissionRemark] = useState('');
 
   useEffect(() => {
     if (!requestId) return;
+    setPermissionRemark(remark);
     let cancelled = false;
     setLoading(true);
     setError('');
@@ -52,7 +54,7 @@ export function OutstandingDialog({
     return () => {
       cancelled = true;
     };
-  }, [requestId]);
+  }, [requestId, remark]);
 
   const savePermission = async (granted: boolean) => {
     if (!requestId) return;
@@ -60,7 +62,7 @@ export function OutstandingDialog({
     setError('');
     setRow((prev) => ({ ...prev, officePermission: granted }));
     try {
-      await otSchedulingApi.officePermission(requestId, { granted, remark });
+      await otSchedulingApi.officePermission(requestId, { granted, remark: permissionRemark.trim() });
       onPermission(granted);
     } catch (err) {
       setRow((prev) => ({ ...prev, officePermission: !granted }));
@@ -95,13 +97,23 @@ export function OutstandingDialog({
           <Amount label="Due Amount" paise={row.duePaise} />
         </tbody>
       </table>
-      <div style={{ marginTop: 'var(--hos-space-3)' }}>
+      <div style={{ marginTop: 'var(--hos-space-3)', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Checkbox
           checked={row.officePermission}
           disabled={saving || loading || !requestId}
           label="Office Permission?"
           onCheckedChange={(checked) => void savePermission(checked === true)}
         />
+        <Field label="Enter remark">
+          <Input
+            value={permissionRemark}
+            disabled={saving || loading || !requestId}
+            aria-label="Office permission remark"
+            placeholder="Enter remark"
+            maxLength={240}
+            onChange={(event) => setPermissionRemark(event.target.value)}
+          />
+        </Field>
       </div>
       <InlineNote>{error}</InlineNote>
     </Dialog>
