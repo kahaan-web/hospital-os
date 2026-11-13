@@ -657,6 +657,17 @@ export function BookingScreen() {
       <section style={{ marginTop: 'var(--hos-space-4)' }}>
         <Panel title="OT list entry">
           <FieldGrid>
+            <Field label="Patient type">
+              <RadioGroup
+                aria-label="Patient type"
+                value={draft.patientType}
+                onValueChange={(value) => patch({ patientType: value === 'ip' ? 'ip' : 'op' })}
+                options={[
+                  { value: 'ip', label: 'In patient' },
+                  { value: 'op', label: 'Out patient' },
+                ]}
+              />
+            </Field>
             <Field label="Number">
               <Input readOnly aria-label="Patient number" value={draft.patientNo} />
             </Field>
@@ -697,6 +708,17 @@ export function BookingScreen() {
             </Field>
             <Field label="Surgery time">
               <Input readOnly aria-label="Surgery time" value={draft.startTime} />
+            </Field>
+            <Field label="Case type">
+              <RadioGroup
+                aria-label="Case type"
+                value={draft.caseType}
+                onValueChange={(value) => patch({ caseType: value === 'emergency' ? 'emergency' : 'elective' })}
+                options={[
+                  { value: 'elective', label: 'Elective' },
+                  { value: 'emergency', label: 'Emergency' },
+                ]}
+              />
             </Field>
             <Field label="Type of surgery">
               <Select
